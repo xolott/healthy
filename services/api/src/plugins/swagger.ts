@@ -9,7 +9,7 @@ export async function registerSwagger(app: FastifyInstance) {
       info: {
         title: 'Healthy API',
         version: '0.0.0',
-        description: 'Scaffold-only Fastify service for self-hosting. No persistence or authentication yet.',
+        description: 'Healthy API with setup, sessions, and authentication endpoints.',
       },
     },
   });

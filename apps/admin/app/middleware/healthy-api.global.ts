@@ -1,4 +1,5 @@
 import { type HealthyPublicStatus, fetchHealthyPublicStatus } from "../utils/healthyApiStatus";
+import { AuthMeUnauthorizedError, fetchAuthMe } from "../utils/healthyApiAuth";
 
 export default defineNuxtRouteMiddleware(async (to) => {
   if (
@@ -42,15 +43,28 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo("/login");
   }
 
-  const session = useCookie("healthy_admin_session", {
-    path: "/",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 12,
-  });
-  const authed = session.value === "1";
-
   if (to.path === "/login") {
+    try {
+      await fetchAuthMe(baseUrl);
+      return navigateTo("/");
+    } catch (e) {
+      if (!(e instanceof AuthMeUnauthorizedError)) {
+        return navigateTo({ path: "/setup", query: { reconnect: "1" } });
+      }
+    }
     return;
+  }
+
+  let authed = false;
+  try {
+    await fetchAuthMe(baseUrl);
+    authed = true;
+  } catch (e) {
+    if (e instanceof AuthMeUnauthorizedError) {
+      authed = false;
+    } else {
+      return navigateTo({ path: "/setup", query: { reconnect: "1" } });
+    }
   }
 
   if (!authed) {

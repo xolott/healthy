@@ -5,11 +5,15 @@ import { registerCors } from './plugins/cors.js';
 import { registerSensible } from './plugins/sensible.js';
 import { registerSwagger } from './plugins/swagger.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerFirstOwnerSetupRoute, type FirstOwnerRouteOptions } from './routes/first-owner-setup.js';
+import { registerAuthMeRoute, type AuthMeRouteOptions } from './routes/auth-me.js';
 import { registerStatusRoutes, type StatusRouteDeps } from './routes/status.js';
 import { summarizeLogger } from './utils/logger.js';
 
 export type BuildAppOptions = {
   statusRouteDeps?: StatusRouteDeps;
+  firstOwnerRouteOptions?: FirstOwnerRouteOptions;
+  authMeRouteOptions?: AuthMeRouteOptions;
 };
 
 export async function buildApp(options?: BuildAppOptions) {
@@ -21,6 +25,8 @@ export async function buildApp(options?: BuildAppOptions) {
   await registerSwagger(app);
   await registerHealthRoutes(app);
   await registerStatusRoutes(app, options?.statusRouteDeps);
+  await registerFirstOwnerSetupRoute(app, options?.firstOwnerRouteOptions);
+  await registerAuthMeRoute(app, options?.authMeRouteOptions);
 
   summarizeLogger(app.log);
 

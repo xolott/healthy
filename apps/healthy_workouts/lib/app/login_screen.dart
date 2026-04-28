@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
+import '../core/api/first_owner_setup.dart';
 import '../core/config/app_identity.dart';
 import '../shared/widgets/shell_scaffold.dart';
 
@@ -16,13 +16,12 @@ class LoginPlaceholderScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Authentication is not implemented yet. Continue to open the app shell once the server reports setup is complete.',
+            Text(
+              'Passwords must be at least $kPasswordMinLength characters (same rule as first-owner setup).',
             ),
-            const SizedBox(height: 16),
-            FilledButton(
-              onPressed: () => context.go('/home'),
-              child: const Text('Continue to app'),
+            const SizedBox(height: 12),
+            const Text(
+              'Email and password login against the API is not implemented yet. Complete first-owner onboarding on a fresh server, or use a stored session from onboarding.',
             ),
           ],
         ),

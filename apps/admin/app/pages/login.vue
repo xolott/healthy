@@ -2,27 +2,18 @@
   <section aria-labelledby="login-title">
     <h1 id="login-title" style="font-size: 1.5rem">Sign in</h1>
     <p style="margin-top: 0.85rem; max-width: 32rem; opacity: 0.9">
-      Authentication is not wired yet. Continue to open the administration shell after the server
-      reports setup is complete.
+      Enter your email and password for this Healthy server. Passwords must be at least
+      {{ passwordMinLength }} characters (same rule as first-owner setup).
     </p>
-    <button
-      type="button"
-      style="margin-top: 1.1rem; padding: 0.45rem 1rem; border-radius: 6px; cursor: pointer"
-      @click="continueToApp"
-    >
-      Continue to app
-    </button>
+    <p style="margin-top: 0.75rem; max-width: 32rem; opacity: 0.85">
+      Email and password login against the API is not wired yet; use first-owner onboarding on a fresh server,
+      or restore an existing session via the API cookie.
+    </p>
   </section>
 </template>
 
 <script setup lang="ts">
-function continueToApp() {
-  const session = useCookie("healthy_admin_session", {
-    path: "/",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 12,
-  });
-  session.value = "1";
-  return navigateTo("/");
-}
+import { PASSWORD_MIN_LENGTH } from "../utils/healthyApiAuth";
+
+const passwordMinLength = PASSWORD_MIN_LENGTH;
 </script>

@@ -131,6 +131,14 @@ export function createUserRepository(db: Database) {
       const now = new Date();
       await db.update(users).set({ status, updatedAt: now }).where(eq(users.id, id));
     },
+
+    async setLastLoginAt(id: string, at: Date): Promise<void> {
+      const now = new Date();
+      await db
+        .update(users)
+        .set({ lastLoginAt: at, updatedAt: now })
+        .where(eq(users.id, id));
+    },
   };
 }
 

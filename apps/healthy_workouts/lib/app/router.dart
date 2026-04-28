@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import 'home_shell_screen.dart';
@@ -20,7 +19,7 @@ final workoutsRouter = GoRouter(
     ),
     GoRoute(
       path: '/onboarding',
-      builder: (context, state) => const OnboardingPlaceholderScreen(),
+      builder: (context, state) => const FirstOwnerOnboardingScreen(),
     ),
     GoRoute(
       path: '/login',

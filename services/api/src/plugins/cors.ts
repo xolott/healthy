@@ -4,7 +4,8 @@ import cors from '@fastify/cors';
 export async function registerCors(app: FastifyInstance) {
   await app.register(cors, {
     origin: true,
+    credentials: true,
     methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 }

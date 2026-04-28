@@ -44,6 +44,15 @@ export function createSessionRepository(db: Database) {
       return row;
     },
 
+    async setLastUsedAtByTokenHash(tokenHash: string, at: Date): Promise<SessionRow | undefined> {
+      const [row] = await db
+        .update(sessions)
+        .set({ lastUsedAt: at })
+        .where(eq(sessions.tokenHash, tokenHash))
+        .returning();
+      return row;
+    },
+
     /**
      * Marks a session as revoked. Idempotent: already-revoked rows are left unchanged
      * and the latest row (unchanged) is not returned; caller should use find if needed.
