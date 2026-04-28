@@ -2,9 +2,9 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { withDisposableDatabase } from '@healthy/db';
 
+import { appendSessionCookie, getRequestIp } from '../auth/http-session.js';
 import { runFirstOwnerSetupInDb, SetupInputError } from '../auth/first-owner-setup.js';
 import { assertPasswordMeetsPolicy, PasswordPolicyError } from '../auth/password-policy.js';
-import { SESSION_COOKIE_NAME } from '../auth/session-token.js';
 
 const postBodySchema = {
   type: 'object',
@@ -44,29 +44,6 @@ const postResponse201 = {
     },
   },
 } as const;
-
-function appendSetCookie(reply: FastifyReply, name: string, value: string, maxAgeSec: number, secure: boolean) {
-  const sameSite = secure ? 'None' : 'Lax';
-  const parts = [
-    `${name}=${encodeURIComponent(value)}`,
-    'Path=/',
-    'HttpOnly',
-    `Max-Age=${String(maxAgeSec)}`,
-    `SameSite=${sameSite}`,
-  ];
-  if (secure) {
-    parts.push('Secure');
-  }
-  reply.header('Set-Cookie', parts.join('; '));
-}
-
-function getRequestIp(request: FastifyRequest): string | null {
-  const h = request.headers['x-forwarded-for'];
-  if (typeof h === 'string' && h.length > 0) {
-    return h.split(',')[0]?.trim() ?? null;
-  }
-  return request.ip;
-}
 
 /**
  * @public For tests: replace the default handler.
@@ -155,7 +132,7 @@ export async function registerFirstOwnerSetupRoute(
         60,
         Math.floor((result.sessionExpiresAt.getTime() - Date.now()) / 1000),
       );
-      appendSetCookie(reply, SESSION_COOKIE_NAME, result.rawSessionToken, maxAge, secure);
+      appendSessionCookie(reply, result.rawSessionToken, maxAge, secure);
 
       return reply.status(201).send({
         user: {

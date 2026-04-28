@@ -23,7 +23,7 @@ final mealsRouter = GoRouter(
     ),
     GoRoute(
       path: '/login',
-      builder: (context, state) => const LoginPlaceholderScreen(),
+      builder: (context, state) => const OwnerLoginScreen(),
     ),
     GoRoute(
       path: '/home',

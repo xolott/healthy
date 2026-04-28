@@ -1,0 +1,157 @@
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+
+import { withDisposableDatabase } from '@healthy/db';
+
+import { appendSessionCookie, getRequestIp } from '../auth/http-session.js';
+import { runOwnerLoginInDb } from '../auth/owner-login.js';
+
+const postBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['email', 'password'],
+  properties: {
+    email: { type: 'string' },
+    password: { type: 'string' },
+  },
+} as const;
+
+const postResponse200 = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['user', 'session'],
+  properties: {
+    user: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['id', 'email', 'displayName', 'role'],
+      properties: {
+        id: { type: 'string' },
+        email: { type: 'string' },
+        displayName: { type: 'string' },
+        role: { type: 'string', enum: ['owner', 'admin', 'member'] },
+      },
+    },
+    session: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['token', 'expiresAt'],
+      properties: {
+        token: { type: 'string' },
+        expiresAt: { type: 'string' },
+      },
+    },
+  },
+} as const;
+
+const invalidInputResponse = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['error', 'field', 'message'],
+  properties: {
+    error: { type: 'string', const: 'invalid_input' },
+    field: { type: 'string', enum: ['email', 'password'] },
+    message: { type: 'string' },
+  },
+} as const;
+
+const invalidCredentialsResponse = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['error'],
+  properties: {
+    error: { type: 'string', const: 'invalid_credentials' },
+  },
+} as const;
+
+/**
+ * @public For tests: replace the default handler.
+ */
+export type OwnerLoginRouteOptions = {
+  runLogin?: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+};
+
+export async function registerOwnerLoginRoute(
+  app: FastifyInstance,
+  options?: OwnerLoginRouteOptions,
+) {
+  if (options?.runLogin !== undefined) {
+    app.post('/auth/login', options.runLogin);
+    return;
+  }
+
+  app.post<{ Body: { email: string; password: string } }>(
+    '/auth/login',
+    {
+      schema: {
+        summary: 'Owner email/password login',
+        description:
+          'Authenticates an active owner. Sets an HttpOnly session cookie and returns a Bearer-capable opaque token for mobile. Failures are neutral (invalid_credentials).',
+        body: postBodySchema,
+        response: {
+          200: postResponse200,
+          400: invalidInputResponse,
+          401: invalidCredentialsResponse,
+          503: { type: 'object' },
+        },
+      },
+    },
+    async (request, reply) => {
+      const body = request.body;
+      const url = app.config.DATABASE_URL?.trim();
+      if (url === undefined || url === '') {
+        return reply.status(503).send({ error: 'service_unavailable' });
+      }
+
+      const email = body.email.trim();
+      if (email.length === 0) {
+        return reply.status(400).send({
+          error: 'invalid_input',
+          field: 'email',
+          message: 'Email is required',
+        });
+      }
+      if (!email.includes('@')) {
+        return reply.status(400).send({
+          error: 'invalid_input',
+          field: 'email',
+          message: 'Email is invalid',
+        });
+      }
+
+      const secure = request.protocol === 'https';
+      const ctx = {
+        ip: getRequestIp(request),
+        userAgent: (request.headers['user-agent'] ?? null) as string | null,
+      };
+
+      const result = await withDisposableDatabase(url, (db) =>
+        db.transaction(async (tx) => {
+          return runOwnerLoginInDb(tx, { email, password: body.password }, ctx);
+        }),
+      );
+
+      if (result.kind === 'invalid_credentials') {
+        return reply.status(401).send({ error: 'invalid_credentials' });
+      }
+
+      const maxAge = Math.max(
+        60,
+        Math.floor((result.sessionExpiresAt.getTime() - Date.now()) / 1000),
+      );
+      appendSessionCookie(reply, result.rawSessionToken, maxAge, secure);
+
+      return reply.status(200).send({
+        user: {
+          id: result.user.id,
+          email: result.user.email,
+          displayName: result.user.displayName,
+          role: result.user.role,
+        },
+        session: {
+          token: result.rawSessionToken,
+          expiresAt: result.sessionExpiresAt.toISOString(),
+        },
+      });
+    },
+  );
+}

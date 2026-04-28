@@ -51,7 +51,8 @@ export async function registerAuthMeRoute(app: FastifyInstance, options?: AuthMe
         authorization: request.headers.authorization,
         cookie: request.headers.cookie,
       });
-      if (t.token === undefined) {
+      const rawToken = t.token;
+      if (rawToken === undefined) {
         return reply.status(401).send({ error: 'unauthorized' });
       }
 
@@ -60,7 +61,7 @@ export async function registerAuthMeRoute(app: FastifyInstance, options?: AuthMe
         return reply.status(503).send({ error: 'service_unavailable' });
       }
 
-      const u = await withDisposableDatabase(url, (db) => resolveAuthMeUser(db, t.token));
+      const u = await withDisposableDatabase(url, (db) => resolveAuthMeUser(db, rawToken));
       if (u === 'unauthorized') {
         return reply.status(401).send({ error: 'unauthorized' });
       }

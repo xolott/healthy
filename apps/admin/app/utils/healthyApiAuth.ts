@@ -1,5 +1,20 @@
 export const PASSWORD_MIN_LENGTH = 12;
 
+export class InvalidOwnerLoginInputError extends Error {
+  constructor(
+    public readonly field: string,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export class OwnerLoginInvalidCredentialsError extends Error {
+  constructor() {
+    super("Invalid email or password");
+  }
+}
+
 export type CurrentUser = {
   id: string;
   email: string;
@@ -119,6 +134,55 @@ export async function postFirstOwnerSetup(
     typeof b.session.expiresAt !== "string"
   ) {
     throw new Error("Invalid setup response");
+  }
+  return { user: b.user, session: b.session };
+}
+
+/**
+ * Owner login after setup is complete. Stores HttpOnly session cookie for the API origin.
+ */
+export async function postOwnerLogin(
+  apiBaseUrl: string,
+  input: { email: string; password: string },
+): Promise<FirstOwnerSuccessBody> {
+  const base = apiBaseUrl.replace(/\/+$/, "");
+  const res = await fetch(`${base}/auth/login`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+  if (res.status === 400) {
+    const body: unknown = await res.json().catch(() => ({}));
+    if (typeof body === "object" && body !== null) {
+      const o = body as { error?: string; field?: string; message?: string };
+      if (o.error === "invalid_input" && typeof o.field === "string" && typeof o.message === "string") {
+        throw new InvalidOwnerLoginInputError(o.field, o.message);
+      }
+    }
+    throw new Error("Bad request");
+  }
+  if (res.status === 401) {
+    throw new OwnerLoginInvalidCredentialsError();
+  }
+  if (res.status === 503) {
+    throw new Error("Server unavailable");
+  }
+  if (!res.ok) {
+    throw new Error(`HTTP ${String(res.status)}`);
+  }
+  const body: unknown = await res.json();
+  if (typeof body !== "object" || body === null) {
+    throw new Error("Invalid login response");
+  }
+  const b = body as { user?: CurrentUser; session?: { token: string; expiresAt: string } };
+  if (
+    b.user === undefined ||
+    b.session === undefined ||
+    typeof b.session.token !== "string" ||
+    typeof b.session.expiresAt !== "string"
+  ) {
+    throw new Error("Invalid login response");
   }
   return { user: b.user, session: b.session };
 }
