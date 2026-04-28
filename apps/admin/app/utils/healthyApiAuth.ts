@@ -57,6 +57,13 @@ export class InvalidInputApiError extends Error {
   }
 }
 
+export class ApiServiceUnavailableError extends Error {
+  constructor() {
+    super("Server unavailable");
+    this.name = "ApiServiceUnavailableError";
+  }
+}
+
 /**
  * Fetches the current user using the API session (HttpOnly cookie and/or future Bearer token wiring).
  */
@@ -117,7 +124,7 @@ export async function postFirstOwnerSetup(
     throw new SetupNotFoundError();
   }
   if (res.status === 503) {
-    throw new Error("Server unavailable");
+    throw new ApiServiceUnavailableError();
   }
   if (!res.ok) {
     throw new Error(`HTTP ${String(res.status)}`);
@@ -166,7 +173,7 @@ export async function postOwnerLogin(
     throw new OwnerLoginInvalidCredentialsError();
   }
   if (res.status === 503) {
-    throw new Error("Server unavailable");
+    throw new ApiServiceUnavailableError();
   }
   if (!res.ok) {
     throw new Error(`HTTP ${String(res.status)}`);
@@ -197,7 +204,7 @@ export async function postAuthLogout(apiBaseUrl: string): Promise<void> {
     credentials: "include",
   });
   if (res.status === 503) {
-    throw new Error("Server unavailable");
+    throw new ApiServiceUnavailableError();
   }
   if (!res.ok) {
     throw new Error(`HTTP ${String(res.status)}`);

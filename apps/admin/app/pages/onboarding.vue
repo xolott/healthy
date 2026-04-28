@@ -1,138 +1,164 @@
 <template>
-  <section aria-labelledby="onboarding-title" style="max-width: 28rem">
-    <h1 id="onboarding-title" style="font-size: 1.5rem">Create owner account</h1>
-    <p style="margin-top: 0.85rem; max-width: 32rem; opacity: 0.9">
-      This server has no active owner yet. Set the initial owner — you will be signed in for 30 days on this
-      device (session cookie for the API host).
-    </p>
+  <div class="flex min-h-[50dvh] flex-col justify-center">
+    <Card class="mx-auto w-full max-w-lg" aria-labelledby="onboarding-title">
+      <CardHeader>
+        <CardTitle id="onboarding-title">Create owner account</CardTitle>
+        <CardDescription>
+          This server has no active owner yet. Set the initial owner. After creation you will continue to sign
+          in (new session cookies are cleared so you authenticate on the login page).
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <p id="password-hint" class="text-muted-foreground text-sm">Password: at least {{ passwordMinLength }} characters.</p>
 
-    <p style="margin-top: 0.5rem; font-size: 0.9rem; opacity: 0.85" id="password-hint">
-      Password: at least {{ passwordMinLength }} characters.
-    </p>
+        <Alert v-if="formError" data-testid="onboarding-error" variant="destructive">
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{{ formError }}</AlertDescription>
+        </Alert>
 
-    <div
-      v-if="formError"
-      role="alert"
-      data-testid="onboarding-error"
-      style="margin-top: 1rem; padding: 0.75rem 1rem; border-radius: 8px; background: #3a1f1f"
-    >
-      {{ formError }}
-    </div>
+        <div
+          v-if="isSubmitting"
+          aria-live="polite"
+          class="text-muted-foreground text-sm"
+          data-testid="onboarding-loading"
+          role="status"
+        >
+          Creating account…
+        </div>
 
-    <form style="margin-top: 1.1rem" @submit.prevent="onSubmit">
-      <label for="display-name" style="display: block; font-size: 0.9rem; margin-bottom: 0.35rem"
-        >Display name</label
-      >
-      <input
-        id="display-name"
-        v-model="displayName"
-        type="text"
-        name="displayName"
-        required
-        autocomplete="name"
-        data-testid="onboarding-display-name"
-        style="width: 100%; padding: 0.5rem 0.65rem; border-radius: 6px; border: 1px solid #444"
-      />
+        <form class="space-y-4" @submit.prevent="onSubmit">
+          <div class="space-y-2">
+            <Label for="display-name">Display name</Label>
+            <Input
+              id="display-name"
+              v-model="displayName"
+              type="text"
+              name="displayName"
+              required
+              autocomplete="name"
+              data-testid="onboarding-display-name"
+            />
+          </div>
 
-      <label
-        for="email"
-        style="display: block; font-size: 0.9rem; margin-top: 0.85rem; margin-bottom: 0.35rem"
-        >Email</label
-      >
-      <input
-        id="email"
-        v-model="email"
-        type="email"
-        name="email"
-        required
-        autocomplete="email"
-        data-testid="onboarding-email"
-        style="width: 100%; padding: 0.5rem 0.65rem; border-radius: 6px; border: 1px solid #444"
-      />
+          <div class="space-y-2">
+            <Label for="email">Email</Label>
+            <Input
+              id="email"
+              v-model="email"
+              type="email"
+              name="email"
+              required
+              autocomplete="email"
+              data-testid="onboarding-email"
+            />
+          </div>
 
-      <label
-        for="password"
-        style="display: block; font-size: 0.9rem; margin-top: 0.85rem; margin-bottom: 0.35rem"
-        >Password</label
-      >
-      <input
-        id="password"
-        v-model="password"
-        type="password"
-        name="password"
-        required
-        :minlength="passwordMinLength"
-        autocomplete="new-password"
-        aria-describedby="password-hint"
-        data-testid="onboarding-password"
-        style="width: 100%; padding: 0.5rem 0.65rem; border-radius: 6px; border: 1px solid #444"
-      />
+          <div class="space-y-2">
+            <Label for="password">Password</Label>
+            <Input
+              id="password"
+              v-model="password"
+              type="password"
+              name="password"
+              required
+              :minlength="passwordMinLength"
+              autocomplete="new-password"
+              aria-describedby="password-hint"
+              data-testid="onboarding-password"
+            />
+          </div>
 
-      <button
-        type="submit"
-        :disabled="submitting"
-        data-testid="onboarding-submit"
-        style="margin-top: 1rem; padding: 0.45rem 1rem; border-radius: 6px; cursor: pointer"
-      >
-        Create owner and sign in
-      </button>
-    </form>
-  </section>
+          <Button
+            type="submit"
+            :disabled="isSubmitting"
+            class="w-full sm:w-auto"
+            data-testid="onboarding-submit"
+          >
+            Create owner account
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { useMutation, useQueryCache } from "@pinia/colada";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
-  InvalidInputApiError,
-  PasswordPolicyApiError,
-  PASSWORD_MIN_LENGTH,
-  postFirstOwnerSetup,
-  SetupNotFoundError,
-} from "../utils/healthyApiAuth";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useHealthyApiStore } from "@/stores/healthyApi";
+import {
+  clientPasswordTooShortMessage,
+  formatFirstOwnerOnboardingError,
+  MissingAdminApiBaseUrlError,
+} from "@/utils/firstOwnerOnboardingErrors";
+import { healthyPublicStatusQueryKey } from "@/utils/healthyApiQueryKeys";
+import { PASSWORD_MIN_LENGTH, postAuthLogout, postFirstOwnerSetup } from "@/utils/healthyApiAuth";
 
 const displayName = ref("");
 const email = ref("");
 const password = ref("");
 const formError = ref<string | null>(null);
-const submitting = ref(false);
 
 const passwordMinLength = PASSWORD_MIN_LENGTH;
 
 const api = useHealthyApiBaseUrl();
+const queryCache = useQueryCache();
+const apiStore = useHealthyApiStore();
+
+const { mutateAsync, isLoading } = useMutation({
+  mutation: async (input: { displayName: string; email: string; password: string }) => {
+    const resolved = api.value;
+    if (!resolved.ok) {
+      throw new MissingAdminApiBaseUrlError();
+    }
+    return postFirstOwnerSetup(resolved.baseUrl, input);
+  },
+  async onSuccess() {
+    const resolved = api.value;
+    if (resolved.ok) {
+      await queryCache.invalidateQueries({
+        key: [...healthyPublicStatusQueryKey(resolved.baseUrl)],
+        exact: true,
+      });
+    }
+    apiStore.markProbe();
+  },
+});
+
+const isSubmitting = computed(() => isLoading.value);
 
 async function onSubmit() {
   formError.value = null;
   if (!api.value.ok) {
-    formError.value =
-      "API base URL is missing or invalid. Configure NUXT_PUBLIC_API_BASE_URL for this deployment.";
+    formError.value = formatFirstOwnerOnboardingError(new MissingAdminApiBaseUrlError());
     return;
   }
   const base = api.value.baseUrl;
   if (password.value.length < passwordMinLength) {
-    formError.value = `Password must be at least ${String(passwordMinLength)} characters.`;
+    formError.value = clientPasswordTooShortMessage(passwordMinLength);
     return;
   }
-  submitting.value = true;
   try {
-    await postFirstOwnerSetup(base, {
-      displayName: displayName.value,
-      email: email.value,
+    await mutateAsync({
+      displayName: displayName.value.trim(),
+      email: email.value.trim(),
       password: password.value,
     });
-    await navigateTo("/home");
+    await postAuthLogout(base);
+    await navigateTo("/login");
   } catch (e) {
-    if (e instanceof PasswordPolicyApiError) {
-      formError.value = e.message;
-    } else if (e instanceof InvalidInputApiError) {
-      formError.value = e.message;
-    } else if (e instanceof SetupNotFoundError) {
-      formError.value = "Setup is no longer available. Try signing in if the server is already configured.";
-    } else {
-      formError.value = "Request failed. Check the API and try again.";
-    }
-  } finally {
-    submitting.value = false;
+    formError.value = formatFirstOwnerOnboardingError(e);
   }
 }
 </script>

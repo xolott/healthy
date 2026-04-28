@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  ApiServiceUnavailableError,
   AuthMeUnauthorizedError,
   fetchAuthMe,
   InvalidInputApiError,
@@ -187,7 +188,25 @@ describe("healthyApiAuth", () => {
     ).rejects.toBeInstanceOf(SetupNotFoundError);
   });
 
-  it("postOwnerLogin throws on 503", async () => {
+  it("postFirstOwnerSetup throws ApiServiceUnavailableError on 503", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 503,
+        ok: false,
+        json: async () => ({}),
+      })) as unknown as typeof fetch,
+    );
+    await expect(
+      postFirstOwnerSetup("https://api.example/", {
+        displayName: "A",
+        email: "a@b.com",
+        password: "x".repeat(12),
+      }),
+    ).rejects.toBeInstanceOf(ApiServiceUnavailableError);
+  });
+
+  it("postOwnerLogin throws ApiServiceUnavailableError on 503", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -198,7 +217,18 @@ describe("healthyApiAuth", () => {
     );
     await expect(
       postOwnerLogin("https://api.example", { email: "a@b.com", password: "x".repeat(12) }),
-    ).rejects.toThrow("Server unavailable");
+    ).rejects.toBeInstanceOf(ApiServiceUnavailableError);
+  });
+
+  it("postAuthLogout throws ApiServiceUnavailableError on 503", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 503,
+        ok: false,
+      })) as unknown as typeof fetch,
+    );
+    await expect(postAuthLogout("https://api.example/")).rejects.toBeInstanceOf(ApiServiceUnavailableError);
   });
 
   it("postAuthLogout POSTs with credentials and accepts 204", async () => {

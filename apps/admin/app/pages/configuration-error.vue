@@ -43,6 +43,7 @@ import { useQuery } from "@pinia/colada";
 import { runConfigurationRetry } from "@/utils/healthyApiConfigurationRetry";
 import type { ConfigurationErrorReason } from "@/utils/healthyApiGlobalRoute";
 import { resolveConfiguredApiBaseUrl } from "@/utils/healthyApiConfig";
+import { healthyPublicStatusQueryKey } from "@/utils/healthyApiQueryKeys";
 import { fetchHealthyPublicStatus } from "@/utils/healthyApiStatus";
 import { useHealthyApiStore } from "@/stores/healthyApi";
 
@@ -70,7 +71,7 @@ const resolved = computed(() => resolveConfiguredApiBaseUrl(rawConfiguredUrl.val
 const baseUrlForProbe = computed(() => (resolved.value.ok ? resolved.value.baseUrl : ""));
 
 const { refetch, isLoading } = useQuery({
-  key: () => ["healthy-public-status", baseUrlForProbe.value],
+  key: () => [...healthyPublicStatusQueryKey(baseUrlForProbe.value)],
   query: () => fetchHealthyPublicStatus(baseUrlForProbe.value),
   enabled: false,
 });
