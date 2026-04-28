@@ -1,115 +1,148 @@
 <template>
-  <section aria-labelledby="login-title" style="max-width: 28rem">
-    <h1 id="login-title" style="font-size: 1.5rem">Sign in</h1>
-    <p style="margin-top: 0.85rem; max-width: 32rem; opacity: 0.9">
-      Enter the owner email and password for this Healthy server. Passwords follow the same minimum length as
-      first-owner setup ({{ passwordMinLength }} characters).
-    </p>
+  <div class="flex min-h-[50dvh] flex-col justify-center">
+    <Card class="mx-auto w-full max-w-lg" aria-labelledby="login-title">
+      <CardHeader>
+        <CardTitle id="login-title">Sign in</CardTitle>
+        <CardDescription>
+          Enter the owner email and password for this Healthy server. Passwords follow the same minimum length as
+          first-owner setup ({{ passwordMinLength }} characters).
+        </CardDescription>
+        <p id="password-hint" class="text-muted-foreground text-sm">Only active owner accounts can sign in here.</p>
+      </CardHeader>
+      <CardContent class="space-y-4">
+        <Alert v-if="formError" data-testid="login-error" variant="destructive">
+          <AlertTitle>Error</AlertTitle>
+          <AlertDescription>{{ formError }}</AlertDescription>
+        </Alert>
 
-    <p style="margin-top: 0.5rem; font-size: 0.9rem; opacity: 0.85" id="password-hint">
-      Only active owner accounts can sign in here.
-    </p>
+        <div
+          v-if="isSubmitting"
+          aria-live="polite"
+          class="text-muted-foreground text-sm"
+          data-testid="login-loading"
+          role="status"
+        >
+          Signing in…
+        </div>
 
-    <div
-      v-if="formError"
-      role="alert"
-      data-testid="login-error"
-      style="margin-top: 1rem; padding: 0.75rem 1rem; border-radius: 8px; background: #3a1f1f"
-    >
-      {{ formError }}
-    </div>
+        <form class="space-y-4" @submit.prevent="onSubmit">
+          <div class="space-y-2">
+            <Label for="login-email">Email</Label>
+            <Input
+              id="login-email"
+              v-model="email"
+              type="email"
+              name="email"
+              required
+              autocomplete="email"
+              data-testid="login-email"
+            />
+          </div>
 
-    <form style="margin-top: 1.1rem" @submit.prevent="onSubmit">
-      <label for="email" style="display: block; font-size: 0.9rem; margin-bottom: 0.35rem">Email</label>
-      <input
-        id="email"
-        v-model="email"
-        type="email"
-        name="email"
-        required
-        autocomplete="email"
-        data-testid="login-email"
-        style="width: 100%; padding: 0.5rem 0.65rem; border-radius: 6px; border: 1px solid #444"
-      />
+          <div class="space-y-2">
+            <Label for="login-password">Password</Label>
+            <Input
+              id="login-password"
+              v-model="password"
+              type="password"
+              name="password"
+              required
+              :minlength="passwordMinLength"
+              autocomplete="current-password"
+              aria-describedby="password-hint"
+              data-testid="login-password"
+            />
+          </div>
 
-      <label
-        for="password"
-        style="display: block; font-size: 0.9rem; margin-top: 0.85rem; margin-bottom: 0.35rem"
-        >Password</label
-      >
-      <input
-        id="password"
-        v-model="password"
-        type="password"
-        name="password"
-        required
-        :minlength="passwordMinLength"
-        autocomplete="current-password"
-        aria-describedby="password-hint"
-        data-testid="login-password"
-        style="width: 100%; padding: 0.5rem 0.65rem; border-radius: 6px; border: 1px solid #444"
-      />
-
-      <button
-        type="submit"
-        :disabled="submitting"
-        data-testid="login-submit"
-        style="margin-top: 1rem; padding: 0.45rem 1rem; border-radius: 6px; cursor: pointer"
-      >
-        Sign in
-      </button>
-    </form>
-  </section>
+          <Button
+            type="submit"
+            :disabled="isSubmitting"
+            class="w-full sm:w-auto"
+            data-testid="login-submit"
+          >
+            Sign in
+          </Button>
+        </form>
+      </CardContent>
+    </Card>
+  </div>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { useMutation, useQueryCache } from "@pinia/colada";
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import {
-  InvalidOwnerLoginInputError,
-  OwnerLoginInvalidCredentialsError,
-  PASSWORD_MIN_LENGTH,
-  postOwnerLogin,
-} from "../utils/healthyApiAuth";
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useHealthyApiStore } from "@/stores/healthyApi";
+import { MissingAdminApiBaseUrlError, clientPasswordTooShortMessage } from "@/utils/firstOwnerOnboardingErrors";
+import { healthyAuthMeQueryKey, healthyPublicStatusQueryKey } from "@/utils/healthyApiQueryKeys";
+import { formatOwnerLoginError } from "@/utils/ownerLoginErrors";
+import { PASSWORD_MIN_LENGTH, postOwnerLogin } from "@/utils/healthyApiAuth";
 
 const email = ref("");
 const password = ref("");
 const formError = ref<string | null>(null);
-const submitting = ref(false);
 
 const passwordMinLength = PASSWORD_MIN_LENGTH;
 
 const api = useHealthyApiBaseUrl();
+const queryCache = useQueryCache();
+const apiStore = useHealthyApiStore();
+
+const { mutateAsync, isLoading } = useMutation({
+  mutation: async (input: { email: string; password: string }) => {
+    const resolved = api.value;
+    if (!resolved.ok) {
+      throw new MissingAdminApiBaseUrlError();
+    }
+    return postOwnerLogin(resolved.baseUrl, input);
+  },
+  async onSuccess(user) {
+    apiStore.setCurrentUser(user);
+    const resolved = api.value;
+    if (resolved.ok) {
+      await queryCache.invalidateQueries({
+        key: [...healthyPublicStatusQueryKey(resolved.baseUrl)],
+        exact: true,
+      });
+      await queryCache.invalidateQueries({
+        key: [...healthyAuthMeQueryKey(resolved.baseUrl)],
+        exact: true,
+      });
+    }
+    apiStore.markProbe();
+    await navigateTo("/home");
+  },
+});
+
+const isSubmitting = computed(() => isLoading.value);
 
 async function onSubmit() {
   formError.value = null;
   if (!api.value.ok) {
-    formError.value =
-      "API base URL is missing or invalid. Configure NUXT_PUBLIC_API_BASE_URL for this deployment.";
+    formError.value = formatOwnerLoginError(new MissingAdminApiBaseUrlError());
     return;
   }
-  const base = api.value.baseUrl;
   if (password.value.length < passwordMinLength) {
-    formError.value = `Password must be at least ${String(passwordMinLength)} characters.`;
+    formError.value = clientPasswordTooShortMessage(passwordMinLength);
     return;
   }
-  submitting.value = true;
   try {
-    await postOwnerLogin(base, {
+    await mutateAsync({
       email: email.value.trim(),
       password: password.value,
     });
-    await navigateTo("/home");
   } catch (e) {
-    if (e instanceof OwnerLoginInvalidCredentialsError) {
-      formError.value = "Could not sign in. Check your email and password and try again.";
-    } else if (e instanceof InvalidOwnerLoginInputError) {
-      formError.value = e.message;
-    } else {
-      formError.value = "Request failed. Check the API and try again.";
-    }
-  } finally {
-    submitting.value = false;
+    formError.value = formatOwnerLoginError(e);
   }
 }
 </script>

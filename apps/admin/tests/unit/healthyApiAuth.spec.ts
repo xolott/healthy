@@ -5,6 +5,7 @@ import {
   AuthMeUnauthorizedError,
   fetchAuthMe,
   InvalidInputApiError,
+  InvalidOwnerLoginInputError,
   OwnerLoginInvalidCredentialsError,
   PASSWORD_MIN_LENGTH,
   PasswordPolicyApiError,
@@ -76,26 +77,46 @@ describe("healthyApiAuth", () => {
     await expect(fetchAuthMe("https://api.example")).rejects.toThrow("HTTP 503");
   });
 
-  it("postOwnerLogin returns user and session on 200", async () => {
+  it("postOwnerLogin returns only the user on 200 (opaque session token is not part of the result)", async () => {
     const user = { id: "u1", email: "a@b.com", displayName: "A", role: "owner" };
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        status: 200,
-        ok: true,
-        json: async () => ({
-          user,
-          session: { token: "opaque-token", expiresAt: "2099-01-01T00:00:00.000Z" },
-        }),
-      })) as unknown as typeof fetch,
-    );
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({
+        user,
+        session: { token: "opaque-token", expiresAt: "2099-01-01T00:00:00.000Z" },
+      }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
     const out = await postOwnerLogin("https://api.example/", {
       email: "a@b.com",
       password: "x".repeat(12),
     });
-    expect(out.user).toEqual(user);
-    expect(out.session.token).toBe("opaque-token");
-    expect(out.session.expiresAt).toContain("2099");
+    expect(out).toEqual(user);
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/auth/login", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: "a@b.com", password: "x".repeat(12) }),
+    });
+  });
+
+  it("postOwnerLogin throws InvalidOwnerLoginInputError on invalid_input 400", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 400,
+        ok: false,
+        json: async () => ({
+          error: "invalid_input",
+          field: "email",
+          message: "Email is invalid",
+        }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(
+      postOwnerLogin("https://api.example", { email: "bad", password: "x".repeat(12) }),
+    ).rejects.toBeInstanceOf(InvalidOwnerLoginInputError);
   });
 
   it("postFirstOwnerSetup returns user and session on 201", async () => {

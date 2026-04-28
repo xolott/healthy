@@ -146,12 +146,14 @@ export async function postFirstOwnerSetup(
 }
 
 /**
- * Owner login after setup is complete. Stores HttpOnly session cookie for the API origin.
+ * Owner login after setup is complete. Sets the HttpOnly session cookie on the API origin.
+ * Returns only the current user — the API may include a Bearer token in JSON for mobile clients;
+ * that value is validated for a well-formed response but is not returned, so web state stays cookie-only.
  */
 export async function postOwnerLogin(
   apiBaseUrl: string,
   input: { email: string; password: string },
-): Promise<FirstOwnerSuccessBody> {
+): Promise<CurrentUser> {
   const base = apiBaseUrl.replace(/\/+$/, "");
   const res = await fetch(`${base}/auth/login`, {
     method: "POST",
@@ -191,7 +193,7 @@ export async function postOwnerLogin(
   ) {
     throw new Error("Invalid login response");
   }
-  return { user: b.user, session: b.session };
+  return b.user;
 }
 
 /**
