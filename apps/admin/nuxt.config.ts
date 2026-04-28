@@ -1,3 +1,5 @@
+import tailwindcss from "@tailwindcss/vite";
+
 export default defineNuxtConfig({
   compatibilityDate: "2025-07-15",
   devtools: { enabled: true },
@@ -5,7 +7,15 @@ export default defineNuxtConfig({
     strict: true,
     typeCheck: true,
   },
-  modules: ["@nuxt/eslint"],
+  css: ["~/assets/css/tailwind.css"],
+  vite: {
+    plugins: [tailwindcss()],
+  },
+  modules: ["@nuxt/eslint", "@pinia/nuxt", "@pinia/colada-nuxt", "shadcn-nuxt"],
+  shadcn: {
+    prefix: "",
+    componentDir: "@/components/ui",
+  },
   nitro: {
     routeRules: {
       "/api/health": { cors: true },

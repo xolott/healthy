@@ -79,17 +79,16 @@ const submitting = ref(false);
 
 const passwordMinLength = PASSWORD_MIN_LENGTH;
 
-function apiBaseUrlFromCookie(): string {
-  return (useCookie("healthy_api_base_url").value ?? "").toString().trim();
-}
+const api = useHealthyApiBaseUrl();
 
 async function onSubmit() {
   formError.value = null;
-  const base = apiBaseUrlFromCookie();
-  if (!base) {
-    formError.value = "Missing API base URL. Go to setup and save your server URL first.";
+  if (!api.value.ok) {
+    formError.value =
+      "API base URL is missing or invalid. Configure NUXT_PUBLIC_API_BASE_URL for this deployment.";
     return;
   }
+  const base = api.value.baseUrl;
   if (password.value.length < passwordMinLength) {
     formError.value = `Password must be at least ${String(passwordMinLength)} characters.`;
     return;

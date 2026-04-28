@@ -20,20 +20,18 @@
 <script setup lang="ts">
 import { postAuthLogout } from "../utils/healthyApiAuth";
 
-function apiBaseUrlFromCookie(): string {
-  return (useCookie("healthy_api_base_url").value ?? "").toString().trim();
-}
+const api = useHealthyApiBaseUrl();
 
 async function onLogout() {
-  const base = apiBaseUrlFromCookie();
-  if (!base) {
-    await navigateTo("/setup");
+  if (!api.value.ok) {
+    await navigateTo({ path: "/configuration-error", query: { reason: "missing" } });
     return;
   }
+  const base = api.value.baseUrl;
   try {
     await postAuthLogout(base);
   } catch {
-    // Still leave the shell: user can reconnect from setup if the API is down.
+    // Still leave the shell: user can reconnect if the API is down.
   }
   await navigateTo("/login");
 }

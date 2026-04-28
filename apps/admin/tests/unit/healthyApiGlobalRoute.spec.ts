@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  isConfigurationErrorPath,
   isInternalHealthyAdminPath,
-  isSetupPath,
   resolveHealthyApiGlobalNavigation,
 } from "../../app/utils/healthyApiGlobalRoute";
 
@@ -19,32 +19,45 @@ describe("isInternalHealthyAdminPath", () => {
   });
 });
 
-describe("isSetupPath", () => {
-  it("matches /setup and nested setup paths", () => {
-    expect(isSetupPath("/setup")).toBe(true);
-    expect(isSetupPath("/setup/extra")).toBe(true);
-    expect(isSetupPath("/onboarding")).toBe(false);
+describe("isConfigurationErrorPath", () => {
+  it("matches /configuration-error and nested paths", () => {
+    expect(isConfigurationErrorPath("/configuration-error")).toBe(true);
+    expect(isConfigurationErrorPath("/configuration-error/extra")).toBe(true);
+    expect(isConfigurationErrorPath("/onboarding")).toBe(false);
   });
 });
 
 describe("resolveHealthyApiGlobalNavigation", () => {
-  it("continues for internal and setup paths regardless of base URL", () => {
+  it("continues for internal and configuration-error paths regardless of base URL", () => {
     expect(resolveHealthyApiGlobalNavigation({ path: "/_nuxt/entry.js", apiBaseUrlTrimmed: "" })).toEqual({
       action: "continue",
     });
-    expect(resolveHealthyApiGlobalNavigation({ path: "/setup", apiBaseUrlTrimmed: "" })).toEqual({
+    expect(resolveHealthyApiGlobalNavigation({ path: "/configuration-error", apiBaseUrlTrimmed: "" })).toEqual({
       action: "continue",
     });
   });
 
-  it("redirects to /setup when no API base URL is stored", () => {
+  it("redirects to configuration-error when no API base URL is configured", () => {
     expect(resolveHealthyApiGlobalNavigation({ path: "/", apiBaseUrlTrimmed: "" })).toEqual({
       action: "redirect",
-      target: { path: "/setup" },
+      target: { path: "/configuration-error", query: { reason: "missing" } },
     });
   });
 
-  it("redirects with reconnect when /status cannot be fetched", () => {
+  it("redirects with invalid_url when deployment URL is not usable", () => {
+    expect(
+      resolveHealthyApiGlobalNavigation({
+        path: "/",
+        apiBaseUrlTrimmed: "",
+        emptyApiBaseReason: "invalid_url",
+      }),
+    ).toEqual({
+      action: "redirect",
+      target: { path: "/configuration-error", query: { reason: "invalid_url" } },
+    });
+  });
+
+  it("redirects with unreachable when /status cannot be fetched", () => {
     expect(
       resolveHealthyApiGlobalNavigation({
         path: "/",
@@ -53,7 +66,7 @@ describe("resolveHealthyApiGlobalNavigation", () => {
       }),
     ).toEqual({
       action: "redirect",
-      target: { path: "/setup", query: { reconnect: "1" } },
+      target: { path: "/configuration-error", query: { reason: "unreachable" } },
     });
   });
 
@@ -105,7 +118,7 @@ describe("resolveHealthyApiGlobalNavigation", () => {
     ).toEqual({ action: "redirect", target: { path: "/" } });
   });
 
-  it("on /login: stays on login when unauthorized; reconnect on transport errors", () => {
+  it("on /login: stays on login when unauthorized; configuration-error on transport errors", () => {
     expect(
       resolveHealthyApiGlobalNavigation({
         path: "/login",
@@ -123,11 +136,11 @@ describe("resolveHealthyApiGlobalNavigation", () => {
       }),
     ).toEqual({
       action: "redirect",
-      target: { path: "/setup", query: { reconnect: "1" } },
+      target: { path: "/configuration-error", query: { reason: "unreachable" } },
     });
   });
 
-  it("on protected routes: login when unauthorized; reconnect on errors", () => {
+  it("on protected routes: login when unauthorized; configuration-error on errors", () => {
     expect(
       resolveHealthyApiGlobalNavigation({
         path: "/",
@@ -145,7 +158,7 @@ describe("resolveHealthyApiGlobalNavigation", () => {
       }),
     ).toEqual({
       action: "redirect",
-      target: { path: "/setup", query: { reconnect: "1" } },
+      target: { path: "/configuration-error", query: { reason: "unreachable" } },
     });
     expect(
       resolveHealthyApiGlobalNavigation({

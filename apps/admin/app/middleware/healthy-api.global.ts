@@ -1,7 +1,8 @@
 import { AuthMeUnauthorizedError, fetchAuthMe } from "../utils/healthyApiAuth";
+import { resolveConfiguredApiBaseUrl } from "../utils/healthyApiConfig";
 import {
+  isConfigurationErrorPath,
   isInternalHealthyAdminPath,
-  isSetupPath,
   resolveHealthyApiGlobalNavigation,
   type HealthyGlobalRedirect,
 } from "../utils/healthyApiGlobalRoute";
@@ -15,24 +16,27 @@ function toNavigateArg(target: HealthyGlobalRedirect) {
 }
 
 export default defineNuxtRouteMiddleware(async (to) => {
-  if (isInternalHealthyAdminPath(to.path) || isSetupPath(to.path)) {
+  if (isInternalHealthyAdminPath(to.path) || isConfigurationErrorPath(to.path)) {
     return;
   }
 
-  const apiCookie = useCookie("healthy_api_base_url", {
-    path: "/",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-  });
-  const baseUrl = (apiCookie.value ?? "").trim();
+  const config = useRuntimeConfig();
+  const resolved = resolveConfiguredApiBaseUrl(String(config.public.apiBaseUrl ?? ""));
 
-  const missingBase = resolveHealthyApiGlobalNavigation({
-    path: to.path,
-    apiBaseUrlTrimmed: baseUrl,
-  });
-  if (missingBase.action === "redirect") {
-    return navigateTo(toNavigateArg(missingBase.target));
+  if (!resolved.ok) {
+    const emptyReason = resolved.reason === "missing" ? "missing" : "invalid_url";
+    const missingNav = resolveHealthyApiGlobalNavigation({
+      path: to.path,
+      apiBaseUrlTrimmed: "",
+      emptyApiBaseReason: emptyReason,
+    });
+    if (missingNav.action === "redirect") {
+      return navigateTo(toNavigateArg(missingNav.target));
+    }
+    return;
   }
+
+  const baseUrl = resolved.baseUrl;
 
   let publicStatus: { ok: true; setupRequired: boolean } | { ok: false };
   try {

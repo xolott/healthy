@@ -3,9 +3,10 @@
  * and session restoration outcomes stay testable without Nuxt runtime.
  */
 
+export type ConfigurationErrorReason = "missing" | "invalid_url" | "unreachable";
+
 export type HealthyGlobalRedirect =
-  | { path: "/setup" }
-  | { path: "/setup"; query: { reconnect: "1" } }
+  | { path: "/configuration-error"; query: { reason: ConfigurationErrorReason } }
   | { path: "/onboarding" }
   | { path: "/login" }
   | { path: "/" };
@@ -18,8 +19,8 @@ export function isInternalHealthyAdminPath(path: string): boolean {
   return path.startsWith("/_nuxt") || path.startsWith("/__") || path.startsWith("/api/");
 }
 
-export function isSetupPath(path: string): boolean {
-  return path === "/setup" || path.startsWith("/setup/");
+export function isConfigurationErrorPath(path: string): boolean {
+  return path === "/configuration-error" || path.startsWith("/configuration-error/");
 }
 
 export type PublicStatusResult = { ok: true; setupRequired: boolean } | { ok: false };
@@ -28,24 +29,31 @@ export type AuthMeResult = "authenticated" | "unauthorized" | "error";
 
 /**
  * Mirrors `middleware/healthy-api.global.ts`: same branch order, same redirects.
- * When `apiBaseUrlTrimmed` is empty, `publicStatus` is ignored.
+ * When `apiBaseUrlTrimmed` is empty, `publicStatus` is ignored; use `emptyApiBaseReason`.
  * When `apiBaseUrlTrimmed` is non-empty, `publicStatus` must be the outcome of the `/status` fetch attempt.
  */
 export function resolveHealthyApiGlobalNavigation(input: {
   path: string;
   apiBaseUrlTrimmed: string;
+  /** When the configured URL is missing or not parseable as http(s). */
+  emptyApiBaseReason?: "missing" | "invalid_url";
   publicStatus?: PublicStatusResult;
   /** Required whenever the middleware would have called `fetchAuthMe` before deciding. */
   authMe?: AuthMeResult;
 }): HealthyGlobalNavigationResult {
   const { path, apiBaseUrlTrimmed } = input;
 
-  if (isInternalHealthyAdminPath(path) || isSetupPath(path)) {
+  if (isInternalHealthyAdminPath(path) || isConfigurationErrorPath(path)) {
     return { action: "continue" };
   }
 
   if (!apiBaseUrlTrimmed) {
-    return { action: "redirect", target: { path: "/setup" } };
+    const reason: ConfigurationErrorReason =
+      input.emptyApiBaseReason === "invalid_url" ? "invalid_url" : "missing";
+    return {
+      action: "redirect",
+      target: { path: "/configuration-error", query: { reason } },
+    };
   }
 
   const publicStatus = input.publicStatus;
@@ -54,7 +62,10 @@ export function resolveHealthyApiGlobalNavigation(input: {
   }
 
   if (!publicStatus.ok) {
-    return { action: "redirect", target: { path: "/setup", query: { reconnect: "1" } } };
+    return {
+      action: "redirect",
+      target: { path: "/configuration-error", query: { reason: "unreachable" } },
+    };
   }
 
   if (publicStatus.setupRequired) {
@@ -78,7 +89,10 @@ export function resolveHealthyApiGlobalNavigation(input: {
       return { action: "redirect", target: { path: "/" } };
     }
     if (authMe === "error") {
-      return { action: "redirect", target: { path: "/setup", query: { reconnect: "1" } } };
+      return {
+        action: "redirect",
+        target: { path: "/configuration-error", query: { reason: "unreachable" } },
+      };
     }
     return { action: "continue" };
   }
@@ -87,7 +101,10 @@ export function resolveHealthyApiGlobalNavigation(input: {
     return { action: "redirect", target: { path: "/login" } };
   }
   if (authMe === "error") {
-    return { action: "redirect", target: { path: "/setup", query: { reconnect: "1" } } };
+    return {
+      action: "redirect",
+      target: { path: "/configuration-error", query: { reason: "unreachable" } },
+    };
   }
   return { action: "continue" };
 }
