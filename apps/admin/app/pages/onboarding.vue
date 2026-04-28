@@ -26,7 +26,7 @@
           Creating account…
         </div>
 
-        <form class="space-y-4" @submit.prevent="onSubmit">
+        <form class="space-y-4" method="post" action="#" @submit.prevent="onSubmit">
           <div class="space-y-2">
             <Label for="display-name">Display name</Label>
             <Input

@@ -35,3 +35,8 @@ Thumbs.db
 
 # Misc
 *.iml
+
+# Playwright (admin e2e)
+**/playwright-report/
+**/playwright-report-*/
+**/test-results/

@@ -5,7 +5,8 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   typescript: {
     strict: true,
-    typeCheck: true,
+    /** Playwright stack sets `NUXT_DISABLE_TYPECHECK=1` to avoid vue-tsc copy flakiness in ephemeral environments. */
+    typeCheck: process.env["NUXT_DISABLE_TYPECHECK"] !== "1",
   },
   css: ["~/assets/css/tailwind.css"],
   vite: {

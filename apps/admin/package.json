@@ -14,7 +14,7 @@
     "typecheck": "nuxt typecheck",
     "test": "vitest run",
     "test:watch": "vitest watch",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test && playwright test -c playwright.unreachable.config.ts"
   },
   "dependencies": {
     "@pinia/colada": "^1.2.0",
@@ -34,6 +34,7 @@
     "vue": "3.5.33"
   },
   "devDependencies": {
+    "@testcontainers/postgresql": "10.16.0",
     "@healthy/eslint-config": "workspace:*",
     "@healthy/prettier-config": "workspace:*",
     "@nuxt/eslint": "1.15.2",
