@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
+  AuthMeUnauthorizedError,
+  fetchAuthMe,
   OwnerLoginInvalidCredentialsError,
   PASSWORD_MIN_LENGTH,
   postOwnerLogin,
@@ -27,6 +29,33 @@ describe("healthyApiAuth", () => {
     await expect(
       postOwnerLogin("https://api.example", { email: "a@b.com", password: "x".repeat(12) }),
     ).rejects.toBeInstanceOf(OwnerLoginInvalidCredentialsError);
+  });
+
+  it("fetchAuthMe uses credentials include and returns user on 200", async () => {
+    const user = { id: "u1", email: "a@b.com", displayName: "A", role: "owner" };
+    const fetchMock = vi.fn(async () => ({
+      status: 200,
+      ok: true,
+      json: async () => ({ user }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+    const out = await fetchAuthMe("https://api.example/");
+    expect(out).toEqual(user);
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/auth/me", {
+      credentials: "include",
+    });
+  });
+
+  it("fetchAuthMe throws AuthMeUnauthorizedError on 401", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 401,
+        ok: false,
+        json: async () => ({ error: "unauthorized" }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(fetchAuthMe("https://api.example")).rejects.toBeInstanceOf(AuthMeUnauthorizedError);
   });
 
   it("postOwnerLogin returns user and session on 200", async () => {
