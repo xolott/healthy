@@ -5,7 +5,7 @@ Scaffold Fastify HTTP service exposing:
 - `GET /health`
 - Swagger UI at `/docs`
 
-No persistence layer, migrations, repositories, authentication, or product routes yet.
+Persistence uses the shared package `@healthy/db` (Drizzle + PostgreSQL). Optional `DATABASE_URL` is validated at startup; omit it for health-only runs. See repository [`docs/database.md`](../../docs/database.md) for local Postgres, migrations, and tests.
 
 ## Local development
 
@@ -18,7 +18,7 @@ pnpm install
 pnpm --filter api dev
 ```
 
-The server listens using environment variables documented in `./.env.example`.
+The server listens using environment variables documented in `./.env.example` (including `DATABASE_URL` when you connect to a database).
 
 ## Scripts
 

@@ -27,6 +27,10 @@ pnpm --filter admin dev
 pnpm --filter api dev
 ```
 
+### PostgreSQL and Drizzle (`@healthy/db`)
+
+For `DATABASE_URL`, local Postgres setup, generating and applying Drizzle migrations, schema boundaries, and how database tests fit into `pnpm test`, see [`docs/database.md`](./database.md).
+
 ## Flutter apps
 
 Install Flutter SDK per [Flutter install](https://docs.flutter.dev/install). Prefer the version pinned in `.tool-versions` (`3.41.5`).

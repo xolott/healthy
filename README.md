@@ -19,6 +19,8 @@ This repository intentionally contains **scaffolding only**: app shells, health 
 
 See [.node-version](./.node-version), [.tool-versions](./.tool-versions), and [`docs/development.md`](docs/development.md).
 
+Database schema and migrations are documented in [`docs/database.md`](docs/database.md).
+
 ## Setup
 
 ### Node workspaces
@@ -55,7 +57,7 @@ Run from repo root (where `pnpm` is used):
 | `pnpm build` | Build wired packages |
 | `pnpm lint` | Lint JS/TS packages |
 | `pnpm format` | Format JS/TS |
-| `pnpm test` | Test JS/TS packages |
+| `pnpm test` | Test JS/TS packages (includes `@healthy/db`, `api`, `admin`; DB integration tests need Docker — see [`docs/database.md`](docs/database.md)) |
 | `pnpm clean` | Clean turbo + typical artifacts |
 
 Flutter: `flutter analyze` / `flutter test` under each app, or orchestrate via `melos` (see CI).
