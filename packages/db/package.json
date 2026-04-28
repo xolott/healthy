@@ -48,6 +48,10 @@
     "./users": {
       "types": "./dist/users/index.d.ts",
       "import": "./dist/users/index.js"
+    },
+    "./sessions": {
+      "types": "./dist/sessions/index.d.ts",
+      "import": "./dist/sessions/index.js"
     }
   },
   "files": [

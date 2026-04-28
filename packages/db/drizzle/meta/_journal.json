@@ -8,6 +8,13 @@
       "when": 1777339764360,
       "tag": "0000_keen_frightful_four",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777340863022,
+      "tag": "0001_slimy_liz_osborn",
+      "breakpoints": true
     }
   ]
 }

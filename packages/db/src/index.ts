@@ -8,3 +8,8 @@ export {
   type CreateUserInput,
   type UserRepository,
 } from './users/index.js';
+export {
+  createSessionRepository,
+  type CreateSessionInput,
+  type SessionRepository,
+} from './sessions/index.js';
