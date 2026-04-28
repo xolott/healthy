@@ -186,3 +186,20 @@ export async function postOwnerLogin(
   }
   return { user: b.user, session: b.session };
 }
+
+/**
+ * Revokes the current API session (HttpOnly cookie) and clears the cookie on the client.
+ */
+export async function postAuthLogout(apiBaseUrl: string): Promise<void> {
+  const base = apiBaseUrl.replace(/\/+$/, "");
+  const res = await fetch(`${base}/auth/logout`, {
+    method: "POST",
+    credentials: "include",
+  });
+  if (res.status === 503) {
+    throw new Error("Server unavailable");
+  }
+  if (!res.ok) {
+    throw new Error(`HTTP ${String(res.status)}`);
+  }
+}

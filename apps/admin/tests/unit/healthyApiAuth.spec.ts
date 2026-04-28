@@ -5,6 +5,7 @@ import {
   fetchAuthMe,
   OwnerLoginInvalidCredentialsError,
   PASSWORD_MIN_LENGTH,
+  postAuthLogout,
   postOwnerLogin,
 } from "../../app/utils/healthyApiAuth";
 
@@ -78,5 +79,18 @@ describe("healthyApiAuth", () => {
     expect(out.user).toEqual(user);
     expect(out.session.token).toBe("opaque-token");
     expect(out.session.expiresAt).toContain("2099");
+  });
+
+  it("postAuthLogout POSTs with credentials and accepts 204", async () => {
+    const fetchMock = vi.fn(async () => ({
+      status: 204,
+      ok: true,
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
+    await postAuthLogout("https://api.example/");
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/auth/logout", {
+      method: "POST",
+      credentials: "include",
+    });
   });
 });

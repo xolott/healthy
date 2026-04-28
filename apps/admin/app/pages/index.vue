@@ -9,7 +9,32 @@
       <strong>Healthy Meals</strong> and <strong>Healthy Workouts</strong>.
     </p>
 
+    <p style="margin-top: 1.5rem">
+      <button type="button" data-testid="logout-button" style="padding: 0.45rem 1rem; border-radius: 6px; cursor: pointer" @click="onLogout">
+        Sign out
+      </button>
+    </p>
   </section>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { postAuthLogout } from "../utils/healthyApiAuth";
+
+function apiBaseUrlFromCookie(): string {
+  return (useCookie("healthy_api_base_url").value ?? "").toString().trim();
+}
+
+async function onLogout() {
+  const base = apiBaseUrlFromCookie();
+  if (!base) {
+    await navigateTo("/setup");
+    return;
+  }
+  try {
+    await postAuthLogout(base);
+  } catch {
+    // Still leave the shell: user can reconnect from setup if the API is down.
+  }
+  await navigateTo("/login");
+}
+</script>
