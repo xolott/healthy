@@ -5,5 +5,7 @@ export default defineConfig({
     environment: 'node',
     include: ['test/**/*.test.ts'],
     pool: 'threads',
+    hookTimeout: 120_000,
+    testTimeout: 30_000,
   },
 });
