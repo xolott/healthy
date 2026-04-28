@@ -1,8 +1,7 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:flutter_test/flutter_test.dart';
-
-import 'package:healthy_workouts/core/api/auth_logout.dart';
 
 void main() {
   test('postAuthLogout POSTs Bearer token and accepts 204', () async {

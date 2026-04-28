@@ -1,17 +1,29 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
-import '../core/api/healthy_api_status.dart';
-import '../core/config/api_base_url_store.dart';
+import '../api/healthy_api_status.dart';
+import '../storage/api_base_url_store.dart';
+import 'healthy_auth_routes.dart';
 
-class SetupScreen extends StatefulWidget {
-  const SetupScreen({super.key});
+/// Collect and validate API base URL, then continue to [routes.root] (startup gate).
+class ServerUrlSetupScreen extends StatefulWidget {
+  const ServerUrlSetupScreen({
+    super.key,
+    required this.routes,
+    required this.navigate,
+    this.showReconnectBanner = false,
+    this.onDismissReconnect,
+  });
+
+  final HealthyAuthRoutes routes;
+  final void Function(String location) navigate;
+  final bool showReconnectBanner;
+  final void Function()? onDismissReconnect;
 
   @override
-  State<SetupScreen> createState() => _SetupScreenState();
+  State<ServerUrlSetupScreen> createState() => _ServerUrlSetupScreenState();
 }
 
-class _SetupScreenState extends State<SetupScreen> {
+class _ServerUrlSetupScreenState extends State<ServerUrlSetupScreen> {
   final _controller = TextEditingController();
   bool _submitting = false;
   String? _fieldError;
@@ -53,20 +65,17 @@ class _SetupScreenState extends State<SetupScreen> {
     await ApiBaseUrlStore.write(trimmed);
     if (!mounted) return;
     setState(() => _submitting = false);
-    context.go('/');
+    widget.navigate(widget.routes.root);
   }
 
   @override
   Widget build(BuildContext context) {
-    final showReconnectBanner =
-        GoRouterState.of(context).uri.queryParameters['reconnect'] == '1';
-
     return Scaffold(
       appBar: AppBar(title: const Text('Server URL')),
       body: ListView(
         padding: const EdgeInsets.all(24),
         children: [
-          if (showReconnectBanner)
+          if (widget.showReconnectBanner)
             Semantics(
               label: 'Connection error',
               child: MaterialBanner(
@@ -75,7 +84,10 @@ class _SetupScreenState extends State<SetupScreen> {
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () => context.go('/setup'),
+                    onPressed: () {
+                      widget.onDismissReconnect?.call();
+                      widget.navigate(widget.routes.serverUrl);
+                    },
                     child: const Text('DISMISS'),
                   ),
                 ],

@@ -1,9 +1,9 @@
 import 'package:go_router/go_router.dart';
+import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
 import 'home_shell_screen.dart';
 import 'login_screen.dart';
 import 'onboarding_screen.dart';
-import 'setup_screen.dart';
 import 'startup_gate.dart';
 
 final workoutsRouter = GoRouter(
@@ -15,7 +15,15 @@ final workoutsRouter = GoRouter(
     ),
     GoRoute(
       path: '/setup',
-      builder: (context, state) => const SetupScreen(),
+      builder: (context, state) {
+        final reconnect = state.uri.queryParameters['reconnect'] == '1';
+        return ServerUrlSetupScreen(
+          routes: const HealthyAuthRoutes(),
+          navigate: (location) => context.go(location),
+          showReconnectBanner: reconnect,
+          onDismissReconnect: () => context.go('/setup'),
+        );
+      },
     ),
     GoRoute(
       path: '/onboarding',

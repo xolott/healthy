@@ -1,10 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
-import '../core/api/auth_logout.dart';
-import '../core/config/api_base_url_store.dart';
 import '../core/config/app_identity.dart';
-import '../core/config/session_token_store.dart';
 import '../shared/widgets/shell_scaffold.dart';
 
 class HomeShellScreen extends StatelessWidget {

@@ -2,6 +2,7 @@ name: healthy_flutter_workspace
 packages:
   - apps/healthy_meals
   - apps/healthy_workouts
+  - packages/healthy_mobile_auth
 
 command:
   version:
