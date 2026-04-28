@@ -107,7 +107,7 @@ describe("resolveHealthyApiGlobalNavigation", () => {
     ).toEqual({ action: "redirect", target: { path: "/login" } });
   });
 
-  it("on /login: redirects home when session is already valid (restoration)", () => {
+  it("on /login: redirects to home when session is already valid (restoration)", () => {
     expect(
       resolveHealthyApiGlobalNavigation({
         path: "/login",
@@ -115,7 +115,7 @@ describe("resolveHealthyApiGlobalNavigation", () => {
         publicStatus: { ok: true, setupRequired: false },
         authMe: "authenticated",
       }),
-    ).toEqual({ action: "redirect", target: { path: "/" } });
+    ).toEqual({ action: "redirect", target: { path: "/home" } });
   });
 
   it("on /login: stays on login when unauthorized; configuration-error on transport errors", () => {
@@ -140,7 +140,7 @@ describe("resolveHealthyApiGlobalNavigation", () => {
     });
   });
 
-  it("on protected routes: login when unauthorized; configuration-error on errors", () => {
+  it("on startup gate (/): redirects to home when authenticated; login or error otherwise", () => {
     expect(
       resolveHealthyApiGlobalNavigation({
         path: "/",
@@ -163,6 +163,55 @@ describe("resolveHealthyApiGlobalNavigation", () => {
     expect(
       resolveHealthyApiGlobalNavigation({
         path: "/",
+        apiBaseUrlTrimmed: "http://api",
+        publicStatus: { ok: true, setupRequired: false },
+        authMe: "authenticated",
+      }),
+    ).toEqual({ action: "redirect", target: { path: "/home" } });
+  });
+
+  it("on protected admin home: continues when authenticated; login when unauthorized", () => {
+    expect(
+      resolveHealthyApiGlobalNavigation({
+        path: "/home",
+        apiBaseUrlTrimmed: "http://api",
+        publicStatus: { ok: true, setupRequired: false },
+        authMe: "authenticated",
+      }),
+    ).toEqual({ action: "continue" });
+    expect(
+      resolveHealthyApiGlobalNavigation({
+        path: "/home",
+        apiBaseUrlTrimmed: "http://api",
+        publicStatus: { ok: true, setupRequired: false },
+        authMe: "unauthorized",
+      }),
+    ).toEqual({ action: "redirect", target: { path: "/login" } });
+    expect(
+      resolveHealthyApiGlobalNavigation({
+        path: "/home",
+        apiBaseUrlTrimmed: "http://api",
+        publicStatus: { ok: true, setupRequired: false },
+        authMe: "error",
+      }),
+    ).toEqual({
+      action: "redirect",
+      target: { path: "/configuration-error", query: { reason: "unreachable" } },
+    });
+  });
+
+  it("protects nested routes under /home for future admin pages", () => {
+    expect(
+      resolveHealthyApiGlobalNavigation({
+        path: "/home/settings",
+        apiBaseUrlTrimmed: "http://api",
+        publicStatus: { ok: true, setupRequired: false },
+        authMe: "unauthorized",
+      }),
+    ).toEqual({ action: "redirect", target: { path: "/login" } });
+    expect(
+      resolveHealthyApiGlobalNavigation({
+        path: "/home/settings",
         apiBaseUrlTrimmed: "http://api",
         publicStatus: { ok: true, setupRequired: false },
         authMe: "authenticated",

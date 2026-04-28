@@ -2,7 +2,7 @@
   <div data-testid="app-shell">
     <header style="border-bottom: 1px solid rgba(127, 127, 127, 0.4)">
       <nav aria-label="Primary" style="max-width: 52rem; margin: 0 auto; padding: 0.85rem 1rem; display: flex; gap: 1.25rem; align-items: center">
-        <NuxtLink style="font-weight: 600" to="/">
+        <NuxtLink style="font-weight: 600" to="/home">
           Healthy Admin
         </NuxtLink>
 

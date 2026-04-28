@@ -120,7 +120,7 @@ async function onSubmit() {
       email: email.value,
       password: password.value,
     });
-    await navigateTo("/");
+    await navigateTo("/home");
   } catch (e) {
     if (e instanceof PasswordPolicyApiError) {
       formError.value = e.message;

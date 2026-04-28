@@ -99,7 +99,7 @@ async function onSubmit() {
       email: email.value.trim(),
       password: password.value,
     });
-    await navigateTo("/");
+    await navigateTo("/home");
   } catch (e) {
     if (e instanceof OwnerLoginInvalidCredentialsError) {
       formError.value = "Could not sign in. Check your email and password and try again.";

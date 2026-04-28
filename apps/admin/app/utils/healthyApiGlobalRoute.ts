@@ -9,7 +9,7 @@ export type HealthyGlobalRedirect =
   | { path: "/configuration-error"; query: { reason: ConfigurationErrorReason } }
   | { path: "/onboarding" }
   | { path: "/login" }
-  | { path: "/" };
+  | { path: "/home" };
 
 export type HealthyGlobalNavigationResult =
   | { action: "continue" }
@@ -86,7 +86,7 @@ export function resolveHealthyApiGlobalNavigation(input: {
 
   if (path === "/login") {
     if (authMe === "authenticated") {
-      return { action: "redirect", target: { path: "/" } };
+      return { action: "redirect", target: { path: "/home" } };
     }
     if (authMe === "error") {
       return {
@@ -95,6 +95,10 @@ export function resolveHealthyApiGlobalNavigation(input: {
       };
     }
     return { action: "continue" };
+  }
+
+  if (path === "/" && authMe === "authenticated") {
+    return { action: "redirect", target: { path: "/home" } };
   }
 
   if (authMe === "unauthorized") {
