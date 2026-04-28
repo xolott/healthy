@@ -15,6 +15,13 @@
       "when": 1777340863022,
       "tag": "0001_slimy_liz_osborn",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777341057524,
+      "tag": "0002_far_cammi",
+      "breakpoints": true
     }
   ]
 }

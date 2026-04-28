@@ -3,7 +3,7 @@
  * Kept in one module so Drizzle Kit can load it without pre-built `.js` peers.
  */
 import { isNull } from 'drizzle-orm';
-import { index, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { index, jsonb, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 /** Instance role; see PRD Implementation Decisions. */
 export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member']);
@@ -56,5 +56,33 @@ export const sessions = pgTable(
 export type SessionRow = typeof sessions.$inferSelect;
 export type NewSessionRow = typeof sessions.$inferInsert;
 
+/**
+ * Append-only audit trail: inserts only; no `updated_at` / `deleted_at`.
+ * `actor_user_id` is cleared (SET NULL) if the referenced user row is hard-deleted.
+ */
+export const auditLogs = pgTable(
+  'audit_logs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    actorUserId: uuid('actor_user_id').references(() => users.id, { onDelete: 'set null' }),
+    action: text('action').notNull(),
+    entityType: text('entity_type'),
+    entityId: text('entity_id'),
+    summary: text('summary').notNull(),
+    metadata: jsonb('metadata').$type<Record<string, unknown> | null>(),
+    ipAddress: text('ip_address'),
+    userAgent: text('user_agent'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index('audit_logs_created_at_idx').on(t.createdAt),
+    index('audit_logs_actor_user_id_created_at_idx').on(t.actorUserId, t.createdAt),
+    index('audit_logs_entity_type_id_created_at_idx').on(t.entityType, t.entityId, t.createdAt),
+  ],
+);
+
+export type AuditLogRow = typeof auditLogs.$inferSelect;
+export type NewAuditLogRow = typeof auditLogs.$inferInsert;
+
 /** Relational schema map passed to `drizzle({ schema })`. */
-export const schema = { users, sessions };
+export const schema = { users, sessions, auditLogs };

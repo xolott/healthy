@@ -52,6 +52,10 @@
     "./sessions": {
       "types": "./dist/sessions/index.d.ts",
       "import": "./dist/sessions/index.js"
+    },
+    "./audit-logs": {
+      "types": "./dist/audit-logs/index.d.ts",
+      "import": "./dist/audit-logs/index.js"
     }
   },
   "files": [

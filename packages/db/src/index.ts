@@ -13,3 +13,8 @@ export {
   type CreateSessionInput,
   type SessionRepository,
 } from './sessions/index.js';
+export {
+  createAuditLogRepository,
+  type AppendAuditLogInput,
+  type AuditLogRepository,
+} from './audit-logs/index.js';
