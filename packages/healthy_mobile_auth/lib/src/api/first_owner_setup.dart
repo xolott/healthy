@@ -11,6 +11,14 @@ class FirstOwnerSuccess {
   final String expiresAtIso;
 }
 
+typedef PostFirstOwnerSetup = Future<FirstOwnerSuccess> Function(
+  String apiBaseUrl, {
+  required String displayName,
+  required String email,
+  required String password,
+  http.Client? httpClient,
+});
+
 class PasswordPolicyException implements Exception {
   PasswordPolicyException(this.message, {required this.minLength});
   final String message;

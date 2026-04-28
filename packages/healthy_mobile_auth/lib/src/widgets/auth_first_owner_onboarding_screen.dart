@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../api/auth_me.dart';
 import '../api/first_owner_setup.dart';
 import '../storage/api_base_url_store.dart';
-import '../storage/session_token_store.dart';
 import 'auth_shell_scaffold.dart';
 import 'healthy_auth_routes.dart';
 
@@ -14,11 +12,19 @@ class AuthFirstOwnerOnboardingScreen extends StatefulWidget {
     required this.routes,
     required this.navigate,
     required this.appProductTitle,
+    this.postFirstOwnerSetupFn,
+    this.readApiBaseUrlFn,
   });
 
   final HealthyAuthRoutes routes;
   final void Function(String location) navigate;
   final String appProductTitle;
+
+  /// Defaults to [ApiBaseUrlStore.read]. Override in tests.
+  final Future<String?> Function()? readApiBaseUrlFn;
+
+  /// Defaults to [postFirstOwnerSetup]. Override in tests.
+  final PostFirstOwnerSetup? postFirstOwnerSetupFn;
 
   @override
   State<AuthFirstOwnerOnboardingScreen> createState() => _AuthFirstOwnerOnboardingScreenState();
@@ -43,7 +49,7 @@ class _AuthFirstOwnerOnboardingScreenState extends State<AuthFirstOwnerOnboardin
     setState(() {
       _error = null;
     });
-    final base = await ApiBaseUrlStore.read();
+    final base = await (widget.readApiBaseUrlFn ?? ApiBaseUrlStore.read)();
     if (base == null) {
       setState(() => _error = 'Missing API URL');
       return;
@@ -54,16 +60,15 @@ class _AuthFirstOwnerOnboardingScreenState extends State<AuthFirstOwnerOnboardin
     }
     setState(() => _busy = true);
     try {
-      final r = await postFirstOwnerSetup(
+      final submit = widget.postFirstOwnerSetupFn ?? postFirstOwnerSetup;
+      await submit(
         base,
         displayName: _display.text.trim(),
         email: _email.text.trim(),
         password: _password.text,
       );
-      await writeSessionToken(r.sessionToken);
-      await fetchAuthMe(base, bearerToken: r.sessionToken);
       if (!mounted) return;
-      widget.navigate(widget.routes.home);
+      widget.navigate(widget.routes.login);
     } on PasswordPolicyException catch (e) {
       setState(() => _error = e.message);
     } on SetupNotAvailableException {
@@ -120,7 +125,7 @@ class _AuthFirstOwnerOnboardingScreenState extends State<AuthFirstOwnerOnboardin
               onPressed: _busy ? null : _submit,
               child: _busy
                   ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Create owner and sign in'),
+                  : const Text('Create owner account'),
             ),
           ],
         ),
