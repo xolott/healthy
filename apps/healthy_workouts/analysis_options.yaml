@@ -1,0 +1,2 @@
+include:
+  ../../packages/config/dart_analysis/analysis_options.base.yaml

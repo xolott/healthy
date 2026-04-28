@@ -1,0 +1,9 @@
+name: healthy_flutter_workspace
+packages:
+  - apps/healthy_meals
+  - apps/healthy_workouts
+
+command:
+  version:
+    # Placeholder group for future versioning
+    scope: "**"

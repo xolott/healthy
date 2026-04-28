@@ -1,0 +1,14 @@
+# Baseline analysis options for Healthy Flutter apps.
+# Include from each app: `include: ../../packages/config/dart_analysis/analysis_options.base.yaml`
+
+include: package:flutter_lints/flutter.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+
+linter:
+  rules:
+    avoid_print: true

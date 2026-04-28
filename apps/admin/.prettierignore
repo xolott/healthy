@@ -1,0 +1,7 @@
+coverage
+dist
+.output
+.nuxt
+node_modules
+playwright-report
+test-results
