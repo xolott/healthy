@@ -13,6 +13,7 @@ declare module 'fastify' {
       PORT: string;
       LOG_LEVEL: string;
       CORS_ORIGIN: string;
+      DATABASE_URL?: string;
     };
   }
 }

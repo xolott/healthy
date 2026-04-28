@@ -1,6 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import envPlugin from '@fastify/env';
 
+import { assertValidOptionalDatabaseUrl } from './validate-database-url.js';
+
 const schema = {
   type: 'object',
   properties: {
@@ -9,6 +11,7 @@ const schema = {
     PORT: { type: 'string', default: '3001' },
     LOG_LEVEL: { type: 'string', default: 'info' },
     CORS_ORIGIN: { type: 'string', default: '*' },
+    DATABASE_URL: { type: 'string' },
   },
 };
 
@@ -17,4 +20,5 @@ export async function registerEnv(app: FastifyInstance) {
     schema,
     dotenv: true,
   });
+  assertValidOptionalDatabaseUrl(app.config.DATABASE_URL);
 }
