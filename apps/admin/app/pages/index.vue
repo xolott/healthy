@@ -9,17 +9,7 @@
       <strong>Healthy Meals</strong> and <strong>Healthy Workouts</strong>.
     </p>
 
-    <p style="margin-top: 0.85rem">
-      API base URL (public runtime config preview):
-      <code>{{ apiBase }}</code>
-    </p>
   </section>
 </template>
 
-<script setup lang="ts">
-import { computed } from "vue";
-
-const config = useRuntimeConfig();
-
-const apiBase = computed(() => config.public.apiBaseUrl);
-</script>
+<script setup lang="ts"></script>

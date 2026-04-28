@@ -1,26 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../core/config/app_identity.dart';
-import '../shared/widgets/shell_scaffold.dart';
+import 'home_shell_screen.dart';
+import 'login_screen.dart';
+import 'onboarding_screen.dart';
+import 'setup_screen.dart';
+import 'startup_gate.dart';
 
 final mealsRouter = GoRouter(
   initialLocation: '/',
   routes: [
     GoRoute(
       path: '/',
-      name: 'shell',
-      builder: (context, state) => ShellScaffold(
-        title: AppIdentity.title,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Text(
-            'Welcome to ${AppIdentity.title}.\n\n'
-            'This is a scaffold shell only.',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-        ),
-      ),
+      builder: (context, state) => const StartupGate(),
+    ),
+    GoRoute(
+      path: '/setup',
+      builder: (context, state) => const SetupScreen(),
+    ),
+    GoRoute(
+      path: '/onboarding',
+      builder: (context, state) => const OnboardingPlaceholderScreen(),
+    ),
+    GoRoute(
+      path: '/login',
+      builder: (context, state) => const LoginPlaceholderScreen(),
+    ),
+    GoRoute(
+      path: '/home',
+      builder: (context, state) => const HomeShellScreen(),
     ),
   ],
 );

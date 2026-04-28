@@ -5,9 +5,14 @@ import { registerCors } from './plugins/cors.js';
 import { registerSensible } from './plugins/sensible.js';
 import { registerSwagger } from './plugins/swagger.js';
 import { registerHealthRoutes } from './routes/health.js';
+import { registerStatusRoutes, type StatusRouteDeps } from './routes/status.js';
 import { summarizeLogger } from './utils/logger.js';
 
-export async function buildApp() {
+export type BuildAppOptions = {
+  statusRouteDeps?: StatusRouteDeps;
+};
+
+export async function buildApp(options?: BuildAppOptions) {
   const app = Fastify({ logger: true });
 
   await registerEnv(app);
@@ -15,6 +20,7 @@ export async function buildApp() {
   await registerSensible(app);
   await registerSwagger(app);
   await registerHealthRoutes(app);
+  await registerStatusRoutes(app, options?.statusRouteDeps);
 
   summarizeLogger(app.log);
 

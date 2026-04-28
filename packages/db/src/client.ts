@@ -16,3 +16,16 @@ export function createDb(
   const client = postgres(connectionString, options);
   return drizzle({ client, schema });
 }
+
+/** Single short-lived connection; ends the client after `fn` completes. */
+export async function withDisposableDatabase<T>(
+  connectionString: string,
+  fn: (db: Database) => Promise<T>,
+): Promise<T> {
+  const client = postgres(connectionString, { max: 1 });
+  try {
+    return await fn(drizzle({ client, schema }));
+  } finally {
+    await client.end({ timeout: 5 });
+  }
+}

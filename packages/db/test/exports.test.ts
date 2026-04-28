@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDb } from '../src/index.js';
+import { createDb, withDisposableDatabase } from '../src/index.js';
 
 describe('@healthy/db exports', () => {
   it('exposes createDb for consumers', () => {
     expect(typeof createDb).toBe('function');
+  });
+
+  it('exposes withDisposableDatabase for consumers', () => {
+    expect(typeof withDisposableDatabase).toBe('function');
   });
 });

@@ -68,6 +68,10 @@ export function createUserRepository(db: Database) {
   return {
     createUser: insertUser,
 
+    async hasActiveOwner(): Promise<boolean> {
+      return (await countActiveOwners()) > 0;
+    },
+
     /** Setup path: create the initial owner when no active owner exists. */
     async createFirstOwner(input: CreateFirstOwnerInput): Promise<UserRow> {
       if ((await countActiveOwners()) > 0) {

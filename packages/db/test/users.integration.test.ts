@@ -155,6 +155,17 @@ describe('user repository (integration)', () => {
       await ownerHarness.dispose();
     });
 
+    it('reports hasActiveOwner only after an active owner exists', async () => {
+      const repo = createUserRepository(ownerHarness.db);
+      expect(await repo.hasActiveOwner()).toBe(false);
+      await repo.createFirstOwner({
+        email: 'owner-present@example.com',
+        passwordHash: 'h',
+        displayName: 'Founder',
+      });
+      expect(await repo.hasActiveOwner()).toBe(true);
+    });
+
     it('creates the first owner via setup with role owner and active status', async () => {
       const repo = createUserRepository(ownerHarness.db);
 
