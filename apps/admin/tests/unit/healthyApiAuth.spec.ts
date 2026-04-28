@@ -3,10 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   AuthMeUnauthorizedError,
   fetchAuthMe,
+  InvalidInputApiError,
   OwnerLoginInvalidCredentialsError,
   PASSWORD_MIN_LENGTH,
+  PasswordPolicyApiError,
   postAuthLogout,
+  postFirstOwnerSetup,
   postOwnerLogin,
+  SetupNotFoundError,
 } from "../../app/utils/healthyApiAuth";
 
 describe("healthyApiAuth", () => {
@@ -59,6 +63,18 @@ describe("healthyApiAuth", () => {
     await expect(fetchAuthMe("https://api.example")).rejects.toBeInstanceOf(AuthMeUnauthorizedError);
   });
 
+  it("fetchAuthMe throws on non-401 HTTP errors (session probe / restoration)", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 503,
+        ok: false,
+        json: async () => ({}),
+      })) as unknown as typeof fetch,
+    );
+    await expect(fetchAuthMe("https://api.example")).rejects.toThrow("HTTP 503");
+  });
+
   it("postOwnerLogin returns user and session on 200", async () => {
     const user = { id: "u1", email: "a@b.com", displayName: "A", role: "owner" };
     vi.stubGlobal(
@@ -79,6 +95,110 @@ describe("healthyApiAuth", () => {
     expect(out.user).toEqual(user);
     expect(out.session.token).toBe("opaque-token");
     expect(out.session.expiresAt).toContain("2099");
+  });
+
+  it("postFirstOwnerSetup returns user and session on 201", async () => {
+    const user = { id: "u1", email: "a@b.com", displayName: "A", role: "owner" };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 201,
+        ok: true,
+        json: async () => ({
+          user,
+          session: { token: "opaque-token", expiresAt: "2099-01-01T00:00:00.000Z" },
+        }),
+      })) as unknown as typeof fetch,
+    );
+    const out = await postFirstOwnerSetup("https://api.example/", {
+      displayName: "A",
+      email: "a@b.com",
+      password: "x".repeat(12),
+    });
+    expect(out.user).toEqual(user);
+    expect(out.session.token).toBe("opaque-token");
+    expect(fetch).toHaveBeenCalledWith("https://api.example/setup/first-owner", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ displayName: "A", email: "a@b.com", password: "x".repeat(12) }),
+    });
+  });
+
+  it("postFirstOwnerSetup throws PasswordPolicyApiError on password_policy 400", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 400,
+        ok: false,
+        json: async () => ({
+          error: "password_policy",
+          minLength: 12,
+          message: "Too short",
+        }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(
+      postFirstOwnerSetup("https://api.example", {
+        displayName: "A",
+        email: "a@b.com",
+        password: "short",
+      }),
+    ).rejects.toBeInstanceOf(PasswordPolicyApiError);
+  });
+
+  it("postFirstOwnerSetup throws InvalidInputApiError on invalid_input 400", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 400,
+        ok: false,
+        json: async () => ({
+          error: "invalid_input",
+          field: "email",
+          message: "Invalid",
+        }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(
+      postFirstOwnerSetup("https://api.example", {
+        displayName: "A",
+        email: "bad",
+        password: "x".repeat(12),
+      }),
+    ).rejects.toBeInstanceOf(InvalidInputApiError);
+  });
+
+  it("postFirstOwnerSetup throws SetupNotFoundError on 404", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 404,
+        ok: false,
+        json: async () => ({ error: "not_found" }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(
+      postFirstOwnerSetup("https://api.example/", {
+        displayName: "A",
+        email: "a@b.com",
+        password: "x".repeat(12),
+      }),
+    ).rejects.toBeInstanceOf(SetupNotFoundError);
+  });
+
+  it("postOwnerLogin throws on 503", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 503,
+        ok: false,
+        json: async () => ({}),
+      })) as unknown as typeof fetch,
+    );
+    await expect(
+      postOwnerLogin("https://api.example", { email: "a@b.com", password: "x".repeat(12) }),
+    ).rejects.toThrow("Server unavailable");
   });
 
   it("postAuthLogout POSTs with credentials and accepts 204", async () => {

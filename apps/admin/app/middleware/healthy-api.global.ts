@@ -1,16 +1,21 @@
-import { type HealthyPublicStatus, fetchHealthyPublicStatus } from "../utils/healthyApiStatus";
 import { AuthMeUnauthorizedError, fetchAuthMe } from "../utils/healthyApiAuth";
+import {
+  isInternalHealthyAdminPath,
+  isSetupPath,
+  resolveHealthyApiGlobalNavigation,
+  type HealthyGlobalRedirect,
+} from "../utils/healthyApiGlobalRoute";
+import { fetchHealthyPublicStatus } from "../utils/healthyApiStatus";
+
+function toNavigateArg(target: HealthyGlobalRedirect) {
+  if ("query" in target) {
+    return { path: target.path, query: target.query };
+  }
+  return target.path;
+}
 
 export default defineNuxtRouteMiddleware(async (to) => {
-  if (
-    to.path.startsWith("/_nuxt") ||
-    to.path.startsWith("/__") ||
-    to.path.startsWith("/api/")
-  ) {
-    return;
-  }
-
-  if (to.path === "/setup" || to.path.startsWith("/setup/")) {
+  if (isInternalHealthyAdminPath(to.path) || isSetupPath(to.path)) {
     return;
   }
 
@@ -21,55 +26,65 @@ export default defineNuxtRouteMiddleware(async (to) => {
   });
   const baseUrl = (apiCookie.value ?? "").trim();
 
-  if (!baseUrl) {
-    return navigateTo("/setup");
+  const missingBase = resolveHealthyApiGlobalNavigation({
+    path: to.path,
+    apiBaseUrlTrimmed: baseUrl,
+  });
+  if (missingBase.action === "redirect") {
+    return navigateTo(toNavigateArg(missingBase.target));
   }
 
-  let status: HealthyPublicStatus;
+  let publicStatus: { ok: true; setupRequired: boolean } | { ok: false };
   try {
-    status = await fetchHealthyPublicStatus(baseUrl);
+    const status = await fetchHealthyPublicStatus(baseUrl);
+    publicStatus = { ok: true, setupRequired: status.setupRequired };
   } catch {
-    return navigateTo({ path: "/setup", query: { reconnect: "1" } });
+    publicStatus = { ok: false };
   }
 
-  if (status.setupRequired) {
-    if (to.path === "/onboarding") {
-      return;
+  if (!publicStatus.ok) {
+    const d = resolveHealthyApiGlobalNavigation({
+      path: to.path,
+      apiBaseUrlTrimmed: baseUrl,
+      publicStatus,
+    });
+    if (d.action === "redirect") {
+      return navigateTo(toNavigateArg(d.target));
     }
-    return navigateTo("/onboarding");
+    return;
+  }
+
+  if (publicStatus.setupRequired) {
+    const d = resolveHealthyApiGlobalNavigation({
+      path: to.path,
+      apiBaseUrlTrimmed: baseUrl,
+      publicStatus,
+    });
+    if (d.action === "redirect") {
+      return navigateTo(toNavigateArg(d.target));
+    }
+    return;
   }
 
   if (to.path === "/onboarding") {
     return navigateTo("/login");
   }
 
-  if (to.path === "/login") {
-    try {
-      await fetchAuthMe(baseUrl);
-      return navigateTo("/");
-    } catch (e) {
-      if (!(e instanceof AuthMeUnauthorizedError)) {
-        return navigateTo({ path: "/setup", query: { reconnect: "1" } });
-      }
-    }
-    return;
-  }
-
-  let authed = false;
+  let authMe: "authenticated" | "unauthorized" | "error";
   try {
     await fetchAuthMe(baseUrl);
-    authed = true;
+    authMe = "authenticated";
   } catch (e) {
-    if (e instanceof AuthMeUnauthorizedError) {
-      authed = false;
-    } else {
-      return navigateTo({ path: "/setup", query: { reconnect: "1" } });
-    }
+    authMe = e instanceof AuthMeUnauthorizedError ? "unauthorized" : "error";
   }
 
-  if (!authed) {
-    return navigateTo("/login");
+  const d = resolveHealthyApiGlobalNavigation({
+    path: to.path,
+    apiBaseUrlTrimmed: baseUrl,
+    publicStatus,
+    authMe,
+  });
+  if (d.action === "redirect") {
+    return navigateTo(toNavigateArg(d.target));
   }
-
-  return;
 });

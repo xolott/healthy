@@ -12,7 +12,8 @@
     "format": "turbo format",
     "test": "turbo test",
     "clean": "turbo clean && node tooling/scripts/clean.mjs",
-    "doctor": "node tooling/scripts/doctor.mjs"
+    "doctor": "node tooling/scripts/doctor.mjs",
+    "verify:auth-contracts": "bash tooling/scripts/verify-auth-contracts.sh"
   },
   "devDependencies": {
     "concurrently": "9.2.1",
