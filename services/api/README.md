@@ -20,9 +20,26 @@ pnpm --filter api dev
 
 The server listens using environment variables documented in `./.env.example` (including `DATABASE_URL` when you connect to a database).
 
+With Docker Compose from the repository root:
+
+```bash
+docker compose up api
+```
+
+The Compose API service waits for PostgreSQL, applies pending migrations, and starts the dev server on http://127.0.0.1:3001.
+
 ## Scripts
 
 See `services/api/package.json` for `lint`, `test`, `typecheck`, and `build` targets.
+
+Database helpers:
+
+```bash
+pnpm --filter api db:migrate
+pnpm --filter api db:recreate
+```
+
+`db:migrate` applies all pending Drizzle migrations. `db:recreate` clears local migration metadata, drops and recreates the local `public` schema, then applies migrations again; it refuses production and non-local database hosts unless `ALLOW_NON_LOCAL_DB_RECREATE=1` is set.
 
 ## Production build
 

@@ -1,30 +1,35 @@
 # Database and migrations (`@healthy/db`)
 
-Shared PostgreSQL schema and Drizzle ORM live in the workspace package **`packages/db`** (npm name `@healthy/db`). The API and other services consume it via `workspace:*`; migrations are authored once in that package.
+Shared PostgreSQL schema and Drizzle ORM live in the workspace package `**packages/db**` (npm name `@healthy/db`). The API and other services consume it via `workspace:*`; migrations are authored once in that package.
 
 ## Configure `DATABASE_URL` locally
 
-Use a standard PostgreSQL connection string. The API and Drizzle Kit both expect the variable name **`DATABASE_URL`**.
+Use a standard PostgreSQL connection string. The API and Drizzle Kit both expect the variable name `**DATABASE_URL**`.
+
+To run the local Docker Compose database, API, and admin services:
+
+```bash
+docker compose up
+```
+
+Compose uses:
+
+```bash
+postgres://healthy:healthy@127.0.0.1:5432/healthy_dev
+```
+
+Inside the Compose network the API connects to `postgres://healthy:healthy@postgres:5432/healthy_dev`.
 
 1. Run PostgreSQL 16+ locally (Docker, Homebrew `postgresql@16`, managed cloud, and so on).
 2. Create a database for development, for example `healthy_dev`:
-
-   ```bash
+  ```bash
    createdb healthy_dev
-   ```
-
+  ```
 3. Export a URL (adjust user, password, host, and port to match your install):
-
-   ```bash
+  ```bash
    export DATABASE_URL="postgresql://localhost:5432/healthy_dev"
-   ```
-
+  ```
    With password authentication:
-
-   ```bash
-   export DATABASE_URL="postgresql://app_user:secret@127.0.0.1:5432/healthy_dev"
-   ```
-
 4. For the API, you can copy `services/api/.env.example` to `.env` and set `DATABASE_URL` there instead of exporting it in the shell.
 
 **URL rules (API):** the scheme must be `postgres://` or `postgresql://`. See `services/api/src/config/validate-database-url.ts` and `services/api/.env.example`.
@@ -33,12 +38,14 @@ Use a standard PostgreSQL connection string. The API and Drizzle Kit both expect
 
 ## Package layout and naming
 
-| Path | Role |
-|------|------|
+
+| Path                              | Role                                                                      |
+| --------------------------------- | ------------------------------------------------------------------------- |
 | `packages/db/src/schema/index.ts` | Single schema entrypoint imported by `drizzle.config.ts` and the migrator |
-| `packages/db/drizzle/` | Generated SQL migrations and `meta/` snapshots (Drizzle Kit output) |
-| `packages/db/drizzle.config.ts` | Kit config: dialect `postgresql`, `schema`, `out` |
-| `packages/db/src/*.ts` | Repositories and client helpers (built to `dist/` for consumers) |
+| `packages/db/drizzle/`            | Generated SQL migrations and `meta/` snapshots (Drizzle Kit output)       |
+| `packages/db/drizzle.config.ts`   | Kit config: dialect `postgresql`, `schema`, `out`                         |
+| `packages/db/src/*.ts`            | Repositories and client helpers (built to `dist/` for consumers)          |
+
 
 New migration files are named by Drizzle Kit (for example `0002_far_cammi.sql`). Do not hand-rename Kit output; adjust the schema and regenerate if needed.
 
@@ -62,6 +69,15 @@ pnpm --filter @healthy/db db:generate
 pnpm --filter @healthy/db db:migrate
 ```
 
+The API workspace exposes convenience commands for local operations:
+
+```bash
+pnpm --filter api db:migrate
+pnpm --filter api db:recreate
+```
+
+`db:recreate` clears local migration metadata, drops and recreates the local `public` schema, then applies all migrations again. It refuses `NODE_ENV=production` and non-local database hosts by default; set `ALLOW_NON_LOCAL_DB_RECREATE=1` only when you intentionally need to override that guard.
+
 Optional: open Drizzle Studio against the same URL:
 
 ```bash
@@ -74,9 +90,9 @@ Integration tests apply the same migration folder programmatically (`drizzle-orm
 
 The first migrations establish **identity and platform audit** only:
 
-- **`users`** — accounts with roles (`owner`, `admin`, `member`), lifecycle status, soft delete, unique normalized email
-- **`sessions`** — revocable sessions keyed by token hash (never store raw tokens)
-- **`audit_logs`** — append-only audit trail with optional actor, entity references, and JSON metadata
+- `**users`** — accounts with roles (`owner`, `admin`, `member`), lifecycle status, soft delete, unique normalized email
+- `**sessions**` — revocable sessions keyed by token hash (never store raw tokens)
+- `**audit_logs**` — append-only audit trail with optional actor, entity references, and JSON metadata
 
 ## Explicitly deferred (not in this schema yet)
 
@@ -91,9 +107,9 @@ Keep new tables cohesive with the above boundaries: extend `packages/db/src/sche
 
 ## Tests and CI prerequisites
 
-Root **`pnpm test`** runs Turbo **`test`** in every workspace that defines it, including **`@healthy/db`**, **`api`**, and **`admin`**.
+Root `**pnpm test`** runs Turbo `**test**` in every workspace that defines it, including `**@healthy/db**`, `**api**`, and `**admin**`.
 
-**`@healthy/db` tests:**
+`**@healthy/db` tests:**
 
 - Unit-style tests under `packages/db/test/*.test.ts` (no database).
 - Integration tests (`*.integration.test.ts`) start **PostgreSQL in Docker** via `@testcontainers/postgresql` (`postgres:16-alpine`).

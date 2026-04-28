@@ -12,6 +12,8 @@
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:migrate": "pnpm --filter @healthy/db db:migrate",
+    "db:recreate": "tsx ./scripts/recreate-db.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "clean": "node ../../tooling/scripts/clean-api-dist.mjs"
