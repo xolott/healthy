@@ -7,21 +7,6 @@ import {
 
 export const PASSWORD_MIN_LENGTH = 12;
 
-export class InvalidOwnerLoginInputError extends Error {
-  constructor(
-    public readonly field: string,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-export class OwnerLoginInvalidCredentialsError extends Error {
-  constructor() {
-    super("Invalid email or password");
-  }
-}
-
 /** Current admin user (`/auth/me` success body). Roles match documented API enums. */
 export type CurrentUser = HealthyAuthMeUser;
 
@@ -141,51 +126,14 @@ export async function postFirstOwnerSetup(
  * Owner login after setup is complete. Sets the HttpOnly session cookie on the API origin.
  * Returns only the current user — the API may include a Bearer token in JSON for mobile clients;
  * that value is validated for a well-formed response but is not returned, so web state stays cookie-only.
+ * Failures use `HealthyApiClientError` with closed `kind` values.
  */
 export async function postOwnerLogin(
   apiBaseUrl: string,
   input: { email: string; password: string },
+  options?: Omit<CreateHealthyApiClientOptions, "baseUrl">,
 ): Promise<CurrentUser> {
-  const base = apiBaseUrl.replace(/\/+$/, "");
-  const res = await fetch(`${base}/auth/login`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (res.status === 400) {
-    const body: unknown = await res.json().catch(() => ({}));
-    if (typeof body === "object" && body !== null) {
-      const o = body as { error?: string; field?: string; message?: string };
-      if (o.error === "invalid_input" && typeof o.field === "string" && typeof o.message === "string") {
-        throw new InvalidOwnerLoginInputError(o.field, o.message);
-      }
-    }
-    throw new Error("Bad request");
-  }
-  if (res.status === 401) {
-    throw new OwnerLoginInvalidCredentialsError();
-  }
-  if (res.status === 503) {
-    throw new ApiServiceUnavailableError();
-  }
-  if (!res.ok) {
-    throw new Error(`HTTP ${String(res.status)}`);
-  }
-  const body: unknown = await res.json();
-  if (typeof body !== "object" || body === null) {
-    throw new Error("Invalid login response");
-  }
-  const b = body as { user?: CurrentUser; session?: { token: string; expiresAt: string } };
-  if (
-    b.user === undefined ||
-    b.session === undefined ||
-    typeof b.session.token !== "string" ||
-    typeof b.session.expiresAt !== "string"
-  ) {
-    throw new Error("Invalid login response");
-  }
-  return b.user;
+  return createHealthyApiClient({ baseUrl: apiBaseUrl, ...options }).ownerLogin(input);
 }
 
 /**

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   HEALTHY_API_AUTH_ME_ENDPOINT,
+  HEALTHY_API_OWNER_LOGIN_ENDPOINT,
   HEALTHY_API_PUBLIC_STATUS_ENDPOINT,
   HealthyApiClientError,
   createHealthyApiClient,
@@ -315,6 +316,246 @@ describe("createHealthyApiClient / getCurrentUser", () => {
     await expect(createHealthyApiClient({ baseUrl: "http://example.test/", fetch: fetchMock }).getCurrentUser()).rejects.toMatchObject({
       kind: "service_unavailable",
       httpStatus: 503,
+    });
+  });
+});
+
+describe("createHealthyApiClient / ownerLogin", () => {
+  const ownerUser = {
+    id: "u1",
+    email: "a@b.com",
+    displayName: "A",
+    role: "owner" as const,
+  };
+
+  it("POSTs JSON to /auth/login with credentials and required JSON headers", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        user: ownerUser,
+        session: { token: "tok", expiresAt: "2099-01-01T00:00:00.000Z" },
+      }),
+    })) as unknown as typeof fetch;
+
+    const client = createHealthyApiClient({
+      baseUrl: "http://example.test/",
+      fetch: fetchMock,
+    });
+
+    await expect(
+      client.ownerLogin({ email: "a@b.com", password: "x".repeat(12) }),
+    ).resolves.toEqual(ownerUser);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://example.test/auth/login",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: expect.any(Headers),
+        body: JSON.stringify({ email: "a@b.com", password: "x".repeat(12) }),
+      }),
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const h = init.headers as Headers;
+    expect(h.get("Accept")).toBe("application/json");
+    expect(h.get("Content-Type")).toBe("application/json");
+  });
+
+  it("merges defaultRequestInit with client-owned POST essentials taking precedence", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        user: ownerUser,
+        session: { token: "tok", expiresAt: "2099-01-01T00:00:00.000Z" },
+      }),
+    })) as unknown as typeof fetch;
+
+    const client = createHealthyApiClient({
+      baseUrl: "http://example.test",
+      fetch: fetchMock,
+      defaultRequestInit: {
+        credentials: "omit",
+        cache: "no-store",
+        headers: { "X-T": "1" },
+      },
+    });
+    await client.ownerLogin({ email: "a@b.com", password: "x".repeat(12) });
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.credentials).toBe("include");
+    expect(init.cache).toBe("no-store");
+    const h = init.headers as Headers;
+    expect(h.get("Content-Type")).toBe("application/json");
+    expect(h.get("X-T")).toBe("1");
+  });
+
+  it("returns only the user on 200 (session token validated, not returned)", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        user: ownerUser,
+        session: { token: "opaque", expiresAt: "2099-01-01T00:00:00.000Z" },
+      }),
+    })) as unknown as typeof fetch;
+
+    const out = await createHealthyApiClient({ baseUrl: "http://example.test", fetch: fetchMock }).ownerLogin({
+      email: "a@b.com",
+      password: "x".repeat(12),
+    });
+    expect(out).toEqual(ownerUser);
+  });
+
+  it("throws success_body_invalid on 200 when session shape is wrong", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ user: ownerUser, session: { token: 1 } }),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      createHealthyApiClient({ baseUrl: "http://example.test", fetch: fetchMock }).ownerLogin({
+        email: "a@b.com",
+        password: "x".repeat(12),
+      }),
+    ).rejects.toMatchObject({
+      kind: "success_body_invalid",
+      endpoint: HEALTHY_API_OWNER_LOGIN_ENDPOINT,
+      httpStatus: 200,
+    });
+  });
+
+  it("throws login_invalid_input for documented 400 body", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        error: "invalid_input",
+        field: "password",
+        message: "Too short",
+      }),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      createHealthyApiClient({ baseUrl: "http://example.test", fetch: fetchMock }).ownerLogin({
+        email: "a@b.com",
+        password: "short",
+      }),
+    ).rejects.toMatchObject({
+      kind: "login_invalid_input",
+      endpoint: HEALTHY_API_OWNER_LOGIN_ENDPOINT,
+      loginInvalidInput: { field: "password", message: "Too short" },
+    });
+  });
+
+  it("throws error_body_invalid on 400 without documented shape", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 400,
+      json: async () => ({ error: "other" }),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      createHealthyApiClient({ baseUrl: "http://example.test", fetch: fetchMock }).ownerLogin({
+        email: "a@b.com",
+        password: "x".repeat(12),
+      }),
+    ).rejects.toMatchObject({
+      kind: "error_body_invalid",
+      endpoint: HEALTHY_API_OWNER_LOGIN_ENDPOINT,
+      httpStatus: 400,
+    });
+  });
+
+  it("throws invalid_credentials for documented 401 body", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: "invalid_credentials" }),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      createHealthyApiClient({ baseUrl: "http://example.test", fetch: fetchMock }).ownerLogin({
+        email: "a@b.com",
+        password: "x".repeat(12),
+      }),
+    ).rejects.toMatchObject({
+      kind: "invalid_credentials",
+      endpoint: HEALTHY_API_OWNER_LOGIN_ENDPOINT,
+      httpStatus: 401,
+    });
+  });
+
+  it("throws error_body_invalid on 401 without documented shape", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: "unauthorized" }),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      createHealthyApiClient({ baseUrl: "http://example.test", fetch: fetchMock }).ownerLogin({
+        email: "a@b.com",
+        password: "x".repeat(12),
+      }),
+    ).rejects.toMatchObject({
+      kind: "error_body_invalid",
+      endpoint: HEALTHY_API_OWNER_LOGIN_ENDPOINT,
+      httpStatus: 401,
+    });
+  });
+
+  it("throws service_unavailable for documented 503 body", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: "service_unavailable" }),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      createHealthyApiClient({ baseUrl: "http://example.test", fetch: fetchMock }).ownerLogin({
+        email: "a@b.com",
+        password: "x".repeat(12),
+      }),
+    ).rejects.toMatchObject({
+      kind: "service_unavailable",
+      endpoint: HEALTHY_API_OWNER_LOGIN_ENDPOINT,
+      httpStatus: 503,
+    });
+  });
+
+  it("throws unexpected_http_status for undocumented HTTP codes", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 429,
+      json: async () => ({}),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      createHealthyApiClient({ baseUrl: "http://example.test", fetch: fetchMock }).ownerLogin({
+        email: "a@b.com",
+        password: "x".repeat(12),
+      }),
+    ).rejects.toMatchObject({
+      kind: "unexpected_http_status",
+      httpStatus: 429,
+    });
+  });
+
+  it("throws network kind when fetch throws", async () => {
+    const fetchMock = vi.fn(async () => {
+      throw new Error("offline");
+    }) as unknown as typeof fetch;
+
+    await expect(
+      createHealthyApiClient({ baseUrl: "http://example.test", fetch: fetchMock }).ownerLogin({
+        email: "a@b.com",
+        password: "x".repeat(12),
+      }),
+    ).rejects.toMatchObject({
+      kind: "network",
+      endpoint: HEALTHY_API_OWNER_LOGIN_ENDPOINT,
     });
   });
 });

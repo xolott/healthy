@@ -5,8 +5,6 @@ import {
   AuthMeUnauthorizedError,
   fetchAuthMe,
   InvalidInputApiError,
-  InvalidOwnerLoginInputError,
-  OwnerLoginInvalidCredentialsError,
   PASSWORD_MIN_LENGTH,
   PasswordPolicyApiError,
   postAuthLogout,
@@ -24,7 +22,7 @@ describe("healthyApiAuth", () => {
     expect(PASSWORD_MIN_LENGTH).toBe(12);
   });
 
-  it("postOwnerLogin throws OwnerLoginInvalidCredentialsError on 401", async () => {
+  it("postOwnerLogin rejects with invalid_credentials on documented 401", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -35,7 +33,7 @@ describe("healthyApiAuth", () => {
     );
     await expect(
       postOwnerLogin("https://api.example", { email: "a@b.com", password: "x".repeat(12) }),
-    ).rejects.toBeInstanceOf(OwnerLoginInvalidCredentialsError);
+    ).rejects.toMatchObject({ kind: "invalid_credentials", httpStatus: 401 });
   });
 
   it("fetchAuthMe uses credentials include and returns user on 200", async () => {
@@ -84,7 +82,7 @@ describe("healthyApiAuth", () => {
     });
   });
 
-  it("postOwnerLogin returns only the user on 200 (opaque session token is not part of the result)", async () => {
+  it("postOwnerLogin delegates to Healthy client JSON POST with credentials and parses user-only result", async () => {
     const user = { id: "u1", email: "a@b.com", displayName: "A", role: "owner" };
     const fetchMock = vi.fn(async () => ({
       status: 200,
@@ -103,12 +101,16 @@ describe("healthyApiAuth", () => {
     expect(fetchMock).toHaveBeenCalledWith("https://api.example/auth/login", {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: expect.any(Headers),
       body: JSON.stringify({ email: "a@b.com", password: "x".repeat(12) }),
     });
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const h = init.headers as Headers;
+    expect(h.get("Accept")).toBe("application/json");
+    expect(h.get("Content-Type")).toBe("application/json");
   });
 
-  it("postOwnerLogin throws InvalidOwnerLoginInputError on invalid_input 400", async () => {
+  it("postOwnerLogin maps documented invalid_input 400 to login_invalid_input", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -123,7 +125,10 @@ describe("healthyApiAuth", () => {
     );
     await expect(
       postOwnerLogin("https://api.example", { email: "bad", password: "x".repeat(12) }),
-    ).rejects.toBeInstanceOf(InvalidOwnerLoginInputError);
+    ).rejects.toMatchObject({
+      kind: "login_invalid_input",
+      loginInvalidInput: { field: "email", message: "Email is invalid" },
+    });
   });
 
   it("postFirstOwnerSetup returns user and session on 201", async () => {
@@ -234,7 +239,7 @@ describe("healthyApiAuth", () => {
     ).rejects.toBeInstanceOf(ApiServiceUnavailableError);
   });
 
-  it("postOwnerLogin throws ApiServiceUnavailableError on 503", async () => {
+  it("postOwnerLogin rejects with error_body_invalid on 503 without documented body", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -245,7 +250,10 @@ describe("healthyApiAuth", () => {
     );
     await expect(
       postOwnerLogin("https://api.example", { email: "a@b.com", password: "x".repeat(12) }),
-    ).rejects.toBeInstanceOf(ApiServiceUnavailableError);
+    ).rejects.toMatchObject({
+      kind: "error_body_invalid",
+      httpStatus: 503,
+    });
   });
 
   it("postAuthLogout throws ApiServiceUnavailableError on 503", async () => {
