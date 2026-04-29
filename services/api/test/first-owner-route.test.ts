@@ -91,6 +91,11 @@ describe('GET /auth/me', () => {
             return { kind: 'persistence_unavailable' };
           },
         },
+        logout: {
+          async logoutWithRawToken() {
+            return { kind: 'skipped', reason: 'no_raw_token' };
+          },
+        },
       },
     });
     const res = await app.inject({
@@ -127,6 +132,11 @@ describe('GET /auth/me (request-scope stub)', () => {
               kind: 'ok',
               user: { id: '1', email: 'a@b', displayName: 'A', role: 'owner' },
             };
+          },
+        },
+        logout: {
+          async logoutWithRawToken() {
+            return { kind: 'skipped', reason: 'no_raw_token' };
           },
         },
       },

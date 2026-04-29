@@ -47,5 +47,25 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
         }
       },
     },
+    logout: {
+      async logoutWithRawToken(rawToken: string | undefined) {
+        if (rawToken === undefined || rawToken.length === 0) {
+          return { kind: 'skipped', reason: 'no_raw_token' };
+        }
+        const url = app.config.DATABASE_URL?.trim();
+        if (url === undefined || url === '') {
+          return { kind: 'persistence_not_configured' };
+        }
+        try {
+          return await withDisposableDatabase(url, async (db) => {
+            const useCases = createAuthUseCasesForDatabase(db);
+            return useCases.logout(rawToken);
+          });
+        } catch (err) {
+          app.log.warn({ err }, 'logout database operation failed');
+          return { kind: 'persistence_unavailable' };
+        }
+      },
+    },
   };
 }

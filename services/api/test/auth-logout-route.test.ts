@@ -7,12 +7,61 @@ describe('POST /auth/logout (unit)', () => {
     vi.unstubAllEnvs();
   });
 
-  it('returns 503 when DATABASE_URL is not configured', async () => {
+  it('returns 204 when DATABASE_URL is not configured and no session token is sent', async () => {
     vi.stubEnv('DATABASE_URL', '');
     const app = await buildApp();
     try {
       const res = await app.inject({ method: 'POST', url: '/auth/logout' });
+      expect(res.statusCode).toBe(204);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns 503 when DATABASE_URL is not configured but a Bearer token is present', async () => {
+    vi.stubEnv('DATABASE_URL', '');
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/auth/logout',
+        headers: { authorization: 'Bearer sometoken' },
+      });
       expect(res.statusCode).toBe(503);
+      expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns 503 service_unavailable when request scope reports persistence_unavailable', async () => {
+    const app = await buildApp({
+      requestScope: {
+        status: {
+          async activeOwnerExists() {
+            return { kind: 'ok', hasActiveOwner: true };
+          },
+        },
+        currentSession: {
+          async resolveFromRawToken() {
+            return { kind: 'unauthorized', reason: 'missing_session' };
+          },
+        },
+        logout: {
+          async logoutWithRawToken() {
+            return { kind: 'persistence_unavailable' };
+          },
+        },
+      },
+    });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/auth/logout',
+        headers: { authorization: 'Bearer sometoken' },
+      });
+      expect(res.statusCode).toBe(503);
+      expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
     } finally {
       await app.close();
     }

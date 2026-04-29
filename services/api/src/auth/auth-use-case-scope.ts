@@ -14,7 +14,6 @@ import {
   type OwnerLoginResult,
   validateFirstOwnerSetupPayload,
   type FirstOwnerSetupResult,
-  type LogoutResult,
 } from './auth-use-cases.js';
 import { hashPasswordArgon2id, verifyPasswordArgon2id } from './hash-password.js';
 import { generateSessionToken } from './session-token.js';
@@ -34,11 +33,6 @@ export type OwnerLoginFromAppRequestOutcome =
 export type FirstOwnerSetupFromAppRequestOutcome =
   | { kind: 'service_unavailable' }
   | FirstOwnerSetupResult;
-
-/**
- * Logout from app configuration (database URL check + disposable connection).
- */
-export type LogoutFromAppRequestOutcome = { kind: 'service_unavailable' } | LogoutResult;
 
 /**
  * Returns a trimmed database URL when the app is configured for auth database access.
@@ -113,20 +107,5 @@ export async function ownerLoginFromAppRequest(
   return withDisposableDatabase(url, async (db) => {
     const useCases = createAuthUseCasesForDatabase(db);
     return useCases.ownerLogin(rawEmail, rawPassword, ctx);
-  });
-}
-
-export async function logoutFromAppRequest(
-  app: FastifyInstance,
-  rawToken: string | undefined,
-): Promise<LogoutFromAppRequestOutcome> {
-  const url = getAuthDatabaseUrl(app);
-  if (url === undefined) {
-    return { kind: 'service_unavailable' };
-  }
-
-  return withDisposableDatabase(url, async (db) => {
-    const useCases = createAuthUseCasesForDatabase(db);
-    return useCases.logout(rawToken);
   });
 }

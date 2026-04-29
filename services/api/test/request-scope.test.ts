@@ -46,6 +46,11 @@ describe('Request Scope (public status / active owner)', () => {
           return { kind: 'unauthorized', reason: 'missing_session' };
         },
       },
+      logout: {
+        async logoutWithRawToken() {
+          return { kind: 'skipped', reason: 'no_raw_token' };
+        },
+      },
     };
     await expect(fake.status.activeOwnerExists()).resolves.toEqual({
       kind: 'ok',
@@ -59,6 +64,48 @@ describe('Request Scope (public status / active owner)', () => {
     await registerEnv(app);
     const scope = createRequestScopeForApp(app);
     const outcome = await scope.status.activeOwnerExists();
+    expect(outcome.kind).toBe('persistence_unavailable');
+  });
+});
+
+describe('Request Scope (logout)', () => {
+  let app: FastifyInstance | undefined;
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    if (app !== undefined) {
+      await app.close();
+      app = undefined;
+    }
+  });
+
+  it('logoutWithRawToken returns skipped when token is absent without touching DATABASE_URL', async () => {
+    vi.stubEnv('DATABASE_URL', '');
+    app = Fastify({ logger: false });
+    await registerEnv(app);
+    const scope = createRequestScopeForApp(app);
+    await expect(scope.logout.logoutWithRawToken(undefined)).resolves.toEqual({
+      kind: 'skipped',
+      reason: 'no_raw_token',
+    });
+  });
+
+  it('logoutWithRawToken reports persistence_not_configured when token present but DATABASE_URL missing', async () => {
+    vi.stubEnv('DATABASE_URL', '');
+    app = Fastify({ logger: false });
+    await registerEnv(app);
+    const scope = createRequestScopeForApp(app);
+    await expect(scope.logout.logoutWithRawToken('token')).resolves.toEqual({
+      kind: 'persistence_not_configured',
+    });
+  });
+
+  it('logoutWithRawToken reports persistence_unavailable when the database connection fails', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgresql://127.0.0.1:1/unreachable_for_logout_scope_test');
+    app = Fastify({ logger: false });
+    await registerEnv(app);
+    const scope = createRequestScopeForApp(app);
+    const outcome = await scope.logout.logoutWithRawToken('any');
     expect(outcome.kind).toBe('persistence_unavailable');
   });
 });

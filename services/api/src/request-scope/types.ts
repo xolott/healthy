@@ -1,4 +1,4 @@
-import type { ResolveCurrentSessionResult } from '../auth/auth-use-cases.js';
+import type { LogoutResult, ResolveCurrentSessionResult } from '../auth/auth-use-cases.js';
 
 /**
  * Request Scope exposes infrastructure-backed capabilities without route-shaped HTTP outcomes.
@@ -26,7 +26,21 @@ export type RequestScopeCurrentSessionCapability = {
   resolveFromRawToken(rawToken: string): Promise<PublicCurrentSessionOutcome>;
 };
 
+/**
+ * Logout: persistence gate plus closed logout outcomes from auth use cases.
+ * Callers pass the raw token from transport; an absent token is treated as idempotent skip without persistence.
+ */
+export type PublicLogoutOutcome =
+  | { kind: 'persistence_not_configured' }
+  | { kind: 'persistence_unavailable' }
+  | LogoutResult;
+
+export type RequestScopeLogoutCapability = {
+  logoutWithRawToken(rawToken: string | undefined): Promise<PublicLogoutOutcome>;
+};
+
 export type RequestScope = {
   status: RequestScopeStatusCapability;
   currentSession: RequestScopeCurrentSessionCapability;
+  logout: RequestScopeLogoutCapability;
 };

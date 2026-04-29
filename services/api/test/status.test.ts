@@ -11,6 +11,14 @@ function unusedCurrentSession(): RequestScope['currentSession'] {
   };
 }
 
+function unusedLogout(): RequestScope['logout'] {
+  return {
+    async logoutWithRawToken() {
+      return { kind: 'skipped', reason: 'no_raw_token' };
+    },
+  };
+}
+
 describe('GET /status', () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
@@ -31,6 +39,7 @@ describe('GET /status', () => {
           },
         },
         currentSession: unusedCurrentSession(),
+        logout: unusedLogout(),
       },
     });
 
@@ -56,6 +65,7 @@ describe('GET /status', () => {
           },
         },
         currentSession: unusedCurrentSession(),
+        logout: unusedLogout(),
       },
     });
 
@@ -91,6 +101,7 @@ describe('GET /status', () => {
           },
         },
         currentSession: unusedCurrentSession(),
+        logout: unusedLogout(),
       },
     });
 
