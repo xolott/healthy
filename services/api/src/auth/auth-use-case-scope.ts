@@ -1,7 +1,8 @@
 /**
  * Constructs Auth Use Cases backed by Drizzle persistence on an existing database handle.
- * `createRequestScopeForApp` uses this inside disposable-database scopes; Drizzle-backed
- * integration tests call it with an open harness handle. Routes depend on Request Scope only.
+ * `createRequestScopeForApp` passes `app.databaseAdapter.db` here when configured;
+ * Drizzle-backed integration tests call it with an open harness handle.
+ * Routes depend on Request Scope only.
  */
 
 import type { Database } from '@healthy/db';

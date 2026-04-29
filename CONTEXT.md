@@ -53,8 +53,9 @@ deterministic hashing and session collaborators. Implemented as
 `createAuthUseCasesForDatabase`; `AuthMeUser` is re-exported for consumers that anchor
 on this module.
 
-`createRequestScopeForApp` invokes that factory inside disposable database scopes.
-Routes consume Request Scope capabilities only—they do not import this factory.
+`createRequestScopeForApp` invokes that factory with `app.databaseAdapter.db`
+when persistence is configured. Routes consume Request Scope capabilities
+only—they do not import this factory.
 
 Policy tests construct `createAuthUseCases` with the Auth Test Adapter directly.
 Repository shape in `@healthy/db` is unchanged in this seam.
@@ -70,10 +71,9 @@ Routes own HTTP translation (schemas, status codes, headers) and cookie
 mutation; they depend on Request Scope only for capabilities and outcomes.
 They do not import auth use-case factories or open persistence handles.
 
-Request Scope hides database lifecycle from callers (including disposable
-connections in the current adapter); pooling or shutdown-oriented lifecycle is
-a future adapter concern, not a route concern. Decision record:
-`docs/adr/0001-request-scope-boundary.md`.
+Request Scope hides process-owned database lifecycle from callers; pooling or
+shutdown-oriented refinements belong inside `@healthy/db` / the adapter seam, not
+in routes. Decision record: `docs/adr/0001-request-scope-boundary.md`.
 
 ### Database Adapter
 

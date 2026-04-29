@@ -76,6 +76,18 @@ describe('Request Scope (public status / active owner)', () => {
     const outcome = await scope.status.activeOwnerExists();
     expect(outcome.kind).toBe('persistence_unavailable');
   });
+
+  it('reuses the same Database Adapter for multiple persistence-backed capability calls', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgresql://127.0.0.1:1/adapter_singleton_scope_test');
+    app = Fastify({ logger: false });
+    await registerEnv(app);
+    const adapterSingleton = app.databaseAdapter;
+    expect(adapterSingleton).not.toBeNull();
+    const scope = createRequestScopeForApp(app);
+    await scope.status.activeOwnerExists();
+    await scope.logout.logoutWithRawToken('any-token');
+    expect(app.databaseAdapter).toBe(adapterSingleton);
+  });
 });
 
 describe('Request Scope (logout)', () => {

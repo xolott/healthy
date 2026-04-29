@@ -22,11 +22,11 @@ When configured persistence is missing or unusable, Request Scope surfaces `pers
 
 ### Implementation detail (lifecycle)
 
-The first implementation uses **disposable database connections** inside Request Scope (`withDisposableDatabase`, per-operation scopes). Callers never receive a database handle or participate in connect/disconnect; that lifecycle remains hidden behind Request Scope.
+Request Scope obtains persistence via the Fastify **`databaseAdapter`** decorated at startup when `DATABASE_URL` is configured (process-owned Drizzle database plus teardown on app close). Per-request operations reuse that adapter rather than opening a new connection scope; callers never receive a raw handle or participate in connect/disconnect; that lifecycle remains hidden behind Request Scope.
 
 ### Future replacement point
 
-When pooling, long-lived connections, or coordinated shutdown are introduced, the replacement belongs **inside** the Request Scope adapter (and collaborators it owns)—not in routes. This ADR does not prescribe pooling, connection limits, or application shutdown sequencing; those are separate decisions.
+Pooling parameters, retries, observability hooks, or other adapter-internal behavior belong **inside** the Database Adapter and Request Scope implementation—not in routes. This ADR does not prescribe connection limits, pooling policy, or application shutdown sequencing beyond documenting that shutdown flows through Fastify lifecycle.
 
 ## Rejected alternatives
 
@@ -36,7 +36,7 @@ Returning pre-built HTTP results or Fastify-specific helpers from Request Scope 
 
 ### Generic database callbacks
 
-Exposing “run this function with a `db` handle” from Request Scope was rejected: it keeps disposable (or pooled) lifecycle as a **caller** concern, invites routes to reach past the seam, and scatters persistence availability handling instead of centralizing it in Request Scope.
+Exposing “run this function with a `db` handle” from Request Scope was rejected: it keeps connection lifecycle as a **caller** concern, invites routes to reach past the seam, and scatters persistence availability handling instead of centralizing it in Request Scope.
 
 ## Consequences
 
