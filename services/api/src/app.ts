@@ -9,11 +9,13 @@ import { registerFirstOwnerSetupRoute, type FirstOwnerRouteOptions } from './rou
 import { registerAuthLogoutRoute, type AuthLogoutRouteOptions } from './routes/auth-logout.js';
 import { registerAuthMeRoute, type AuthMeRouteOptions } from './routes/auth-me.js';
 import { registerOwnerLoginRoute, type OwnerLoginRouteOptions } from './routes/owner-login.js';
-import { registerStatusRoutes, type StatusRouteDeps } from './routes/status.js';
+import type { RequestScope } from './request-scope/index.js';
+import { registerStatusRoutes } from './routes/status.js';
 import { summarizeLogger } from './utils/logger.js';
 
 export type BuildAppOptions = {
-  statusRouteDeps?: StatusRouteDeps;
+  /** Test-only override; production uses `createRequestScopeForApp(app)`. */
+  requestScope?: RequestScope;
   firstOwnerRouteOptions?: FirstOwnerRouteOptions;
   ownerLoginRouteOptions?: OwnerLoginRouteOptions;
   authMeRouteOptions?: AuthMeRouteOptions;
@@ -28,7 +30,7 @@ export async function buildApp(options?: BuildAppOptions) {
   await registerSensible(app);
   await registerSwagger(app);
   await registerHealthRoutes(app);
-  await registerStatusRoutes(app, options?.statusRouteDeps);
+  await registerStatusRoutes(app, options?.requestScope);
   await registerFirstOwnerSetupRoute(app, options?.firstOwnerRouteOptions);
   await registerOwnerLoginRoute(app, options?.ownerLoginRouteOptions);
   await registerAuthMeRoute(app, options?.authMeRouteOptions);

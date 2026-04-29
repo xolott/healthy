@@ -15,9 +15,11 @@ describe('GET /status', () => {
 
   it('returns setupRequired true when there is no active owner', async () => {
     app = await buildApp({
-      statusRouteDeps: {
-        async hasActiveOwner() {
-          return false;
+      requestScope: {
+        status: {
+          async activeOwnerExists() {
+            return { kind: 'ok', hasActiveOwner: false };
+          },
         },
       },
     });
@@ -37,9 +39,11 @@ describe('GET /status', () => {
 
   it('returns setupRequired false when an active owner exists', async () => {
     app = await buildApp({
-      statusRouteDeps: {
-        async hasActiveOwner() {
-          return true;
+      requestScope: {
+        status: {
+          async activeOwnerExists() {
+            return { kind: 'ok', hasActiveOwner: true };
+          },
         },
       },
     });
@@ -57,12 +61,29 @@ describe('GET /status', () => {
     });
   });
 
-  it('returns 503 when DATABASE_URL is not configured and route is not overridden', async () => {
+  it('returns 503 service_unavailable when DATABASE_URL is not configured and scope is default', async () => {
     vi.stubEnv('DATABASE_URL', '');
     app = await buildApp();
 
     const res = await app.inject({ method: 'GET', url: '/status', headers: { accept: 'application/json' } });
 
     expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
+  });
+
+  it('returns 503 service_unavailable when request scope reports persistence_unavailable', async () => {
+    app = await buildApp({
+      requestScope: {
+        status: {
+          async activeOwnerExists() {
+            return { kind: 'persistence_unavailable' };
+          },
+        },
+      },
+    });
+
+    const res = await app.inject({ method: 'GET', url: '/status', headers: { accept: 'application/json' } });
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
   });
 });

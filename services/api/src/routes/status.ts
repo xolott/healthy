@@ -1,8 +1,7 @@
-import type { FastifyInstance } from 'fastify';
-
-import { createUserRepository, withDisposableDatabase } from '@healthy/db';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { getApiSemver } from '../api-version.js';
+import { createRequestScopeForApp, type RequestScope } from '../request-scope/index.js';
 
 const statusResponseSchema = {
   type: 'object',
@@ -22,33 +21,32 @@ const statusResponseSchema = {
   },
 } as const;
 
-export type StatusRouteDeps = {
-  hasActiveOwner(): Promise<boolean>;
-};
+const statusServiceUnavailableResponse = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['error'],
+  properties: {
+    error: { type: 'string', enum: ['service_unavailable'] },
+  },
+} as const;
 
-async function resolveHasActiveOwner(
-  app: FastifyInstance,
-  deps: StatusRouteDeps | undefined,
-): Promise<boolean> {
-  if (deps !== undefined) {
-    return deps.hasActiveOwner();
-  }
-  const url = app.config.DATABASE_URL?.trim();
-  if (url === undefined || url === '') {
-    throw app.httpErrors.serviceUnavailable('DATABASE_NOT_CONFIGURED');
-  }
-  try {
-    return await withDisposableDatabase(url, async (db) => {
-      const repo = createUserRepository(db);
-      return repo.hasActiveOwner();
-    });
-  } catch (err) {
-    app.log.warn({ err }, 'status database lookup failed');
-    throw app.httpErrors.serviceUnavailable('DATABASE_UNAVAILABLE');
-  }
+function resolveRequestScope(app: FastifyInstance, scope: RequestScope | undefined): RequestScope {
+  return scope ?? createRequestScopeForApp(app);
 }
 
-export async function registerStatusRoutes(app: FastifyInstance, deps?: StatusRouteDeps) {
+function sendStatusPayload(reply: FastifyReply, hasOwner: boolean) {
+  return reply.status(200).send({
+    api: {
+      name: 'healthy-api' as const,
+      version: getApiSemver(),
+    },
+    setupRequired: !hasOwner,
+  });
+}
+
+export async function registerStatusRoutes(app: FastifyInstance, requestScope?: RequestScope) {
+  const scope = resolveRequestScope(app, requestScope);
+
   app.get(
     '/status',
     {
@@ -58,18 +56,23 @@ export async function registerStatusRoutes(app: FastifyInstance, deps?: StatusRo
           'Unauthenticated contract for clients to validate a Healthy API base URL and decide onboarding vs login. Does not expose user counts.',
         response: {
           200: statusResponseSchema,
+          503: statusServiceUnavailableResponse,
         },
       },
     },
-    async () => {
-      const hasOwner = await resolveHasActiveOwner(app, deps);
-      return {
-        api: {
-          name: 'healthy-api' as const,
-          version: getApiSemver(),
-        },
-        setupRequired: !hasOwner,
-      };
+    async (_request, reply) => {
+      const outcome = await scope.status.activeOwnerExists();
+      switch (outcome.kind) {
+        case 'persistence_not_configured':
+        case 'persistence_unavailable':
+          return reply.status(503).send({ error: 'service_unavailable' });
+        case 'ok':
+          return sendStatusPayload(reply, outcome.hasActiveOwner);
+        default: {
+          const _exhaustive: never = outcome;
+          return _exhaustive;
+        }
+      }
     },
   );
 }
