@@ -1,18 +1,18 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
-  ApiServiceUnavailableError,
   AuthMeUnauthorizedError,
   fetchAuthMe,
-  InvalidInputApiError,
   PASSWORD_MIN_LENGTH,
-  PasswordPolicyApiError,
   postAuthLogout,
   postFirstOwnerSetup,
   postOwnerLogin,
-  SetupNotFoundError,
+  ApiServiceUnavailableError,
 } from "../../app/utils/healthyApiAuth";
-import { HEALTHY_API_AUTH_LOGOUT_ENDPOINT } from "../../app/utils/healthyApiClient";
+import {
+  HEALTHY_API_AUTH_LOGOUT_ENDPOINT,
+  HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+} from "../../app/utils/healthyApiClient";
 
 describe("healthyApiAuth", () => {
   afterEach(() => {
@@ -132,35 +132,36 @@ describe("healthyApiAuth", () => {
     });
   });
 
-  it("postFirstOwnerSetup returns user and session on 201", async () => {
+  it("postFirstOwnerSetup delegates to Healthy client JSON POST with credentials and parses user-only result", async () => {
     const user = { id: "u1", email: "a@b.com", displayName: "A", role: "owner" };
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => ({
-        status: 201,
-        ok: true,
-        json: async () => ({
-          user,
-          session: { token: "opaque-token", expiresAt: "2099-01-01T00:00:00.000Z" },
-        }),
-      })) as unknown as typeof fetch,
-    );
+    const fetchMock = vi.fn(async () => ({
+      status: 201,
+      ok: true,
+      json: async () => ({
+        user,
+        session: { token: "opaque-token", expiresAt: "2099-01-01T00:00:00.000Z" },
+      }),
+    })) as unknown as typeof fetch;
+    vi.stubGlobal("fetch", fetchMock);
     const out = await postFirstOwnerSetup("https://api.example/", {
       displayName: "A",
       email: "a@b.com",
       password: "x".repeat(12),
     });
-    expect(out.user).toEqual(user);
-    expect(out.session.token).toBe("opaque-token");
-    expect(fetch).toHaveBeenCalledWith("https://api.example/setup/first-owner", {
+    expect(out).toEqual(user);
+    expect(fetchMock).toHaveBeenCalledWith("https://api.example/setup/first-owner", {
       method: "POST",
       credentials: "include",
-      headers: { "Content-Type": "application/json" },
+      headers: expect.any(Headers),
       body: JSON.stringify({ displayName: "A", email: "a@b.com", password: "x".repeat(12) }),
     });
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    const h = init.headers as Headers;
+    expect(h.get("Accept")).toBe("application/json");
+    expect(h.get("Content-Type")).toBe("application/json");
   });
 
-  it("postFirstOwnerSetup throws PasswordPolicyApiError on password_policy 400", async () => {
+  it("postFirstOwnerSetup rejects with setup_password_policy on documented password_policy 400", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -179,10 +180,15 @@ describe("healthyApiAuth", () => {
         email: "a@b.com",
         password: "short",
       }),
-    ).rejects.toBeInstanceOf(PasswordPolicyApiError);
+    ).rejects.toMatchObject({
+      kind: "setup_password_policy",
+      httpStatus: 400,
+      endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+      setupPasswordPolicy: { minLength: 12, message: "Too short" },
+    });
   });
 
-  it("postFirstOwnerSetup throws InvalidInputApiError on invalid_input 400", async () => {
+  it("postFirstOwnerSetup rejects with setup_invalid_input on documented invalid_input 400", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -201,10 +207,13 @@ describe("healthyApiAuth", () => {
         email: "bad",
         password: "x".repeat(12),
       }),
-    ).rejects.toBeInstanceOf(InvalidInputApiError);
+    ).rejects.toMatchObject({
+      kind: "setup_invalid_input",
+      setupInvalidInput: { field: "email", message: "Invalid" },
+    });
   });
 
-  it("postFirstOwnerSetup throws SetupNotFoundError on 404", async () => {
+  it("postFirstOwnerSetup rejects with setup_unavailable on documented 404", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -219,10 +228,14 @@ describe("healthyApiAuth", () => {
         email: "a@b.com",
         password: "x".repeat(12),
       }),
-    ).rejects.toBeInstanceOf(SetupNotFoundError);
+    ).rejects.toMatchObject({
+      kind: "setup_unavailable",
+      httpStatus: 404,
+      endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+    });
   });
 
-  it("postFirstOwnerSetup throws ApiServiceUnavailableError on 503", async () => {
+  it("postFirstOwnerSetup rejects with error_body_invalid on 503 without documented body", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -237,7 +250,10 @@ describe("healthyApiAuth", () => {
         email: "a@b.com",
         password: "x".repeat(12),
       }),
-    ).rejects.toBeInstanceOf(ApiServiceUnavailableError);
+    ).rejects.toMatchObject({
+      kind: "error_body_invalid",
+      httpStatus: 503,
+    });
   });
 
   it("postOwnerLogin rejects with error_body_invalid on 503 without documented body", async () => {

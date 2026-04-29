@@ -10,38 +10,9 @@ export const PASSWORD_MIN_LENGTH = 12;
 /** Current admin user (`/auth/me` success body). Roles match documented API enums. */
 export type CurrentUser = HealthyAuthMeUser;
 
-export type FirstOwnerSuccessBody = {
-  user: CurrentUser;
-  session: { token: string; expiresAt: string };
-};
-
 export class AuthMeUnauthorizedError extends Error {
   constructor() {
     super("Not authenticated");
-  }
-}
-
-export class SetupNotFoundError extends Error {
-  constructor() {
-    super("Setup is not available");
-  }
-}
-
-export class PasswordPolicyApiError extends Error {
-  constructor(
-    public readonly minLength: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
-
-export class InvalidInputApiError extends Error {
-  constructor(
-    public readonly field: string,
-    message: string,
-  ) {
-    super(message);
   }
 }
 
@@ -71,55 +42,17 @@ export async function fetchAuthMe(
 }
 
 /**
- * Create the first owner. Stores HttpOnly session cookie for the API origin; returns response body for display.
+ * Create the first owner when setup is available. Sets the HttpOnly session cookie on the API origin.
+ * Returns only the current user — the API includes a Bearer-oriented session in JSON; that shape is validated
+ * but not returned, matching the owner login web contract.
+ * Failures use `HealthyApiClientError` with closed `kind` values.
  */
 export async function postFirstOwnerSetup(
   apiBaseUrl: string,
   input: { displayName: string; email: string; password: string },
-): Promise<FirstOwnerSuccessBody> {
-  const base = apiBaseUrl.replace(/\/+$/, "");
-  const res = await fetch(`${base}/setup/first-owner`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  if (res.status === 400) {
-    const body: unknown = await res.json().catch(() => ({}));
-    if (typeof body === "object" && body !== null) {
-      const o = body as { error?: string; minLength?: number; message?: string; field?: string };
-      if (o.error === "password_policy" && typeof o.minLength === "number" && typeof o.message === "string") {
-        throw new PasswordPolicyApiError(o.minLength, o.message);
-      }
-      if (o.error === "invalid_input" && typeof o.field === "string" && typeof o.message === "string") {
-        throw new InvalidInputApiError(o.field, o.message);
-      }
-    }
-    throw new Error("Bad request");
-  }
-  if (res.status === 404) {
-    throw new SetupNotFoundError();
-  }
-  if (res.status === 503) {
-    throw new ApiServiceUnavailableError();
-  }
-  if (!res.ok) {
-    throw new Error(`HTTP ${String(res.status)}`);
-  }
-  const body: unknown = await res.json();
-  if (typeof body !== "object" || body === null) {
-    throw new Error("Invalid setup response");
-  }
-  const b = body as { user?: CurrentUser; session?: { token: string; expiresAt: string } };
-  if (
-    b.user === undefined ||
-    b.session === undefined ||
-    typeof b.session.token !== "string" ||
-    typeof b.session.expiresAt !== "string"
-  ) {
-    throw new Error("Invalid setup response");
-  }
-  return { user: b.user, session: b.session };
+  options?: Omit<CreateHealthyApiClientOptions, "baseUrl">,
+): Promise<CurrentUser> {
+  return createHealthyApiClient({ baseUrl: apiBaseUrl, ...options }).firstOwnerSetup(input);
 }
 
 /**

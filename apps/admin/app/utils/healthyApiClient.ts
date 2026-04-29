@@ -70,9 +70,34 @@ const ownerLoginInvalidInputBodySchema = z
   })
   .strict();
 
+/** Documented `400` with `{ error: "invalid_input", field, message }` on first-owner setup. */
+const firstOwnerInvalidInputBodySchema = z
+  .object({
+    error: z.literal("invalid_input"),
+    field: z.enum(["displayName", "email", "password"]),
+    message: z.string(),
+  })
+  .strict();
+
 const ownerLoginInvalidCredentialsBodySchema = z
   .object({
     error: z.literal("invalid_credentials"),
+  })
+  .strict();
+
+/** Documented `400` with `{ error: "password_policy", minLength, message }` on first-owner setup. */
+const firstOwnerPasswordPolicyBodySchema = z
+  .object({
+    error: z.literal("password_policy"),
+    minLength: z.number(),
+    message: z.string(),
+  })
+  .strict();
+
+/** Documented `404` body when setup is no longer available. */
+const firstOwnerSetupUnavailableBodySchema = z
+  .object({
+    error: z.literal("not_found"),
   })
   .strict();
 
@@ -98,16 +123,23 @@ export const HEALTHY_API_AUTH_LOGOUT_ENDPOINT = {
   path: "/auth/logout" as const,
 };
 
+export const HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT = {
+  method: "POST" as const,
+  path: "/setup/first-owner" as const,
+};
+
 export type HealthyApiPublicStatusEndpoint = typeof HEALTHY_API_PUBLIC_STATUS_ENDPOINT;
 export type HealthyApiAuthMeEndpoint = typeof HEALTHY_API_AUTH_ME_ENDPOINT;
 export type HealthyApiOwnerLoginEndpoint = typeof HEALTHY_API_OWNER_LOGIN_ENDPOINT;
 export type HealthyApiAuthLogoutEndpoint = typeof HEALTHY_API_AUTH_LOGOUT_ENDPOINT;
+export type HealthyApiFirstOwnerSetupEndpoint = typeof HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT;
 
 export type HealthyApiClientEndpoint =
   | HealthyApiPublicStatusEndpoint
   | HealthyApiAuthMeEndpoint
   | HealthyApiOwnerLoginEndpoint
-  | HealthyApiAuthLogoutEndpoint;
+  | HealthyApiAuthLogoutEndpoint
+  | HealthyApiFirstOwnerSetupEndpoint;
 
 export type HealthyApiClientErrorKind =
   | "network"
@@ -121,7 +153,13 @@ export type HealthyApiClientErrorKind =
   /** Documented `401` with `{ error: "invalid_credentials" }` on `POST /auth/login`. */
   | "invalid_credentials"
   /** Documented `400` with `{ error: "invalid_input", field, message }` on owner login. */
-  | "login_invalid_input";
+  | "login_invalid_input"
+  /** Documented `400` with `{ error: "invalid_input", field, message }` on first-owner setup. */
+  | "setup_invalid_input"
+  /** Documented `400` with `{ error: "password_policy", minLength, message }` on first-owner setup. */
+  | "setup_password_policy"
+  /** Documented `404` when first-owner setup is no longer available. */
+  | "setup_unavailable";
 
 export class HealthyApiClientError extends Error {
   readonly kind: HealthyApiClientErrorKind;
@@ -129,6 +167,10 @@ export class HealthyApiClientError extends Error {
   readonly httpStatus?: number;
   /** Present when {@link HealthyApiClientError.kind} is `login_invalid_input`. */
   readonly loginInvalidInput?: { readonly field: string; readonly message: string };
+  /** Present when {@link HealthyApiClientError.kind} is `setup_invalid_input`. */
+  readonly setupInvalidInput?: { readonly field: string; readonly message: string };
+  /** Present when {@link HealthyApiClientError.kind} is `setup_password_policy`. */
+  readonly setupPasswordPolicy?: { readonly minLength: number; readonly message: string };
 
   constructor(args: {
     kind: HealthyApiClientErrorKind;
@@ -137,6 +179,8 @@ export class HealthyApiClientError extends Error {
     httpStatus?: number;
     cause?: unknown;
     loginInvalidInput?: { field: string; message: string };
+    setupInvalidInput?: { field: string; message: string };
+    setupPasswordPolicy?: { minLength: number; message: string };
   }) {
     super(args.message, args.cause !== undefined ? { cause: args.cause } : undefined);
     this.name = "HealthyApiClientError";
@@ -144,6 +188,8 @@ export class HealthyApiClientError extends Error {
     this.endpoint = args.endpoint;
     this.httpStatus = args.httpStatus;
     this.loginInvalidInput = args.loginInvalidInput;
+    this.setupInvalidInput = args.setupInvalidInput;
+    this.setupPasswordPolicy = args.setupPasswordPolicy;
   }
 }
 
@@ -171,6 +217,10 @@ export function healthyApiAuthLogoutUrl(normalizedBaseUrl: string): string {
   return `${normalizedBaseUrl}${HEALTHY_API_AUTH_LOGOUT_ENDPOINT.path}`;
 }
 
+export function healthyApiFirstOwnerSetupUrl(normalizedBaseUrl: string): string {
+  return `${normalizedBaseUrl}${HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT.path}`;
+}
+
 export type CreateHealthyApiClientOptions = {
   baseUrl: string;
   fetch?: typeof fetch;
@@ -181,6 +231,15 @@ export type HealthyApiClient = {
   getPublicStatus(): Promise<HealthyPublicStatus>;
   getCurrentUser(): Promise<HealthyAuthMeUser>;
   ownerLogin(input: { email: string; password: string }): Promise<HealthyAuthMeUser>;
+  /**
+   * Creates the first owner when setup is available. Validates session JSON (Bearer-capable)
+   * but returns only the current user so admin state stays cookie-oriented.
+   */
+  firstOwnerSetup(input: {
+    displayName: string;
+    email: string;
+    password: string;
+  }): Promise<HealthyAuthMeUser>;
   /** Revokes the current session; documented success is `204 No Content` (empty body). */
   logout(): Promise<void>;
 };
@@ -498,6 +557,139 @@ export function createHealthyApiClient(options: CreateHealthyApiClientOptions): 
       throw new HealthyApiClientError({
         kind: "unexpected_http_status",
         endpoint: HEALTHY_API_OWNER_LOGIN_ENDPOINT,
+        message: `Healthy API returned HTTP ${String(res.status)}`,
+        httpStatus: res.status,
+      });
+    },
+
+    async firstOwnerSetup(input: { displayName: string; email: string; password: string }) {
+      const url = healthyApiFirstOwnerSetupUrl(normalizedBase);
+      const headers = new Headers(defaultRequestInit.headers);
+      headers.set("Accept", "application/json");
+      headers.set("Content-Type", "application/json");
+      const init = mergeFetchInit(defaultRequestInit, {
+        method: "POST",
+        credentials: "include",
+        headers,
+        body: JSON.stringify(input),
+      });
+
+      let res: Response;
+      try {
+        res = await doFetch(url, init);
+      } catch (e) {
+        throw new HealthyApiClientError({
+          kind: "network",
+          endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+          message: "Healthy API request failed",
+          cause: e,
+        });
+      }
+
+      let body: unknown;
+      try {
+        body = await res.json();
+      } catch (e) {
+        throw new HealthyApiClientError({
+          kind: "invalid_json",
+          endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+          message: "Healthy API response was not valid JSON",
+          httpStatus: res.status,
+          cause: e,
+        });
+      }
+
+      if (res.status === 201) {
+        const parsed = ownerLoginSuccessSchema.safeParse(body);
+        if (!parsed.success) {
+          throw new HealthyApiClientError({
+            kind: "success_body_invalid",
+            endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+            message: "Healthy API first-owner setup response did not match the expected session shape",
+            httpStatus: 201,
+            cause: parsed.error,
+          });
+        }
+        return parsed.data.user;
+      }
+
+      if (res.status === 400) {
+        const invalidInput = firstOwnerInvalidInputBodySchema.safeParse(body);
+        if (invalidInput.success) {
+          throw new HealthyApiClientError({
+            kind: "setup_invalid_input",
+            endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+            message: "Healthy API reported invalid first-owner setup input",
+            httpStatus: 400,
+            setupInvalidInput: {
+              field: invalidInput.data.field,
+              message: invalidInput.data.message,
+            },
+          });
+        }
+        const policy = firstOwnerPasswordPolicyBodySchema.safeParse(body);
+        if (policy.success) {
+          throw new HealthyApiClientError({
+            kind: "setup_password_policy",
+            endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+            message: "Healthy API reported a password policy violation",
+            httpStatus: 400,
+            setupPasswordPolicy: {
+              minLength: policy.data.minLength,
+              message: policy.data.message,
+            },
+          });
+        }
+        throw new HealthyApiClientError({
+          kind: "error_body_invalid",
+          endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+          message: "Healthy API first-owner setup error response did not match the documented shape",
+          httpStatus: 400,
+          cause: policy.error,
+        });
+      }
+
+      if (res.status === 404) {
+        const parsed = firstOwnerSetupUnavailableBodySchema.safeParse(body);
+        if (!parsed.success) {
+          throw new HealthyApiClientError({
+            kind: "error_body_invalid",
+            endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+            message: "Healthy API first-owner setup error response did not match the documented shape",
+            httpStatus: 404,
+            cause: parsed.error,
+          });
+        }
+        throw new HealthyApiClientError({
+          kind: "setup_unavailable",
+          endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+          message: "Healthy API reported first-owner setup is unavailable",
+          httpStatus: 404,
+        });
+      }
+
+      if (res.status === 503) {
+        const parsed = authMeServiceUnavailableBodySchema.safeParse(body);
+        if (!parsed.success) {
+          throw new HealthyApiClientError({
+            kind: "error_body_invalid",
+            endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+            message: "Healthy API first-owner setup error response did not match the documented shape",
+            httpStatus: 503,
+            cause: parsed.error,
+          });
+        }
+        throw new HealthyApiClientError({
+          kind: "service_unavailable",
+          endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
+          message: "Healthy API reported service_unavailable",
+          httpStatus: 503,
+        });
+      }
+
+      throw new HealthyApiClientError({
+        kind: "unexpected_http_status",
+        endpoint: HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT,
         message: `Healthy API returned HTTP ${String(res.status)}`,
         httpStatus: res.status,
       });
