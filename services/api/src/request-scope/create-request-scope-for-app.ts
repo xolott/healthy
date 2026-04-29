@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 
-import { createUserRepository } from '@healthy/db';
+import { createSetupStatusPersistence } from '@healthy/db';
 
 import { validateFirstOwnerSetupPayload } from '../auth/auth-use-cases.js';
 import { createAuthUseCasesForDatabase } from '../auth/auth-use-case-scope.js';
@@ -14,15 +14,15 @@ import type { RequestScope } from './types.js';
 export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
   return {
     status: {
-      async activeOwnerExists() {
+      async isFirstOwnerSetupRequired() {
         const adapter = app.databaseAdapter;
         if (adapter === null) {
           return { kind: 'persistence_not_configured' };
         }
         try {
-          const repo = createUserRepository(adapter.db);
-          const hasOwner = await repo.hasActiveOwner();
-          return { kind: 'ok', hasActiveOwner: hasOwner };
+          const setupStatus = createSetupStatusPersistence(adapter.db);
+          const required = await setupStatus.isFirstOwnerSetupRequired();
+          return { kind: 'ok', isFirstOwnerSetupRequired: required };
         } catch (err) {
           app.log.warn({ err }, 'status database lookup failed');
           return { kind: 'persistence_unavailable' };

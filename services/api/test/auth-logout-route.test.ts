@@ -38,8 +38,8 @@ describe('POST /auth/logout (unit)', () => {
     const app = await buildApp({
       requestScope: {
         status: {
-          async activeOwnerExists() {
-            return { kind: 'ok', hasActiveOwner: true };
+          async isFirstOwnerSetupRequired() {
+            return { kind: 'ok', isFirstOwnerSetupRequired: false };
           },
         },
         currentSession: {

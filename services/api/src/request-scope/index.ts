@@ -3,7 +3,7 @@ export type {
   PublicFirstOwnerSetupOutcome,
   PublicLogoutOutcome,
   PublicOwnerLoginOutcome,
-  PublicStatusActiveOwnerOutcome,
+  PublicSetupStatusOutcome,
   RequestScope,
   RequestScopeCurrentSessionCapability,
   RequestScopeFirstOwnerSetupCapability,

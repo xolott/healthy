@@ -50,8 +50,8 @@ describe('GET /status', () => {
     app = await buildApp({
       requestScope: {
         status: {
-          async activeOwnerExists() {
-            return { kind: 'ok', hasActiveOwner: false };
+          async isFirstOwnerSetupRequired() {
+            return { kind: 'ok', isFirstOwnerSetupRequired: true };
           },
         },
         currentSession: unusedCurrentSession(),
@@ -78,8 +78,8 @@ describe('GET /status', () => {
     app = await buildApp({
       requestScope: {
         status: {
-          async activeOwnerExists() {
-            return { kind: 'ok', hasActiveOwner: true };
+          async isFirstOwnerSetupRequired() {
+            return { kind: 'ok', isFirstOwnerSetupRequired: false };
           },
         },
         currentSession: unusedCurrentSession(),
@@ -116,7 +116,7 @@ describe('GET /status', () => {
     app = await buildApp({
       requestScope: {
         status: {
-          async activeOwnerExists() {
+          async isFirstOwnerSetupRequired() {
             return { kind: 'persistence_unavailable' };
           },
         },

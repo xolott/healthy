@@ -34,13 +34,13 @@ function resolveRequestScope(app: FastifyInstance, scope: RequestScope | undefin
   return scope ?? createRequestScopeForApp(app);
 }
 
-function sendStatusPayload(reply: FastifyReply, hasOwner: boolean) {
+function sendStatusPayload(reply: FastifyReply, setupRequired: boolean) {
   return reply.status(200).send({
     api: {
       name: 'healthy-api' as const,
       version: getApiSemver(),
     },
-    setupRequired: !hasOwner,
+    setupRequired,
   });
 }
 
@@ -61,13 +61,13 @@ export async function registerStatusRoutes(app: FastifyInstance, requestScope?: 
       },
     },
     async (_request, reply) => {
-      const outcome = await scope.status.activeOwnerExists();
+      const outcome = await scope.status.isFirstOwnerSetupRequired();
       switch (outcome.kind) {
         case 'persistence_not_configured':
         case 'persistence_unavailable':
           return reply.status(503).send({ error: 'service_unavailable' });
         case 'ok':
-          return sendStatusPayload(reply, outcome.hasActiveOwner);
+          return sendStatusPayload(reply, outcome.isFirstOwnerSetupRequired);
         default: {
           const _exhaustive: never = outcome;
           return _exhaustive;

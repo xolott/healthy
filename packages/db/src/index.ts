@@ -24,3 +24,7 @@ export {
   type AppendAuditLogInput,
   type AuditLogRepository,
 } from './audit-logs/index.js';
+export {
+  createSetupStatusPersistence,
+  type SetupStatusPersistence,
+} from './setup-status/index.js';

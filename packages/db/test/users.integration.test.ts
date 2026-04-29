@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import postgres from 'postgres';
 
+import { createSetupStatusPersistence } from '../src/setup-status/index.js';
 import { createUserRepository } from '../src/users/repository.js';
 import { users } from '../src/schema/index.js';
 import { FirstOwnerAlreadyExistsError, LastActiveOwnerInvariantError } from '../src/users/errors.js';
@@ -164,6 +165,18 @@ describe('user repository (integration)', () => {
         displayName: 'Founder',
       });
       expect(await repo.hasActiveOwner()).toBe(true);
+    });
+
+    it('setup status persistence reports first-owner setup required until an active owner exists', async () => {
+      const setupStatus = createSetupStatusPersistence(ownerHarness.db);
+      expect(await setupStatus.isFirstOwnerSetupRequired()).toBe(true);
+      const repo = createUserRepository(ownerHarness.db);
+      await repo.createFirstOwner({
+        email: 'setup-status@example.com',
+        passwordHash: 'h',
+        displayName: 'Founder',
+      });
+      expect(await setupStatus.isFirstOwnerSetupRequired()).toBe(false);
     });
 
     it('creates the first owner via setup with role owner and active status', async () => {

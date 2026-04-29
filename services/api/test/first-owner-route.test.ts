@@ -54,8 +54,8 @@ describe('POST /setup/first-owner', () => {
     app = await buildApp({
       requestScope: {
         status: {
-          async activeOwnerExists() {
-            return { kind: 'ok', hasActiveOwner: false };
+          async isFirstOwnerSetupRequired() {
+            return { kind: 'ok', isFirstOwnerSetupRequired: true };
           },
         },
         currentSession: {
@@ -128,8 +128,8 @@ describe('GET /auth/me', () => {
     app = await buildApp({
       requestScope: {
         status: {
-          async activeOwnerExists() {
-            return { kind: 'ok', hasActiveOwner: true };
+          async isFirstOwnerSetupRequired() {
+            return { kind: 'ok', isFirstOwnerSetupRequired: false };
           },
         },
         currentSession: {
@@ -178,8 +178,8 @@ describe('GET /auth/me (request-scope stub)', () => {
     app = await buildApp({
       requestScope: {
         status: {
-          async activeOwnerExists() {
-            return { kind: 'ok', hasActiveOwner: true };
+          async isFirstOwnerSetupRequired() {
+            return { kind: 'ok', isFirstOwnerSetupRequired: false };
           },
         },
         currentSession: {

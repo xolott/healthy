@@ -10,13 +10,13 @@ import type {
  * Status reads map persistence configuration and availability to a closed outcome union;
  * routes translate these to HTTP.
  */
-export type PublicStatusActiveOwnerOutcome =
+export type PublicSetupStatusOutcome =
   | { kind: 'persistence_not_configured' }
   | { kind: 'persistence_unavailable' }
-  | { kind: 'ok'; hasActiveOwner: boolean };
+  | { kind: 'ok'; isFirstOwnerSetupRequired: boolean };
 
 export type RequestScopeStatusCapability = {
-  activeOwnerExists(): Promise<PublicStatusActiveOwnerOutcome>;
+  isFirstOwnerSetupRequired(): Promise<PublicSetupStatusOutcome>;
 };
 
 /**
