@@ -1,0 +1,11 @@
+---
+description: Reuse UI components and keep admin/mobile features aligned
+alwaysApply: true
+---
+
+# UI Component Reuse And Product Parity
+
+- Treat existing reusable components as the first choice for UI work. Before adding a new component or styling pattern, look for an existing component, shared package, or local pattern to extend.
+- For admin web UI, prefer shadcn-vue components once the shadcn setup exists. Keep wrappers thin and reusable instead of placing one-off markup in pages.
+- Any user-facing feature added or changed in admin must be considered for both mobile apps, and any user-facing mobile feature must be considered for admin. Keep features the same across admin and mobile as much as the platform allows.
+- If a feature cannot be visible or equivalent in both admin and mobile, document the reason in the implementation notes or ask for product direction before proceeding.

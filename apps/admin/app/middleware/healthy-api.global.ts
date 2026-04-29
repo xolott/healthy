@@ -1,5 +1,5 @@
 import { AuthMeUnauthorizedError, fetchAuthMe } from "../utils/healthyApiAuth";
-import { resolveConfiguredApiBaseUrl } from "../utils/healthyApiConfig";
+import { resolveConfiguredApiBaseUrlForAdminRequest } from "../utils/healthyApiConfig";
 import {
   isConfigurationErrorPath,
   isInternalHealthyAdminPath,
@@ -21,7 +21,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
   }
 
   const config = useRuntimeConfig();
-  const resolved = resolveConfiguredApiBaseUrl(String(config.public.apiBaseUrl ?? ""));
+  const resolved = resolveConfiguredApiBaseUrlForAdminRequest(
+    String(config.public.apiBaseUrl ?? ""),
+    useRequestURL().hostname,
+  );
 
   if (!resolved.ok) {
     const emptyReason = resolved.reason === "missing" ? "missing" : "invalid_url";

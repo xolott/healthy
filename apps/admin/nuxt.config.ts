@@ -24,7 +24,8 @@ export default defineNuxtConfig({
   },
   runtimeConfig: {
     public: {
-      apiBaseUrl: "http://127.0.0.1:3001",
+      /** Same hostname as the browser uses for admin (`localhost` vs `127.0.0.1` must match API URL or session cookies are not sent on HTTP — SameSite=Lax). */
+      apiBaseUrl: "http://localhost:3001",
     },
   },
 });

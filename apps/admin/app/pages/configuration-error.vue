@@ -42,7 +42,7 @@ import { useQuery } from "@pinia/colada";
 
 import { runConfigurationRetry } from "@/utils/healthyApiConfigurationRetry";
 import type { ConfigurationErrorReason } from "@/utils/healthyApiGlobalRoute";
-import { resolveConfiguredApiBaseUrl } from "@/utils/healthyApiConfig";
+import { resolveConfiguredApiBaseUrlForAdminRequest } from "@/utils/healthyApiConfig";
 import { healthyPublicStatusQueryKey } from "@/utils/healthyApiQueryKeys";
 import { fetchHealthyPublicStatus } from "@/utils/healthyApiStatus";
 import { useHealthyApiStore } from "@/stores/healthyApi";
@@ -56,6 +56,7 @@ const config = useRuntimeConfig();
 const apiStore = useHealthyApiStore();
 
 const rawConfiguredUrl = computed(() => String(config.public.apiBaseUrl ?? ""));
+const requestURL = useRequestURL();
 
 const reason = computed<ConfigurationErrorReason>(() => {
   const q = route.query.reason;
@@ -66,7 +67,9 @@ const reason = computed<ConfigurationErrorReason>(() => {
   return "unreachable";
 });
 
-const resolved = computed(() => resolveConfiguredApiBaseUrl(rawConfiguredUrl.value));
+const resolved = computed(() =>
+  resolveConfiguredApiBaseUrlForAdminRequest(rawConfiguredUrl.value, requestURL.hostname),
+);
 
 const baseUrlForProbe = computed(() => (resolved.value.ok ? resolved.value.baseUrl : ""));
 
@@ -94,7 +97,7 @@ const detail = computed(() => {
     case "missing":
       return "Set NUXT_PUBLIC_API_BASE_URL (or your host’s equivalent) to the Healthy API origin, redeploy, then retry.";
     case "invalid_url":
-      return "The configured value must be a full http(s) URL (for example http://127.0.0.1:3001). Update the environment variable and redeploy.";
+      return "The configured value must be a full http(s) URL (for example http://localhost:3001). Use the same hostname as in the browser address bar (`localhost` vs `127.0.0.1`) or session cookies will not work over HTTP. Update the environment variable and redeploy.";
     default:
       return "The server did not return a valid response from /status. Confirm the process is running and reachable from this browser.";
   }

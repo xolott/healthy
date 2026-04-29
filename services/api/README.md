@@ -5,7 +5,7 @@ Scaffold Fastify HTTP service exposing:
 - `GET /health`
 - Swagger UI at `/docs`
 
-Persistence uses the shared package `@healthy/db` (Drizzle + PostgreSQL). Optional `DATABASE_URL` is validated at startup; omit it for health-only runs. See repository [`docs/database.md`](../../docs/database.md) for local Postgres, migrations, and tests.
+Persistence uses the shared package `@healthy/db` (Drizzle + PostgreSQL). Optional `DATABASE_URL` is validated at startup; omit it for health-only runs. See repository `[docs/database.md](../../docs/database.md)` for local Postgres, migrations, and tests.
 
 ## Local development
 
@@ -18,15 +18,7 @@ pnpm install
 pnpm --filter api dev
 ```
 
-The server listens using environment variables documented in `./.env.example` (including `DATABASE_URL` when you connect to a database).
-
-With Docker Compose from the repository root:
-
-```bash
-docker compose up api
-```
-
-The Compose API service waits for PostgreSQL, applies pending migrations, and starts the dev server on http://127.0.0.1:3001.
+The server listens using environment variables documented in `./.env.example` (including `DATABASE_URL` when you connect to a database). You can run PostgreSQL with Compose (see repository root `docker-compose.yml`) and point `DATABASE_URL` at `postgres://healthy:healthy@127.0.0.1:5432/healthy_dev`.
 
 ## Scripts
 

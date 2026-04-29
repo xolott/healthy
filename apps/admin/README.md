@@ -8,6 +8,10 @@ Authentication, persistence hooks, dashboards, and API integrations are intentio
 
 Follow repository root toolchain pins (`.node-version`, `package.json#packageManager`) and docs in [`docs/development.md`](/docs/development.md).
 
+## Environment
+
+Copy `./.env.example` to `./.env` under `apps/admin` when missing. Variables such as `NUXT_PUBLIC_API_BASE_URL` override [`runtimeConfig.public`](./nuxt.config.ts); Nuxt reads `.env` at dev and build time.
+
 ## Commands
 
 ```bash
@@ -29,4 +33,4 @@ pnpm --filter admin preview
 
 ## Runtime configuration
 
-`NUXT_PUBLIC_API_BASE_URL` controls the surfaced API preview string (`app/pages/index.vue`). See `./.env.example`.
+See `./.env.example` and `./.env` (local, gitignored).

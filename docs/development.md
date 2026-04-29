@@ -17,6 +17,8 @@ pnpm install
 
 ### Admin (Nuxt)
 
+Copy [`../apps/admin/.env.example`](../apps/admin/.env.example) to `apps/admin/.env` if you do not already have one (gitignored). Nuxt loads `.env` in the Nuxt root (`apps/admin`) automatically.
+
 ```bash
 pnpm --filter admin dev
 ```

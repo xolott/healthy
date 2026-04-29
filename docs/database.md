@@ -6,19 +6,21 @@ Shared PostgreSQL schema and Drizzle ORM live in the workspace package `**packag
 
 Use a standard PostgreSQL connection string. The API and Drizzle Kit both expect the variable name `**DATABASE_URL**`.
 
-To run the local Docker Compose database, API, and admin services:
+To run PostgreSQL locally via Docker Compose from the repository root:
 
 ```bash
 docker compose up
 ```
 
-Compose uses:
+Use this URL when connecting from your machine:
 
 ```bash
 postgres://healthy:healthy@127.0.0.1:5432/healthy_dev
 ```
 
-Inside the Compose network the API connects to `postgres://healthy:healthy@postgres:5432/healthy_dev`.
+Run the API and admin with pnpm on the host (see [`development.md`](./development.md)); point `DATABASE_URL` at the URL above.
+
+If you run Postgres yourself instead of Compose:
 
 1. Run PostgreSQL 16+ locally (Docker, Homebrew `postgresql@16`, managed cloud, and so on).
 2. Create a database for development, for example `healthy_dev`:

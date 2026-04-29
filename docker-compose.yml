@@ -15,56 +15,5 @@ services:
       timeout: 5s
       retries: 10
 
-  api:
-    build:
-      context: .
-      dockerfile: .docker/node-dev.Dockerfile
-    image: healthy-api-dev
-    working_dir: /workspace
-    command: >
-      sh -lc "pnpm install --frozen-lockfile &&
-      pnpm --filter api db:migrate &&
-      pnpm --filter api dev"
-    environment:
-      NODE_ENV: development
-      HOST: 0.0.0.0
-      PORT: 3001
-      LOG_LEVEL: info
-      CORS_ORIGIN: "*"
-      DATABASE_URL: postgres://healthy:healthy@postgres:5432/healthy_dev
-    ports:
-      - "3001:3001"
-    volumes:
-      - .:/workspace
-      - node-modules:/workspace/node_modules
-      - pnpm-store:/root/.local/share/pnpm/store
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  admin:
-    build:
-      context: .
-      dockerfile: .docker/node-dev.Dockerfile
-    image: healthy-admin-dev
-    working_dir: /workspace
-    command: >
-      sh -lc "pnpm install --frozen-lockfile &&
-      pnpm --filter admin dev -- --host 0.0.0.0"
-    environment:
-      NODE_ENV: development
-      NUXT_PUBLIC_API_BASE_URL: http://127.0.0.1:3001
-    ports:
-      - "${ADMIN_PORT:-3002}:3000"
-    volumes:
-      - .:/workspace
-      - node-modules:/workspace/node_modules
-      - pnpm-store:/root/.local/share/pnpm/store
-    depends_on:
-      api:
-        condition: service_started
-
 volumes:
-  node-modules:
   postgres-data:
-  pnpm-store:
