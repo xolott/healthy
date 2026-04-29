@@ -78,10 +78,58 @@ export type RequestScopeFirstOwnerSetupCapability = {
   ): Promise<PublicFirstOwnerSetupOutcome>;
 };
 
+/**
+ * Authenticated pantry catalog payloads (excluding transport auth).
+ */
+
+export type PantryItemWire = {
+  id: string;
+  itemType: 'food' | 'recipe';
+  name: string;
+  iconKey: string;
+  metadata: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type NutrientCatalogEntry = {
+  key: string;
+  displayName: string;
+  canonicalUnit: string;
+};
+
+export type PublicPantryItemsListOutcome =
+  | { kind: 'persistence_not_configured' }
+  | { kind: 'persistence_unavailable' }
+  | { kind: 'ok'; items: PantryItemWire[] };
+
+export type PublicPantryItemDetailOutcome =
+  | { kind: 'persistence_not_configured' }
+  | { kind: 'persistence_unavailable' }
+  | { kind: 'not_found' }
+  | { kind: 'ok'; item: PantryItemWire };
+
+export type PublicPantryReferenceOutcome =
+  | { kind: 'persistence_not_configured' }
+  | { kind: 'persistence_unavailable' }
+  | {
+      kind: 'ok';
+      nutrients: NutrientCatalogEntry[];
+      iconKeys: readonly string[];
+    };
+
+export type RequestScopePantryCapability = {
+  listItemsForOwner(ownerUserId: string, itemType: 'food' | 'recipe'): Promise<PublicPantryItemsListOutcome>;
+  getItemForOwner(ownerUserId: string, itemId: string): Promise<PublicPantryItemDetailOutcome>;
+  getReferenceCatalog(): Promise<PublicPantryReferenceOutcome>;
+};
+
 export type RequestScope = {
   status: RequestScopeStatusCapability;
   currentSession: RequestScopeCurrentSessionCapability;
   logout: RequestScopeLogoutCapability;
   ownerLogin: RequestScopeOwnerLoginCapability;
   firstOwnerSetup: RequestScopeFirstOwnerSetupCapability;
+
+  pantry: RequestScopePantryCapability;
 };

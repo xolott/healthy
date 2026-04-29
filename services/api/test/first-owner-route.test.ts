@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
 import { MIN_PASSWORD_LENGTH } from '../src/auth/password-policy.js';
+import { unusedPantryCapability } from './helpers/unused-pantry-scope.js';
 
 describe('POST /setup/first-owner', () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
@@ -78,6 +79,7 @@ describe('POST /setup/first-owner', () => {
             return { kind: 'persistence_unavailable' };
           },
         },
+        pantry: unusedPantryCapability(),
       },
     });
     const res = await app.inject({
@@ -152,6 +154,7 @@ describe('GET /auth/me', () => {
             return { kind: 'setup_unavailable' };
           },
         },
+        pantry: unusedPantryCapability(),
       },
     });
     const res = await app.inject({
@@ -205,6 +208,7 @@ describe('GET /auth/me (Request Scope stub)', () => {
             return { kind: 'setup_unavailable' };
           },
         },
+        pantry: unusedPantryCapability(),
       },
     });
     const res = await app.inject({

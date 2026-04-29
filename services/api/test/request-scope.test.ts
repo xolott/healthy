@@ -61,6 +61,17 @@ describe('Request Scope (public status / setup required)', () => {
           return { kind: 'setup_unavailable' };
         },
       },
+      pantry: {
+        async listItemsForOwner() {
+          return { kind: 'ok', items: [] };
+        },
+        async getItemForOwner() {
+          return { kind: 'not_found' };
+        },
+        async getReferenceCatalog() {
+          return { kind: 'ok', nutrients: [], iconKeys: [] };
+        },
+      },
     };
     await expect(fake.status.isFirstOwnerSetupRequired()).resolves.toEqual({
       kind: 'ok',

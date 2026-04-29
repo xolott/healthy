@@ -34,6 +34,8 @@ test.describe("Meals navigation shell (integrated)", () => {
     await page.getByTestId("meals-nav-pantry").click();
     await expect(page).toHaveURL(/\/pantry/);
     await expect(page.getByRole("heading", { name: "Pantry" })).toBeVisible();
+    await expect(page.getByTestId("pantry-catalog-health")).toBeVisible();
+    await expect(page.getByTestId("pantry-empty")).toBeVisible();
 
     await page.getByTestId("meals-nav-progress").click();
     await expect(page).toHaveURL(/\/progress/);

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
+import { unusedPantryCapability } from './helpers/unused-pantry-scope.js';
 
 describe('POST /auth/login (unit)', () => {
   afterEach(() => {
@@ -53,6 +54,7 @@ describe('POST /auth/login (unit)', () => {
             return { kind: 'setup_unavailable' };
           },
         },
+        pantry: unusedPantryCapability(),
       },
     });
     try {
@@ -97,6 +99,7 @@ describe('POST /auth/login (unit)', () => {
             return { kind: 'setup_unavailable' };
           },
         },
+        pantry: unusedPantryCapability(),
       },
     });
     try {

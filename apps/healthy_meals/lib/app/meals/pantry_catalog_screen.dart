@@ -1,0 +1,298 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
+
+import '../../shared/widgets/shell_scaffold.dart';
+
+enum _PantryTab { food, recipe }
+
+/// Server-backed Pantry catalog (Food / Recipe tabs); empty state when the user has no saved items.
+class MealsPantryCatalogScreen extends StatefulWidget {
+  const MealsPantryCatalogScreen({super.key});
+
+  @override
+  State<MealsPantryCatalogScreen> createState() => _MealsPantryCatalogScreenState();
+}
+
+class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
+  _PantryTab _tab = _PantryTab.food;
+  bool _initialLoading = true;
+  bool _itemsRefreshing = false;
+  String? _referenceError;
+  String? _itemsError;
+  int? _nutrientsCount;
+  int? _iconKeysCount;
+  List<_PantryItemWire> _items = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _hydrate();
+  }
+
+  Future<String> _resolveBaseUrl() async {
+    final u = await ApiBaseUrlStore.read();
+    return u?.trim().replaceAll(RegExp(r'/+$'), '') ?? '';
+  }
+
+  Future<void> _hydrate() async {
+    setState(() {
+      _initialLoading = true;
+      _referenceError = null;
+      _itemsError = null;
+    });
+
+    final base = await _resolveBaseUrl();
+    if (base.isEmpty) {
+      setState(() {
+        _initialLoading = false;
+        _referenceError = 'Server URL is not configured.';
+      });
+      return;
+    }
+
+    final token = await readSessionToken();
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _initialLoading = false;
+        _referenceError = 'Not signed in.';
+      });
+      return;
+    }
+
+    try {
+      final refUri = Uri.parse('$base/pantry/reference');
+      final refRes = await http.get(
+        refUri,
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (refRes.statusCode != 200) {
+        setState(() {
+          _initialLoading = false;
+          _referenceError = 'Unable to load nutrient catalog.';
+        });
+        return;
+      }
+      final refBody = jsonDecode(refRes.body);
+      if (refBody is! Map<String, dynamic>) {
+        throw const FormatException('reference');
+      }
+      final nutrients = refBody['nutrients'];
+      final iconKeys = refBody['iconKeys'];
+      if (nutrients is! List<dynamic> || iconKeys is! List<dynamic>) {
+        throw const FormatException('reference shape');
+      }
+
+      final itemsUri = Uri.parse(
+        '$base/pantry/items?itemType=${_tab == _PantryTab.food ? 'food' : 'recipe'}',
+      );
+      final itemsRes = await http.get(
+        itemsUri,
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (itemsRes.statusCode != 200) {
+        setState(() {
+          _nutrientsCount = nutrients.length;
+          _iconKeysCount = iconKeys.length;
+          _initialLoading = false;
+          _itemsError = 'Unable to load your Pantry.';
+          _items = [];
+        });
+        return;
+      }
+      final itemsBody = jsonDecode(itemsRes.body);
+      if (itemsBody is! Map<String, dynamic>) {
+        throw const FormatException('items');
+      }
+      final rawItems = itemsBody['items'];
+      if (rawItems is! List<dynamic>) {
+        throw const FormatException('items list');
+      }
+      final parsed = rawItems
+          .map((e) {
+            if (e is! Map<String, dynamic>) {
+              return null;
+            }
+            final id = e['id'];
+            final name = e['name'];
+            final iconKey = e['iconKey'];
+            if (id is! String || name is! String || iconKey is! String) {
+              return null;
+            }
+            return _PantryItemWire(id: id, name: name, iconKey: iconKey);
+          })
+          .whereType<_PantryItemWire>()
+          .toList();
+
+      setState(() {
+        _nutrientsCount = nutrients.length;
+        _iconKeysCount = iconKeys.length;
+        _items = parsed;
+        _initialLoading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _initialLoading = false;
+        _referenceError = 'Unable to load Pantry.';
+      });
+    }
+  }
+
+  Future<void> _reloadItemsOnly() async {
+    final base = await _resolveBaseUrl();
+    if (base.isEmpty) {
+      return;
+    }
+    final token = await readSessionToken();
+    if (token == null || token.isEmpty) {
+      return;
+    }
+
+    setState(() {
+      _itemsRefreshing = true;
+      _itemsError = null;
+    });
+
+    try {
+      final itemsUri = Uri.parse(
+        '$base/pantry/items?itemType=${_tab == _PantryTab.food ? 'food' : 'recipe'}',
+      );
+      final itemsRes = await http.get(
+        itemsUri,
+        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+      );
+      if (itemsRes.statusCode != 200) {
+        setState(() {
+          _itemsError = 'Unable to load your Pantry.';
+          _items = [];
+        });
+        return;
+      }
+      final itemsBody = jsonDecode(itemsRes.body);
+      if (itemsBody is! Map<String, dynamic>) {
+        throw const FormatException('items');
+      }
+      final rawItems = itemsBody['items'];
+      if (rawItems is! List<dynamic>) {
+        throw const FormatException('items list');
+      }
+      final parsed = rawItems
+          .map((e) {
+            if (e is! Map<String, dynamic>) {
+              return null;
+            }
+            final id = e['id'];
+            final name = e['name'];
+            final iconKey = e['iconKey'];
+            if (id is! String || name is! String || iconKey is! String) {
+              return null;
+            }
+            return _PantryItemWire(id: id, name: name, iconKey: iconKey);
+          })
+          .whereType<_PantryItemWire>()
+          .toList();
+
+      setState(() {
+        _items = parsed;
+      });
+    } catch (_) {
+      setState(() {
+        _itemsError = 'Unable to load your Pantry.';
+        _items = [];
+      });
+    } finally {
+      if (mounted) {
+        setState(() {
+          _itemsRefreshing = false;
+        });
+      }
+    }
+  }
+
+  void _setTab(_PantryTab t) {
+    if (_tab == t) {
+      return;
+    }
+    setState(() => _tab = t);
+    _reloadItemsOnly();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ShellScaffold(
+      title: 'Pantry',
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Browse foods and recipes you save for logging. Tabs load from your server catalog.',
+              style: TextStyle(fontSize: 14, color: Colors.black54),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                TextButton(
+                  key: const Key('pantry-tab-food'),
+                  onPressed: () => _setTab(_PantryTab.food),
+                  child: const Text('Foods'),
+                ),
+                TextButton(
+                  key: const Key('pantry-tab-recipes'),
+                  onPressed: () => _setTab(_PantryTab.recipe),
+                  child: const Text('Recipes'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (_referenceError != null)
+              Text(_referenceError!, key: const Key('pantry-reference-error'))
+            else if (!_initialLoading && _nutrientsCount != null)
+              Text(
+                'Nutrients in catalog: $_nutrientsCount · Icon keys: $_iconKeysCount',
+                key: const Key('pantry-catalog-health'),
+                style: const TextStyle(fontSize: 12, color: Colors.black45),
+              ),
+            const SizedBox(height: 12),
+            if (_initialLoading || _itemsRefreshing)
+              const Text('Loading…')
+            else if (_itemsError != null)
+              Text(_itemsError!, key: const Key('pantry-items-error'))
+            else if (_items.isEmpty)
+              Text(
+                _tab == _PantryTab.food
+                    ? 'No foods yet. Saved items appear here once you add them.'
+                    : 'No recipes yet. Saved items appear here once you add them.',
+                key: const Key('pantry-empty'),
+              )
+            else
+              Expanded(
+                child: ListView.builder(
+                  itemCount: _items.length,
+                  itemBuilder: (context, i) {
+                    final it = _items[i];
+                    return ListTile(
+                      dense: true,
+                      title: Text(it.name),
+                      subtitle: Text(it.iconKey, style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PantryItemWire {
+  const _PantryItemWire({required this.id, required this.name, required this.iconKey});
+
+  final String id;
+  final String name;
+  final String iconKey;
+}

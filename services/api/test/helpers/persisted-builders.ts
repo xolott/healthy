@@ -8,7 +8,7 @@ import { and, count, eq, isNull } from 'drizzle-orm';
 
 import type { Database } from '@healthy/db';
 import { canonicalizeAuthEmailForPersistence } from '../../src/auth/auth-persistence.js';
-import { sessions, users, type SessionRow, type UserRow } from '@healthy/db/schema';
+import { pantryItems, sessions, users, type PantryItemRow, type SessionRow, type UserRow } from '@healthy/db/schema';
 
 export type PersistedUserInsertInput = {
   email: string;
@@ -93,4 +93,35 @@ export async function persistedHasActiveOwner(db: Database): Promise<boolean> {
     .from(users)
     .where(and(eq(users.role, 'owner'), eq(users.status, 'active'), isNull(users.deletedAt)));
   return Number(row?.n ?? 0) > 0;
+}
+
+export type PersistedPantryItemInsertInput = {
+  ownerUserId: string;
+  itemType: 'food' | 'recipe';
+  name: string;
+  iconKey: string;
+};
+
+export async function insertPersistedPantryItem(db: Database, input: PersistedPantryItemInsertInput): Promise<PantryItemRow> {
+  const now = new Date();
+  const [row] = await db
+    .insert(pantryItems)
+    .values({
+      ownerUserId: input.ownerUserId,
+      itemType: input.itemType,
+      name: input.name,
+      iconKey: input.iconKey,
+      metadata: {},
+      updatedAt: now,
+    })
+    .returning();
+  if (row === undefined) {
+    throw new Error('insertPersistedPantryItem did not return a row');
+  }
+  return row;
+}
+
+export async function persistedFindPantryItemById(db: Database, id: string): Promise<PantryItemRow | undefined> {
+  const [row] = await db.select().from(pantryItems).where(eq(pantryItems.id, id)).limit(1);
+  return row;
 }

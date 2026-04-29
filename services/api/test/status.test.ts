@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
 import type { RequestScope } from '../src/request-scope/index.js';
+import { unusedPantryCapability } from './helpers/unused-pantry-scope.js';
 
 function unusedCurrentSession(): RequestScope['currentSession'] {
   return {
@@ -59,6 +60,7 @@ describe('GET /status', () => {
         logout: unusedLogout(),
         ownerLogin: unusedOwnerLogin(),
         firstOwnerSetup: unusedFirstOwnerSetup(),
+        pantry: unusedPantryCapability(),
       },
     });
 
@@ -87,6 +89,7 @@ describe('GET /status', () => {
         logout: unusedLogout(),
         ownerLogin: unusedOwnerLogin(),
         firstOwnerSetup: unusedFirstOwnerSetup(),
+        pantry: unusedPantryCapability(),
       },
     });
 
@@ -125,6 +128,7 @@ describe('GET /status', () => {
         logout: unusedLogout(),
         ownerLogin: unusedOwnerLogin(),
         firstOwnerSetup: unusedFirstOwnerSetup(),
+        pantry: unusedPantryCapability(),
       },
     });
 

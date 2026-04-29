@@ -2,8 +2,28 @@ import type { FastifyInstance } from 'fastify';
 
 import { validateFirstOwnerSetupPayload } from '../auth/auth-use-cases.js';
 import { createAuthUseCasesForDatabase } from '../auth/auth-use-case-scope.js';
+import { PANTRY_ICON_KEYS } from '../pantry/pantry-icon-keys.js';
+import {
+  findPantryItemForOwner,
+  loadNutrientsCatalog,
+  listPantryItemsForOwner,
+} from '../pantry/pantry-persistence.js';
 
-import type { RequestScope } from './types.js';
+import type { PantryItemRow } from '@healthy/db/schema';
+
+import type { PantryItemWire, RequestScope } from './types.js';
+
+function mapPantryRowToWire(row: PantryItemRow): PantryItemWire {
+  return {
+    id: row.id,
+    itemType: row.itemType,
+    name: row.name,
+    iconKey: row.iconKey,
+    metadata: row.metadata,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
+  };
+}
 
 /**
  * Fastify-backed Request Scope: reads process-owned persistence from `app.databaseAdapter`
@@ -99,6 +119,60 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
           return await useCases.firstOwnerSetup(rawDisplayName, rawEmail, rawPassword, ctx);
         } catch (err) {
           app.log.warn({ err }, 'first owner setup database operation failed');
+          return { kind: 'persistence_unavailable' };
+        }
+      },
+    },
+    pantry: {
+      async listItemsForOwner(ownerUserId: string, itemType: 'food' | 'recipe') {
+        const adapter = app.databaseAdapter;
+        if (adapter === null) {
+          return { kind: 'persistence_not_configured' };
+        }
+        try {
+          const rows = await listPantryItemsForOwner(adapter.db, ownerUserId, itemType);
+          return { kind: 'ok', items: rows.map(mapPantryRowToWire) };
+        } catch (err) {
+          app.log.warn({ err }, 'pantry list lookup failed');
+          return { kind: 'persistence_unavailable' };
+        }
+      },
+
+      async getItemForOwner(ownerUserId: string, itemId: string) {
+        const adapter = app.databaseAdapter;
+        if (adapter === null) {
+          return { kind: 'persistence_not_configured' };
+        }
+        try {
+          const row = await findPantryItemForOwner(adapter.db, ownerUserId, itemId);
+          if (row === undefined) {
+            return { kind: 'not_found' };
+          }
+          return { kind: 'ok', item: mapPantryRowToWire(row) };
+        } catch (err) {
+          app.log.warn({ err }, 'pantry item lookup failed');
+          return { kind: 'persistence_unavailable' };
+        }
+      },
+
+      async getReferenceCatalog() {
+        const adapter = app.databaseAdapter;
+        if (adapter === null) {
+          return { kind: 'persistence_not_configured' };
+        }
+        try {
+          const rows = await loadNutrientsCatalog(adapter.db);
+          return {
+            kind: 'ok',
+            nutrients: rows.map((n) => ({
+              key: n.key,
+              displayName: n.displayName,
+              canonicalUnit: n.canonicalUnit,
+            })),
+            iconKeys: PANTRY_ICON_KEYS,
+          };
+        } catch (err) {
+          app.log.warn({ err }, 'pantry nutrient catalog lookup failed');
           return { kind: 'persistence_unavailable' };
         }
       },

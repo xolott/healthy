@@ -6,6 +6,7 @@ import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
 import 'login_screen.dart';
 import 'meals/meals_main_shell.dart';
+import 'meals/pantry_catalog_screen.dart';
 import 'meals/meals_placeholder_screens.dart';
 import 'onboarding_screen.dart';
 import 'startup_gate.dart';
@@ -89,7 +90,7 @@ final mealsRouter = GoRouter(
             GoRoute(
               path: '/pantry',
               pageBuilder: (context, state) => const NoTransitionPage<void>(
-                child: MealsPantryPlaceholder(),
+                child: MealsPantryCatalogScreen(),
               ),
             ),
           ],

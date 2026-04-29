@@ -2,7 +2,7 @@
  * Drizzle schema entrypoint (see `drizzle.config.ts` for Kit).
  * Kept in one module so Drizzle Kit can load it without pre-built `.js` peers.
  */
-import { isNull } from 'drizzle-orm';
+import { isNull, sql } from 'drizzle-orm';
 import { index, jsonb, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 
 /** Instance role; see PRD Implementation Decisions. */
@@ -84,5 +84,52 @@ export const auditLogs = pgTable(
 export type AuditLogRow = typeof auditLogs.$inferSelect;
 export type NewAuditLogRow = typeof auditLogs.$inferInsert;
 
+export const pantryItemTypeEnum = pgEnum('pantry_item_type', ['food', 'recipe']);
+
+/**
+ * App-wide nutrient catalog (seeded in migrations). Amounts recorded per Food use these keys and units.
+ * Primary key `key` is the stable lowercase wire identifier.
+ */
+export const nutrients = pgTable(
+  'nutrients',
+  {
+    key: text('key').primaryKey(),
+    displayName: text('display_name').notNull(),
+    canonicalUnit: text('canonical_unit').notNull(),
+  },
+  (t) => [index('nutrients_canonical_unit_idx').on(t.canonicalUnit)],
+);
+
+export type NutrientRow = typeof nutrients.$inferSelect;
+
+/**
+ * Shared root for Foods and Recipes: ownership, polymorphic identity, naming, icons, flexible metadata.
+ */
+export const pantryItems = pgTable(
+  'pantry_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerUserId: uuid('owner_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    itemType: pantryItemTypeEnum('item_type').notNull(),
+    name: text('name').notNull(),
+    iconKey: text('icon_key').notNull(),
+    metadata: jsonb('metadata')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    index('pantry_items_owner_item_type_created_at_idx').on(t.ownerUserId, t.itemType, t.createdAt),
+    index('pantry_items_owner_name_idx').on(t.ownerUserId, t.name),
+  ],
+);
+
+export type PantryItemRow = typeof pantryItems.$inferSelect;
+export type NewPantryItemRow = typeof pantryItems.$inferInsert;
+
 /** Relational schema map passed to `drizzle({ schema })`. */
-export const schema = { users, sessions, auditLogs };
+export const schema = { users, sessions, auditLogs, nutrients, pantryItems };
