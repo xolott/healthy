@@ -1,6 +1,6 @@
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
-import { createSessionRepository, createUserRepository, type Database } from '@healthy/db';
+import { createUserRepository, type Database } from '@healthy/db';
 import { sessions as sessionsTable, users as usersTable, type UserRow } from '@healthy/db/schema';
 
 /**
@@ -123,16 +123,26 @@ function toUserForOwnerLogin(row: UserRow): AuthUserForOwnerLogin {
 }
 
 /**
- * Drizzle-backed adapter. Owner-login persistence queries run directly on `users` / `sessions`;
- * other paths compose the package session and user repositories.
+ * Drizzle-backed adapter. Current-session lookups (session row, user row, touch, revoke), owner-login
+ * session inserts, and email-scoped reads run as Drizzle queries on `sessions` / `users`. First-owner
+ * and owner-count helpers still use the `@healthy/db` user repository.
  */
 export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
-  const sessionRepo = createSessionRepository(db);
   const userRepo = createUserRepository(db);
 
   const self: AuthPersistence = {
     async findSessionByTokenHash(tokenHash) {
-      const row = await sessionRepo.findSessionByTokenHash(tokenHash);
+      const rows = await db
+        .select({
+          userId: sessionsTable.userId,
+          revokedAt: sessionsTable.revokedAt,
+          expiresAt: sessionsTable.expiresAt,
+          lastUsedAt: sessionsTable.lastUsedAt,
+        })
+        .from(sessionsTable)
+        .where(eq(sessionsTable.tokenHash, tokenHash))
+        .limit(1);
+      const row = rows[0];
       if (row === undefined) {
         return undefined;
       }
@@ -140,12 +150,17 @@ export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
     },
 
     async revokeSessionByTokenHash(tokenHash, at) {
-      const row = await sessionRepo.revokeSessionByTokenHash(tokenHash, at);
-      return { revoked: row !== undefined };
+      const rows = await db
+        .update(sessionsTable)
+        .set({ revokedAt: at })
+        .where(and(eq(sessionsTable.tokenHash, tokenHash), isNull(sessionsTable.revokedAt)))
+        .returning();
+      return { revoked: rows[0] !== undefined };
     },
 
     async findUserById(userId) {
-      const row = await userRepo.findUserById(userId);
+      const rows = await db.select().from(usersTable).where(eq(usersTable.id, userId)).limit(1);
+      const row = rows[0];
       if (row === undefined) {
         return undefined;
       }
@@ -153,7 +168,7 @@ export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
     },
 
     async touchSessionLastUsedByTokenHash(tokenHash, at) {
-      await sessionRepo.setLastUsedAtByTokenHash(tokenHash, at);
+      await db.update(sessionsTable).set({ lastUsedAt: at }).where(eq(sessionsTable.tokenHash, tokenHash));
     },
 
     async findUserForOwnerLoginByEmail(email) {

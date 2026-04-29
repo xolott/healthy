@@ -1,7 +1,9 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { eq } from 'drizzle-orm';
+
 import { createSessionRepository, createUserRepository } from '@healthy/db';
-import { users } from '@healthy/db/schema';
+import { sessions, users } from '@healthy/db/schema';
 
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { generateSessionToken } from '../src/auth/session-token.js';
@@ -94,5 +96,127 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
     expect(row?.revokedAt).toBeDefined();
 
     expect((await useCases.logout(rawToken)).kind).toBe('noop');
+  });
+
+  describe('resolveCurrentSession — unauthorized outcomes', () => {
+    it('returns missing_session when no sessions row matches the token hash', async () => {
+      const missing = generateSessionToken();
+      await expect(
+        createAuthUseCasesForDatabase(harness.db).resolveCurrentSession(missing.rawToken),
+      ).resolves.toEqual({ kind: 'unauthorized', reason: 'missing_session' });
+    });
+
+    it('returns revoked without touching last_used_at when session is revoked', async () => {
+      const userRepo = createUserRepository(harness.db);
+      const sessionRepo = createSessionRepository(harness.db);
+      const user = await userRepo.createUser({
+        email: 'sess-revoked@example.com',
+        passwordHash: await hashPasswordArgon2id(goodPassword),
+        displayName: 'R',
+        role: 'owner',
+        status: 'active',
+      });
+      const { rawToken, tokenHash } = generateSessionToken();
+      const t0 = new Date(Date.now() - 4_800_000);
+      await sessionRepo.createSession({
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        lastUsedAt: t0,
+      });
+      await harness.db.update(sessions).set({ revokedAt: new Date() }).where(eq(sessions.tokenHash, tokenHash));
+
+      const uc = createAuthUseCasesForDatabase(harness.db);
+      await expect(uc.resolveCurrentSession(rawToken)).resolves.toEqual({
+        kind: 'unauthorized',
+        reason: 'revoked',
+      });
+
+      const row = await sessionRepo.findSessionByTokenHash(tokenHash);
+      expect(row?.lastUsedAt?.getTime()).toBe(t0.getTime());
+    });
+
+    it('returns expired without touching last_used_at', async () => {
+      const userRepo = createUserRepository(harness.db);
+      const sessionRepo = createSessionRepository(harness.db);
+      const user = await userRepo.createUser({
+        email: 'sess-expired@example.com',
+        passwordHash: await hashPasswordArgon2id(goodPassword),
+        displayName: 'E',
+        role: 'owner',
+        status: 'active',
+      });
+      const { rawToken, tokenHash } = generateSessionToken();
+      const t0 = new Date(Date.now() - 86_400_000);
+      await sessionRepo.createSession({
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() - 60_000),
+        lastUsedAt: t0,
+      });
+
+      const uc = createAuthUseCasesForDatabase(harness.db);
+      await expect(uc.resolveCurrentSession(rawToken)).resolves.toEqual({
+        kind: 'unauthorized',
+        reason: 'expired',
+      });
+
+      const row = await sessionRepo.findSessionByTokenHash(tokenHash);
+      expect(row?.lastUsedAt?.getTime()).toBe(t0.getTime());
+    });
+
+    it('returns user_ineligible when owner account is disabled', async () => {
+      const userRepo = createUserRepository(harness.db);
+      const sessionRepo = createSessionRepository(harness.db);
+      const user = await userRepo.createUser({
+        email: 'inactive@example.com',
+        passwordHash: await hashPasswordArgon2id(goodPassword),
+        displayName: 'Off',
+        role: 'owner',
+        status: 'disabled',
+      });
+      const { rawToken, tokenHash } = generateSessionToken();
+      await sessionRepo.createSession({
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        lastUsedAt: null,
+      });
+
+      const uc = createAuthUseCasesForDatabase(harness.db);
+      await expect(uc.resolveCurrentSession(rawToken)).resolves.toEqual({
+        kind: 'unauthorized',
+        reason: 'user_ineligible',
+      });
+    });
+
+    it('returns user_ineligible when user is soft-deleted', async () => {
+      const userRepo = createUserRepository(harness.db);
+      const sessionRepo = createSessionRepository(harness.db);
+      const user = await userRepo.createUser({
+        email: 'gone@example.com',
+        passwordHash: await hashPasswordArgon2id(goodPassword),
+        displayName: 'G',
+        role: 'owner',
+        status: 'active',
+      });
+      const { rawToken, tokenHash } = generateSessionToken();
+      await sessionRepo.createSession({
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+        lastUsedAt: null,
+      });
+      await harness.db
+        .update(users)
+        .set({ deletedAt: new Date(Date.now() - 3_600_000) })
+        .where(eq(users.id, user.id));
+
+      const uc = createAuthUseCasesForDatabase(harness.db);
+      await expect(uc.resolveCurrentSession(rawToken)).resolves.toEqual({
+        kind: 'unauthorized',
+        reason: 'user_ineligible',
+      });
+    });
   });
 });
