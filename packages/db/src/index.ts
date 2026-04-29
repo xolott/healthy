@@ -7,10 +7,7 @@ export {
 } from './client.js';
 export {
   createUserRepository,
-  FirstOwnerAlreadyExistsError,
-  LastActiveOwnerInvariantError,
   type CreateFirstOwnerInput,
-  type CreateUserInput,
   type UserRepository,
 } from './users/index.js';
 export {
@@ -18,11 +15,6 @@ export {
   type CreateSessionInput,
   type SessionRepository,
 } from './sessions/index.js';
-export {
-  createAuditLogRepository,
-  type AppendAuditLogInput,
-  type AuditLogRepository,
-} from './audit-logs/index.js';
 export {
   createSetupStatusPersistence,
   type SetupStatusPersistence,

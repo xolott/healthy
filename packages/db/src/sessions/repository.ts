@@ -1,4 +1,4 @@
-import { and, count, eq, isNull, lt } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
 import { sessions, type NewSessionRow, type SessionRow } from '../schema/index.js';
@@ -64,24 +64,6 @@ export function createSessionRepository(db: Database) {
         .where(and(eq(sessions.tokenHash, tokenHash), isNull(sessions.revokedAt)))
         .returning();
       return row;
-    },
-
-    /**
-     * Rows eligible for cleanup: past expiry, not yet revoked. Uses `expires_at` indexes.
-     */
-    async listExpiredUnrevokedSessions(asOf: Date = new Date()): Promise<SessionRow[]> {
-      return db
-        .select()
-        .from(sessions)
-        .where(and(lt(sessions.expiresAt, asOf), isNull(sessions.revokedAt)));
-    },
-
-    async countByUserId(userId: string): Promise<number> {
-      const [r] = await db
-        .select({ n: count() })
-        .from(sessions)
-        .where(eq(sessions.userId, userId));
-      return Number(r?.n ?? 0);
     },
   };
 }

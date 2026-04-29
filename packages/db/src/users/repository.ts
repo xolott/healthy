@@ -2,26 +2,13 @@ import { and, count, eq, isNull } from 'drizzle-orm';
 
 import type { Database } from '../client.js';
 import { users, type NewUserRow, type UserRow } from '../schema/index.js';
-import { FirstOwnerAlreadyExistsError, LastActiveOwnerInvariantError } from './errors.js';
 import { normalizeEmail } from './normalize-email.js';
-
-export type CreateUserInput = {
-  email: string;
-  passwordHash: string;
-  displayName: string;
-  role: NonNullable<NewUserRow['role']>;
-  status: NonNullable<NewUserRow['status']>;
-};
 
 export type CreateFirstOwnerInput = {
   email: string;
   passwordHash: string;
   displayName: string;
 };
-
-function isActiveOwner(row: UserRow): boolean {
-  return row.role === 'owner' && row.status === 'active' && row.deletedAt === null;
-}
 
 /** Unique violation — e.g. concurrent first-owner setups racing on the same email. */
 function isPgUniqueViolation(e: unknown): boolean {
@@ -50,18 +37,13 @@ export function createUserRepository(db: Database) {
     return Number(row?.n ?? 0);
   }
 
-  async function assertNotLastActiveOwner(userId: string): Promise<void> {
-    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
-    if (user === undefined || !isActiveOwner(user)) {
-      return;
-    }
-    const n = await countActiveOwners();
-    if (n <= 1) {
-      throw new LastActiveOwnerInvariantError();
-    }
-  }
-
-  async function insertUser(input: CreateUserInput): Promise<UserRow> {
+  async function insertUser(input: {
+    email: string;
+    passwordHash: string;
+    displayName: string;
+    role: NonNullable<NewUserRow['role']>;
+    status: NonNullable<NewUserRow['status']>;
+  }): Promise<UserRow> {
     const normalized = normalizeEmail(input.email);
     const now = new Date();
     const [row] = await db
@@ -109,76 +91,11 @@ export function createUserRepository(db: Database) {
   }
 
   return {
-    createUser: insertUser,
-
     async hasActiveOwner(): Promise<boolean> {
       return (await countActiveOwners()) > 0;
     },
 
     createFirstOwnerIfNoneExists: createFirstOwnerIfNoneExistsImpl,
-
-    /** Setup path (throws for duplicate owner when callers expect exception-based flow). */
-    async createFirstOwner(input: CreateFirstOwnerInput): Promise<UserRow> {
-      const o = await createFirstOwnerIfNoneExistsImpl(input);
-      if (o.kind === 'already_exists') {
-        throw new FirstOwnerAlreadyExistsError();
-      }
-      return o.row;
-    },
-
-    async findUserById(id: string): Promise<UserRow | undefined> {
-      const rows = await db.select().from(users).where(eq(users.id, id)).limit(1);
-      return rows[0];
-    },
-
-    async findUserByEmail(email: string): Promise<UserRow | undefined> {
-      const normalized = normalizeEmail(email);
-      const rows = await db.select().from(users).where(eq(users.email, normalized)).limit(1);
-      return rows[0];
-    },
-
-    async softDeleteUser(id: string): Promise<void> {
-      await assertNotLastActiveOwner(id);
-      const now = new Date();
-      await db.update(users).set({ deletedAt: now, updatedAt: now }).where(eq(users.id, id));
-    },
-
-    async updateDisplayName(id: string, displayName: string): Promise<void> {
-      const now = new Date();
-      await db.update(users).set({ displayName, updatedAt: now }).where(eq(users.id, id));
-    },
-
-    async updateUserRole(id: string, role: NonNullable<UserRow['role']>): Promise<void> {
-      const [current] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-      if (current === undefined || current.role === role) {
-        return;
-      }
-      if (isActiveOwner(current) && role !== 'owner') {
-        await assertNotLastActiveOwner(id);
-      }
-      const now = new Date();
-      await db.update(users).set({ role, updatedAt: now }).where(eq(users.id, id));
-    },
-
-    async updateUserStatus(id: string, status: NonNullable<UserRow['status']>): Promise<void> {
-      const [current] = await db.select().from(users).where(eq(users.id, id)).limit(1);
-      if (current === undefined || current.status === status) {
-        return;
-      }
-      if (isActiveOwner(current) && status === 'disabled') {
-        await assertNotLastActiveOwner(id);
-      }
-      const now = new Date();
-      await db.update(users).set({ status, updatedAt: now }).where(eq(users.id, id));
-    },
-
-    async setLastLoginAt(id: string, at: Date): Promise<void> {
-      const now = new Date();
-      await db
-        .update(users)
-        .set({ lastLoginAt: at, updatedAt: now })
-        .where(eq(users.id, id));
-    },
   };
 }
 

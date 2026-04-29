@@ -74,7 +74,7 @@ describe('audit log repository (integration)', () => {
     expect(row.userAgent).toBe('vitest-integration/1');
   });
 
-  it('exposes append-only behavior through the public repository', async () => {
+  it('exposes append-only behavior through the audit repository', async () => {
     const repo = createAuditLogRepository(harness.db);
     const keys = Object.keys(repo).sort();
     expect(keys).toEqual(['appendAuditLog']);

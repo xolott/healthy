@@ -1,10 +1,10 @@
-import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
+import { count, eq } from 'drizzle-orm';
 import postgres from 'postgres';
 
 import { createSessionRepository } from '../src/sessions/repository.js';
-import { users } from '../src/schema/index.js';
+import { sessions, users } from '../src/schema/index.js';
 import { startPostgresIntegration, type IntegrationHarness } from './helpers/integration-db.js';
 import { insertPersistedUser } from './helpers/persisted-builders.js';
 
@@ -101,22 +101,6 @@ describe('session repository (integration)', () => {
     expect(found?.revokedAt).not.toBeNull();
   });
 
-  it('lists expired unrevoked sessions for cleanup', async () => {
-    const sessionsRepo = createSessionRepository(harness.db);
-    const user = await insertPersistedUser(harness.db, {
-      email: 'ex@example.com',
-      displayName: 'E',
-    });
-    const past = new Date(Date.now() - 3_600_000);
-    await sessionsRepo.createSession({ userId: user.id, tokenHash: 'exp1', expiresAt: past });
-    const future = new Date(Date.now() + 3_600_000);
-    await sessionsRepo.createSession({ userId: user.id, tokenHash: 'still-ok', expiresAt: future });
-
-    const asOf = new Date();
-    const bad = await sessionsRepo.listExpiredUnrevokedSessions(asOf);
-    expect(bad.map((r) => r.tokenHash).sort()).toEqual(['exp1']);
-  });
-
   it('exposes migration indexes for expiry lookup and unrevoked cleanup', async () => {
     const client = postgres(harness.connectionUri, { max: 1 });
     try {
@@ -143,7 +127,12 @@ describe('session repository (integration)', () => {
     });
     const t = new Date(Date.now() + 60_000);
     await sessionsRepo.createSession({ userId: user.id, tokenHash: 'c1', expiresAt: t });
-    expect(await sessionsRepo.countByUserId(user.id)).toBe(1);
+
+    const [beforeDelete] = await harness.db
+      .select({ n: count() })
+      .from(sessions)
+      .where(eq(sessions.userId, user.id));
+    expect(Number(beforeDelete?.n ?? 0)).toBe(1);
 
     await harness.db.delete(users).where(eq(users.id, user.id));
 

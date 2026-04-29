@@ -5,8 +5,8 @@ import postgres from 'postgres';
 import { createSetupStatusPersistence } from '../src/setup-status/index.js';
 import { createUserRepository } from '../src/users/repository.js';
 import { users } from '../src/schema/index.js';
-import { FirstOwnerAlreadyExistsError, LastActiveOwnerInvariantError } from '../src/users/errors.js';
 import { startPostgresIntegration, type IntegrationHarness } from './helpers/integration-db.js';
+import { insertPersistedUser } from './helpers/persisted-builders.js';
 
 describe('user repository (integration)', () => {
   let harness: IntegrationHarness;
@@ -19,11 +19,10 @@ describe('user repository (integration)', () => {
     await harness.dispose();
   });
 
-  it('creates a user with normalized email and timestamps', async () => {
-    const repo = createUserRepository(harness.db);
+  it('persists normalized email when inserting via shared normalization rules', async () => {
     const before = Date.now();
 
-    const user = await repo.createUser({
+    const user = await insertPersistedUser(harness.db, {
       email: '  Owner@Example.com ',
       passwordHash: 'argon2id$fake',
       displayName: 'Owner',
@@ -42,9 +41,7 @@ describe('user repository (integration)', () => {
   });
 
   it('rejects duplicate normalized emails', async () => {
-    const repo = createUserRepository(harness.db);
-
-    await repo.createUser({
+    await insertPersistedUser(harness.db, {
       email: 'dup@example.com',
       passwordHash: 'h1',
       displayName: 'First',
@@ -53,7 +50,7 @@ describe('user repository (integration)', () => {
     });
 
     await expect(
-      repo.createUser({
+      insertPersistedUser(harness.db, {
         email: 'DUP@EXAMPLE.COM',
         passwordHash: 'h2',
         displayName: 'Second',
@@ -91,57 +88,7 @@ describe('user repository (integration)', () => {
     }
   });
 
-  it('soft-deletes and keeps email reserved', async () => {
-    const repo = createUserRepository(harness.db);
-    const row = await repo.createUser({
-      email: 'soft@example.com',
-      passwordHash: 'h',
-      displayName: 'Soon gone',
-      role: 'admin',
-      status: 'active',
-    });
-
-    await repo.softDeleteUser(row.id);
-
-    const after = await repo.findUserByEmail('soft@example.com');
-    expect(after?.deletedAt).not.toBeNull();
-
-    await expect(
-      repo.createUser({
-        email: 'soft@example.com',
-        passwordHash: 'h2',
-        displayName: 'Reused',
-        role: 'member',
-        status: 'active',
-      }),
-    ).rejects.toThrow();
-  });
-
-  it('advances updated_at on display name change and leaves created_at stable', async () => {
-    const repo = createUserRepository(harness.db);
-    const row = await repo.createUser({
-      email: 'time@example.com',
-      passwordHash: 'h',
-      displayName: 'Original',
-      role: 'member',
-      status: 'active',
-    });
-
-    const createdAt = row.createdAt.getTime();
-    const initialUpdated = row.updatedAt.getTime();
-
-    await new Promise((r) => setTimeout(r, 25));
-
-    await repo.updateDisplayName(row.id, 'Renamed');
-
-    const again = await repo.findUserByEmail('time@example.com');
-    expect(again).toBeDefined();
-    expect(again!.displayName).toBe('Renamed');
-    expect(again!.createdAt.getTime()).toBe(createdAt);
-    expect(again!.updatedAt.getTime()).toBeGreaterThan(initialUpdated);
-  });
-
-  describe('owner setup and last-owner invariant', () => {
+  describe('owner setup', () => {
     let ownerHarness: IntegrationHarness;
 
     beforeAll(async () => {
@@ -159,11 +106,12 @@ describe('user repository (integration)', () => {
     it('reports hasActiveOwner only after an active owner exists', async () => {
       const repo = createUserRepository(ownerHarness.db);
       expect(await repo.hasActiveOwner()).toBe(false);
-      await repo.createFirstOwner({
+      const outcome = await repo.createFirstOwnerIfNoneExists({
         email: 'owner-present@example.com',
         passwordHash: 'h',
         displayName: 'Founder',
       });
+      expect(outcome.kind).toBe('created');
       expect(await repo.hasActiveOwner()).toBe(true);
     });
 
@@ -171,7 +119,7 @@ describe('user repository (integration)', () => {
       const setupStatus = createSetupStatusPersistence(ownerHarness.db);
       expect(await setupStatus.isFirstOwnerSetupRequired()).toBe(true);
       const repo = createUserRepository(ownerHarness.db);
-      await repo.createFirstOwner({
+      await repo.createFirstOwnerIfNoneExists({
         email: 'setup-status@example.com',
         passwordHash: 'h',
         displayName: 'Founder',
@@ -182,87 +130,37 @@ describe('user repository (integration)', () => {
     it('creates the first owner via setup with role owner and active status', async () => {
       const repo = createUserRepository(ownerHarness.db);
 
-      const owner = await repo.createFirstOwner({
+      const outcome = await repo.createFirstOwnerIfNoneExists({
         email: 'setup@example.com',
         passwordHash: 'argon2id$fake',
         displayName: 'Founder',
       });
 
-      expect(owner.role).toBe('owner');
-      expect(owner.status).toBe('active');
-      expect(owner.email).toBe('setup@example.com');
+      expect(outcome.kind).toBe('created');
+      if (outcome.kind !== 'created') {
+        throw new Error('expected created');
+      }
+      expect(outcome.row.role).toBe('owner');
+      expect(outcome.row.status).toBe('active');
+      expect(outcome.row.email).toBe('setup@example.com');
     });
 
-    it('rejects createFirstOwner when an active owner already exists', async () => {
+    it('returns already_exists from createFirstOwnerIfNoneExists when an active owner already exists', async () => {
       const repo = createUserRepository(ownerHarness.db);
 
-      await repo.createFirstOwner({
+      const first = await repo.createFirstOwnerIfNoneExists({
         email: 'first@example.com',
         passwordHash: 'h',
         displayName: 'First',
       });
+      expect(first.kind).toBe('created');
 
-      await expect(
-        repo.createFirstOwner({
-          email: 'second@example.com',
-          passwordHash: 'h',
-          displayName: 'Second',
-        }),
-      ).rejects.toBeInstanceOf(FirstOwnerAlreadyExistsError);
-    });
-
-    it('prevents demoting, disabling, or soft-deleting the sole active owner', async () => {
-      const repo = createUserRepository(ownerHarness.db);
-
-      await repo.createFirstOwner({
-        email: 'lone@example.com',
+      const second = await repo.createFirstOwnerIfNoneExists({
+        email: 'second@example.com',
         passwordHash: 'h',
-        displayName: 'Solo',
+        displayName: 'Second',
       });
-
-      const row = await repo.findUserByEmail('lone@example.com');
-      expect(row).toBeDefined();
-
-      await expect(repo.updateUserRole(row!.id, 'member')).rejects.toBeInstanceOf(
-        LastActiveOwnerInvariantError,
-      );
-      await expect(repo.updateUserStatus(row!.id, 'disabled')).rejects.toBeInstanceOf(
-        LastActiveOwnerInvariantError,
-      );
-      await expect(repo.softDeleteUser(row!.id)).rejects.toBeInstanceOf(
-        LastActiveOwnerInvariantError,
-      );
-    });
-
-    it('allows demote, disable, and soft-delete when another active owner remains', async () => {
-      const repo = createUserRepository(ownerHarness.db);
-
-      await repo.createFirstOwner({
-        email: 'keep@example.com',
-        passwordHash: 'h',
-        displayName: 'Keeper',
-      });
-      const other = await repo.createUser({
-        email: 'go@example.com',
-        passwordHash: 'h',
-        displayName: 'Goner',
-        role: 'owner',
-        status: 'active',
-      });
-
-      await repo.updateUserRole(other.id, 'member');
-      await repo.updateUserRole(other.id, 'owner');
-      await repo.updateUserStatus(other.id, 'disabled');
-      await repo.updateUserStatus(other.id, 'active');
-      await repo.softDeleteUser(other.id);
-
-      const gone = await repo.findUserById(other.id);
-      expect(gone?.deletedAt).not.toBeNull();
-
-      const keeper = await repo.findUserByEmail('keep@example.com');
-      expect(keeper?.role).toBe('owner');
-      expect(keeper?.status).toBe('active');
-      expect(keeper?.deletedAt).toBeNull();
+      expect(second.kind).toBe('already_exists');
     });
   });
 });
