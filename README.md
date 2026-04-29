@@ -23,33 +23,21 @@ Database schema and migrations are documented in [`docs/database.md`](docs/datab
 
 ## Setup
 
-### Docker Compose
+### Docker Compose (PostgreSQL only)
 
-The local web/API stack can run in Docker with PostgreSQL:
+Use Compose to run a local PostgreSQL instance; run the API and admin on the host with pnpm (see [`docs/development.md`](docs/development.md)).
 
 ```bash
 docker compose up
 ```
 
-This starts:
-
-- API: http://127.0.0.1:3001
-- Swagger UI: http://127.0.0.1:3001/docs
-- Admin: http://127.0.0.1:3002
-- PostgreSQL: `postgres://healthy:healthy@127.0.0.1:5432/healthy_dev`
-
-The API service runs pending migrations on startup. You can also run the API database commands manually:
+Connection string from your machine:
 
 ```bash
-docker compose run --rm api pnpm --filter api db:migrate
-docker compose run --rm api pnpm --filter api db:recreate
+postgres://healthy:healthy@127.0.0.1:5432/healthy_dev
 ```
 
-To choose a different admin host port:
-
-```bash
-ADMIN_PORT=3000 docker compose up
-```
+Database migrations are no longer wired through Compose; run them from the repo with pnpm after `DATABASE_URL` is set (see [`docs/database.md`](docs/database.md)).
 
 ### Node workspaces
 
