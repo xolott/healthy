@@ -26,6 +26,52 @@ The **Request Scope** glossary entry below illustrates the linking rule: it incl
 
 ## Domain Terms
 
+### Pantry
+
+The user's reusable catalog of nutrition items for meal logging: Foods and
+Recipes with serving and nutrient definitions, not an inventory of quantities on
+hand.
+
+_Avoid_: inventory, stock, cupboard.
+
+Each authenticated user owns their own Pantry.
+Pantry items may carry a stable app-owned icon key.
+
+### Pantry Item
+
+A user-owned Food or Recipe in the Pantry.
+
+### Food
+
+A single product or ingredient in the Pantry with its own serving and nutrient
+definitions.
+
+Foods define nutrients against a measurable base amount and may expose multiple
+serving options that convert to that base. Serving options use common predefined
+units or user-defined serving labels. Food mass is normalized to grams.
+Foods require values for Calories, Protein, Fat, and Carbohydrates.
+
+### Recipe
+
+A reusable Pantry item composed from one or more Foods or Recipes and a declared
+number of servings.
+
+Recipes may include other Recipes but must not form cycles.
+Recipe nutrients are computed from ingredient amounts and serving count.
+Each Recipe ingredient identifies a Pantry item, one of that item's serving
+options, and a quantity.
+Recipes expose a serving label that defaults to "serving" and does not require a
+weight conversion.
+Recipes require at least one ingredient.
+
+### Nutrient
+
+A measurable nutrition fact from a catalog of supported nutrients, initially
+Calories, Protein, Fat, and Carbohydrates.
+
+Each Nutrient defines its canonical unit, and nutrient amounts are recorded in
+that unit.
+
 ### Auth Use Cases
 
 The API module that owns authentication policy: first-owner setup, owner login,
