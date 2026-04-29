@@ -1,11 +1,15 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createSessionRepository, createUserRepository } from '@healthy/db';
 import { users } from '@healthy/db/schema';
 
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { generateSessionToken, SESSION_COOKIE_NAME } from '../src/auth/session-token.js';
 import { buildApp } from '../src/app.js';
+import {
+  insertPersistedSession,
+  insertPersistedUser,
+  persistedFindSessionByTokenHash,
+} from './helpers/persisted-builders.js';
 import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
 
 const goodPassword = 'goodpassword12';
@@ -31,9 +35,7 @@ describe('GET /auth/me (integration)', () => {
   });
 
   it('accepts the HttpOnly session cookie and updates last_used_at on success', async () => {
-    const userRepo = createUserRepository(harness.db);
-    const sessionRepo = createSessionRepository(harness.db);
-    const user = await userRepo.createUser({
+    const user = await insertPersistedUser(harness.db, {
       email: 'owner3@example.com',
       passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Owner',
@@ -43,7 +45,7 @@ describe('GET /auth/me (integration)', () => {
 
     const { rawToken, tokenHash } = generateSessionToken();
     const t0 = new Date(Date.now() - 3_600_000);
-    await sessionRepo.createSession({
+    await insertPersistedSession(harness.db, {
       userId: user.id,
       tokenHash,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -58,7 +60,7 @@ describe('GET /auth/me (integration)', () => {
         headers: { cookie: `${SESSION_COOKIE_NAME}=${encodeURIComponent(rawToken)}` },
       });
       expect(res.statusCode).toBe(200);
-      const row = await sessionRepo.findSessionByTokenHash(tokenHash);
+      const row = await persistedFindSessionByTokenHash(harness.db, tokenHash);
       expect(row?.lastUsedAt).toBeDefined();
       expect(row!.lastUsedAt!.getTime()).toBeGreaterThan(t0.getTime());
     } finally {

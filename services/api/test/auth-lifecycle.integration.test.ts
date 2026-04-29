@@ -1,10 +1,10 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createUserRepository } from '@healthy/db';
 import { users } from '@healthy/db/schema';
 
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { buildApp } from '../src/app.js';
+import { insertPersistedUser } from './helpers/persisted-builders.js';
 import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
 
 const goodPassword = 'goodpassword12';
@@ -94,8 +94,7 @@ describe('Auth lifecycle (integration contract)', () => {
   });
 
   it('initialized server: login → me → logout matches onboarding client contracts', async () => {
-    const repo = createUserRepository(harness.db);
-    await repo.createUser({
+    await insertPersistedUser(harness.db, {
       email: 'existing@example.com',
       passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Existing',

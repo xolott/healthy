@@ -1,11 +1,16 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createSessionRepository, createUserRepository } from '@healthy/db';
 import { users } from '@healthy/db/schema';
 
 import { createAuthUseCasesForDatabase } from '../src/auth/auth-use-case-scope.js';
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { hashSessionTokenForLookup } from '../src/auth/session-token.js';
+import {
+  insertPersistedUser,
+  persistedFindSessionByTokenHash,
+  persistedFindUserByEmail,
+  persistedFindUserById,
+} from './helpers/persisted-builders.js';
 import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
 
 const goodPassword = 'goodpassword12';
@@ -31,9 +36,7 @@ describe('Drizzle Auth Persistence — ownerLogin (integration)', () => {
   });
 
   it('persists session and last_login_at via Auth Use Cases and Drizzle persistence', async () => {
-    const userRepo = createUserRepository(harness.db);
-    const sessionRepo = createSessionRepository(harness.db);
-    const user = await userRepo.createUser({
+    const user = await insertPersistedUser(harness.db, {
       email: 'drizzle-login@example.com',
       passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Drizzle Login',
@@ -53,19 +56,18 @@ describe('Drizzle Auth Persistence — ownerLogin (integration)', () => {
     }
 
     const tokenHash = hashSessionTokenForLookup(r.rawSessionToken);
-    const row = await sessionRepo.findSessionByTokenHash(tokenHash);
+    const row = await persistedFindSessionByTokenHash(harness.db, tokenHash);
     expect(row).toBeDefined();
     expect(row!.userId).toBe(user.id);
     expect(row!.lastUsedAt).toBeDefined();
 
-    const userAgain = await userRepo.findUserById(user.id);
+    const userAgain = await persistedFindUserById(harness.db, user.id);
     expect(userAgain?.lastLoginAt).toBeDefined();
     expect(userAgain!.lastLoginAt!.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
   it('owner login matches stored email after persistence canonicalization', async () => {
-    const userRepo = createUserRepository(harness.db);
-    await userRepo.createUser({
+    await insertPersistedUser(harness.db, {
       email: 'mixed-case@example.com',
       passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Mixed Case',
@@ -85,7 +87,7 @@ describe('Drizzle Auth Persistence — ownerLogin (integration)', () => {
     }
     expect(r.user.email).toBe('mixed-case@example.com');
 
-    const stored = await userRepo.findUserByEmail('mixed-case@example.com');
+    const stored = await persistedFindUserByEmail(harness.db, 'mixed-case@example.com');
     expect(stored?.lastLoginAt).toBeDefined();
   });
 });

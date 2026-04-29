@@ -15,12 +15,12 @@ import {
   vi,
 } from 'vitest';
 
-import { createSessionRepository, createUserRepository } from '@healthy/db';
 import { users } from '@healthy/db/schema';
 
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { generateSessionToken } from '../src/auth/session-token.js';
 import { buildApp } from '../src/app.js';
+import { insertPersistedSession, insertPersistedUser } from './helpers/persisted-builders.js';
 import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
 
 const goodPassword = 'goodpassword12';
@@ -61,8 +61,7 @@ describe('Production database lifecycle — route integration', () => {
     });
 
     it('persists seeded owner is visible only through persisted HTTP routes using the app adapter', async () => {
-      const repo = createUserRepository(harness.db);
-      await repo.createUser({
+      await insertPersistedUser(harness.db, {
         email: 'lifecycle-owner@example.com',
         passwordHash: await hashPasswordArgon2id(goodPassword),
         displayName: 'Lifecycle Owner',
@@ -88,9 +87,7 @@ describe('Production database lifecycle — route integration', () => {
     });
 
     it('Bearer /auth/me exercises session persistence through the app-owned adapter after harness seed', async () => {
-      const userRepo = createUserRepository(harness.db);
-      const sessionRepo = createSessionRepository(harness.db);
-      const user = await userRepo.createUser({
+      const user = await insertPersistedUser(harness.db, {
         email: 'lifecycle-session@example.com',
         passwordHash: await hashPasswordArgon2id(goodPassword),
         displayName: 'Session Owner',
@@ -98,7 +95,7 @@ describe('Production database lifecycle — route integration', () => {
         status: 'active',
       });
       const { rawToken, tokenHash } = generateSessionToken();
-      await sessionRepo.createSession({
+      await insertPersistedSession(harness.db, {
         userId: user.id,
         tokenHash,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),

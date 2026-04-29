@@ -1,10 +1,15 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createSessionRepository, createUserRepository } from '@healthy/db';
 import { users } from '@healthy/db/schema';
 
 import { createAuthUseCasesForDatabase } from '../src/auth/auth-use-case-scope.js';
 import { hashSessionTokenForLookup } from '../src/auth/session-token.js';
+import {
+  persistedFindSessionByTokenHash,
+  persistedFindUserByEmail,
+  persistedFindUserById,
+  persistedHasActiveOwner,
+} from './helpers/persisted-builders.js';
 import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
 
 const goodPassword = 'goodpassword12';
@@ -30,10 +35,7 @@ describe('Drizzle Auth Persistence — firstOwnerSetup (integration)', () => {
   });
 
   it('persists first owner, session, and last_login_at via Auth Use Cases and Drizzle persistence', async () => {
-    const userRepo = createUserRepository(harness.db);
-    const sessionRepo = createSessionRepository(harness.db);
-
-    expect(await userRepo.hasActiveOwner()).toBe(false);
+    expect(await persistedHasActiveOwner(harness.db)).toBe(false);
 
     const useCases = createAuthUseCasesForDatabase(harness.db);
     const r = await useCases.firstOwnerSetup(
@@ -48,19 +50,19 @@ describe('Drizzle Auth Persistence — firstOwnerSetup (integration)', () => {
       return;
     }
 
-    const row = await userRepo.findUserByEmail('firstowner@example.com');
+    const row = await persistedFindUserByEmail(harness.db, 'firstowner@example.com');
     expect(row).toBeDefined();
     expect(row!.displayName).toBe('First Owner');
     expect(row!.role).toBe('owner');
     expect(row!.status).toBe('active');
 
     const tokenHash = hashSessionTokenForLookup(r.rawSessionToken);
-    const sess = await sessionRepo.findSessionByTokenHash(tokenHash);
+    const sess = await persistedFindSessionByTokenHash(harness.db, tokenHash);
     expect(sess).toBeDefined();
     expect(sess!.userId).toBe(row!.id);
     expect(sess!.lastUsedAt).toBeDefined();
 
-    const userAgain = await userRepo.findUserById(row!.id);
+    const userAgain = await persistedFindUserById(harness.db, row!.id);
     expect(userAgain?.lastLoginAt).toBeDefined();
   });
 
@@ -84,7 +86,6 @@ describe('Drizzle Auth Persistence — firstOwnerSetup (integration)', () => {
     ]);
     expect([a.kind, b.kind].sort()).toEqual(['setup_unavailable', 'success']);
 
-    const userRepo = createUserRepository(harness.db);
-    expect(await userRepo.findUserByEmail('dup@example.com')).toBeDefined();
+    expect(await persistedFindUserByEmail(harness.db, 'dup@example.com')).toBeDefined();
   });
 });

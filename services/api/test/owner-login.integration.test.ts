@@ -1,11 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createUserRepository } from '@healthy/db';
 import { users } from '@healthy/db/schema';
 
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { SESSION_COOKIE_NAME } from '../src/auth/session-token.js';
 import { buildApp } from '../src/app.js';
+import { insertPersistedUser } from './helpers/persisted-builders.js';
 import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
 
 const goodPassword = 'goodpassword12';
@@ -31,8 +31,7 @@ describe('POST /auth/login (integration)', () => {
   });
 
   it('returns 200, Set-Cookie, and a session token; Bearer and cookie satisfy /auth/me', async () => {
-    const repo = createUserRepository(harness.db);
-    await repo.createUser({
+    await insertPersistedUser(harness.db, {
       email: 'owner@example.com',
       passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Owner',

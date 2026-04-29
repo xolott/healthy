@@ -1,11 +1,11 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createUserRepository } from '@healthy/db';
 import { users } from '@healthy/db/schema';
 
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { SESSION_COOKIE_NAME } from '../src/auth/session-token.js';
 import { buildApp } from '../src/app.js';
+import { insertPersistedUser } from './helpers/persisted-builders.js';
 import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
 
 const goodPassword = 'goodpassword12';
@@ -42,8 +42,7 @@ describe('POST /auth/logout (integration)', () => {
   });
 
   it('revokes cookie session, clears Set-Cookie, and rejects cookie on /auth/me', async () => {
-    const userRepo = createUserRepository(harness.db);
-    await userRepo.createUser({
+    await insertPersistedUser(harness.db, {
       email: 'owner2@example.com',
       passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Owner',

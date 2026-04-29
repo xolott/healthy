@@ -2,12 +2,16 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { eq } from 'drizzle-orm';
 
-import { createSessionRepository, createUserRepository } from '@healthy/db';
 import { sessions, users } from '@healthy/db/schema';
 
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { generateSessionToken } from '../src/auth/session-token.js';
 import { createAuthUseCasesForDatabase } from '../src/auth/auth-use-case-scope.js';
+import {
+  insertPersistedSession,
+  insertPersistedUser,
+  persistedFindSessionByTokenHash,
+} from './helpers/persisted-builders.js';
 import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
 
 const goodPassword = 'goodpassword12';
@@ -33,9 +37,7 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
   });
 
   it('resolves the current user via factory use cases and Drizzle-backed persistence', async () => {
-    const userRepo = createUserRepository(harness.db);
-    const sessionRepo = createSessionRepository(harness.db);
-    const user = await userRepo.createUser({
+    const user = await insertPersistedUser(harness.db, {
       email: 'drizzle-me@example.com',
       passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Drizzle',
@@ -45,7 +47,7 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
 
     const { rawToken, tokenHash } = generateSessionToken();
     const t0 = new Date(Date.now() - 3_600_000);
-    await sessionRepo.createSession({
+    await insertPersistedSession(harness.db, {
       userId: user.id,
       tokenHash,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -65,15 +67,13 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
       role: 'owner',
     });
 
-    const row = await sessionRepo.findSessionByTokenHash(tokenHash);
+    const row = await persistedFindSessionByTokenHash(harness.db, tokenHash);
     expect(row?.lastUsedAt).toBeDefined();
     expect(row!.lastUsedAt!.getTime()).toBeGreaterThan(t0.getTime());
   });
 
   it('revokes session via factory logout against Drizzle-backed persistence', async () => {
-    const userRepo = createUserRepository(harness.db);
-    const sessionRepo = createSessionRepository(harness.db);
-    const user = await userRepo.createUser({
+    const user = await insertPersistedUser(harness.db, {
       email: 'drizzle-logout@example.com',
       passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Logout',
@@ -82,7 +82,7 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
     });
 
     const { rawToken, tokenHash } = generateSessionToken();
-    await sessionRepo.createSession({
+    await insertPersistedSession(harness.db, {
       userId: user.id,
       tokenHash,
       expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -92,7 +92,7 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
     const useCases = createAuthUseCasesForDatabase(harness.db);
     expect(await useCases.logout(rawToken)).toEqual({ kind: 'session_revoked' });
 
-    const row = await sessionRepo.findSessionByTokenHash(tokenHash);
+    const row = await persistedFindSessionByTokenHash(harness.db, tokenHash);
     expect(row?.revokedAt).toBeDefined();
 
     expect((await useCases.logout(rawToken)).kind).toBe('noop');
@@ -107,9 +107,7 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
     });
 
     it('returns revoked without touching last_used_at when session is revoked', async () => {
-      const userRepo = createUserRepository(harness.db);
-      const sessionRepo = createSessionRepository(harness.db);
-      const user = await userRepo.createUser({
+      const user = await insertPersistedUser(harness.db, {
         email: 'sess-revoked@example.com',
         passwordHash: await hashPasswordArgon2id(goodPassword),
         displayName: 'R',
@@ -118,7 +116,7 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
       });
       const { rawToken, tokenHash } = generateSessionToken();
       const t0 = new Date(Date.now() - 4_800_000);
-      await sessionRepo.createSession({
+      await insertPersistedSession(harness.db, {
         userId: user.id,
         tokenHash,
         expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
@@ -132,14 +130,12 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
         reason: 'revoked',
       });
 
-      const row = await sessionRepo.findSessionByTokenHash(tokenHash);
+      const row = await persistedFindSessionByTokenHash(harness.db, tokenHash);
       expect(row?.lastUsedAt?.getTime()).toBe(t0.getTime());
     });
 
     it('returns expired without touching last_used_at', async () => {
-      const userRepo = createUserRepository(harness.db);
-      const sessionRepo = createSessionRepository(harness.db);
-      const user = await userRepo.createUser({
+      const user = await insertPersistedUser(harness.db, {
         email: 'sess-expired@example.com',
         passwordHash: await hashPasswordArgon2id(goodPassword),
         displayName: 'E',
@@ -148,7 +144,7 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
       });
       const { rawToken, tokenHash } = generateSessionToken();
       const t0 = new Date(Date.now() - 86_400_000);
-      await sessionRepo.createSession({
+      await insertPersistedSession(harness.db, {
         userId: user.id,
         tokenHash,
         expiresAt: new Date(Date.now() - 60_000),
@@ -161,14 +157,12 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
         reason: 'expired',
       });
 
-      const row = await sessionRepo.findSessionByTokenHash(tokenHash);
+      const row = await persistedFindSessionByTokenHash(harness.db, tokenHash);
       expect(row?.lastUsedAt?.getTime()).toBe(t0.getTime());
     });
 
     it('returns user_ineligible when owner account is disabled', async () => {
-      const userRepo = createUserRepository(harness.db);
-      const sessionRepo = createSessionRepository(harness.db);
-      const user = await userRepo.createUser({
+      const user = await insertPersistedUser(harness.db, {
         email: 'inactive@example.com',
         passwordHash: await hashPasswordArgon2id(goodPassword),
         displayName: 'Off',
@@ -176,7 +170,7 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
         status: 'disabled',
       });
       const { rawToken, tokenHash } = generateSessionToken();
-      await sessionRepo.createSession({
+      await insertPersistedSession(harness.db, {
         userId: user.id,
         tokenHash,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
@@ -191,9 +185,7 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
     });
 
     it('returns user_ineligible when user is soft-deleted', async () => {
-      const userRepo = createUserRepository(harness.db);
-      const sessionRepo = createSessionRepository(harness.db);
-      const user = await userRepo.createUser({
+      const user = await insertPersistedUser(harness.db, {
         email: 'gone@example.com',
         passwordHash: await hashPasswordArgon2id(goodPassword),
         displayName: 'G',
@@ -201,7 +193,7 @@ describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
         status: 'active',
       });
       const { rawToken, tokenHash } = generateSessionToken();
-      await sessionRepo.createSession({
+      await insertPersistedSession(harness.db, {
         userId: user.id,
         tokenHash,
         expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),

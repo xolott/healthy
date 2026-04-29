@@ -8,3 +8,4 @@ export {
   type CreateUserInput,
   type UserRepository,
 } from './repository.js';
+export { normalizeEmail } from './normalize-email.js';
