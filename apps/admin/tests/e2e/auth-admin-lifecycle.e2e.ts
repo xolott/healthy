@@ -6,7 +6,7 @@ test.describe.configure({ mode: "serial" });
 test.setTimeout(120_000);
 
 test.describe("Admin auth lifecycle (integrated)", () => {
-  test("fresh API: startup to onboarding, first owner, sign-in, home", async ({ page }) => {
+  test("fresh API: onboarding handoff → login → home → logout (route guards + shell)", async ({ page }) => {
     await page.goto("/", { waitUntil: "networkidle" });
     await page.getByTestId("onboarding-submit").waitFor({ state: "visible" });
 
@@ -21,13 +21,27 @@ test.describe("Admin auth lifecycle (integrated)", () => {
     await expect(page).toHaveURL(/\/login/, { timeout: 60_000 });
     await expect(page.locator("#login-title")).toHaveText("Sign in");
 
+    // After first-owner handoff choreography, /home should still see unauthenticated guard decisions.
+    await page.goto("/home", { waitUntil: "networkidle" });
+    await expect(page).toHaveURL(/\/login/, { timeout: 60_000 });
+    await expect(page.locator("#login-title")).toHaveText("Sign in");
+
     await page.getByRole("textbox", { name: "Email" }).fill(unique);
     await page.getByRole("textbox", { name: "Password" }).fill(ownerPassword);
     await page.getByTestId("login-submit").click();
 
     await expect(page).toHaveURL(/\/home/, { timeout: 60_000 });
     await expect(page.getByRole("heading", { name: "Healthy administration shell" })).toBeVisible();
-    await expect(page.getByText(/Signed in as/)).toContainText("E2E Owner");
+    await expect(page.getByTestId("home-current-user")).toContainText("E2E Owner");
+
+    await page.getByTestId("logout-button").click();
+    await expect(page).toHaveURL(/\/login/, { timeout: 60_000 });
+    await expect(page.locator("#login-title")).toHaveText("Sign in");
+
+    // After session-ended choreography, deep-linking to /home should again land on sign-in.
+    await page.goto("/home", { waitUntil: "networkidle" });
+    await expect(page).toHaveURL(/\/login/, { timeout: 60_000 });
+    await expect(page.locator("#login-title")).toHaveText("Sign in");
   });
 
   test("protected home: new browser context without session lands on sign-in", async ({ browser }) => {
