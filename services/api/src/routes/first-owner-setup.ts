@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { appendSessionCookie, getRequestIp } from '../auth/http-session.js';
-import { firstOwnerSetupFromAppRequest } from '../auth/auth-me-from-request.js';
+import { firstOwnerSetupFromAppRequest } from '../auth/auth-use-case-scope.js';
 
 const postBodySchema = {
   type: 'object',

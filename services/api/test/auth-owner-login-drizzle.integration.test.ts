@@ -3,7 +3,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { createSessionRepository, createUserRepository } from '@healthy/db';
 import { users } from '@healthy/db/schema';
 
-import { createAuthUseCasesForDatabase } from '../src/auth/auth-me-from-request.js';
+import { createAuthUseCasesForDatabase } from '../src/auth/auth-use-case-scope.js';
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { hashSessionTokenForLookup } from '../src/auth/session-token.js';
 import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';

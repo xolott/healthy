@@ -13,6 +13,8 @@ Auth Use Cases accept raw input strings from routes and own trimming and
 validation for auth policy: email shape, display-name shape, and password
 policy. Routes validate only JSON shape and translate result kinds to HTTP.
 
+Implementation: `services/api/src/auth/auth-use-cases.ts`.
+
 ### Auth Persistence
 
 The auth-intent-shaped persistence seam used by Auth Use Cases. It exposes the
@@ -28,6 +30,8 @@ and logout are not transactional unless their invariants grow.
 The first Drizzle-backed Auth Persistence adapter composes the existing
 `@healthy/db` repositories. Repository cleanup is separate work.
 
+Adapter code: `services/api/src/auth/auth-persistence.ts`.
+
 ### Auth Result
 
 Expected Auth Use Cases outcomes are closed tagged unions, not domain
@@ -39,11 +43,18 @@ An in-memory Auth Persistence adapter used by policy tests. It gives fast,
 deterministic tests for auth rules without requiring PostgreSQL, Argon2, random
 session tokens, or wall-clock time.
 
+Adapter code: `services/api/src/auth/auth-persistence-memory.ts`.
+
 ### Auth Use Case Scope
 
 A request helper that creates Auth Use Cases from the configured database and
 deterministic collaborators. Routes use this helper instead of receiving raw
 Drizzle database handles.
+
+Implemented as `services/api/src/auth/auth-use-case-scope.ts` (`createAuthUseCasesForDatabase`,
+`*FromAppRequest` helpers, and types such as `AuthMeUser` re-exported for route
+layers). Policy tests construct `createAuthUseCases` with the Auth Test Adapter
+directly; repository shape in `@healthy/db` is unchanged in this seam.
 
 ### Active Owner
 

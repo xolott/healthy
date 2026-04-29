@@ -5,7 +5,7 @@ import { users } from '@healthy/db/schema';
 
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { generateSessionToken } from '../src/auth/session-token.js';
-import { createAuthUseCasesForDatabase } from '../src/auth/auth-me-from-request.js';
+import { createAuthUseCasesForDatabase } from '../src/auth/auth-use-case-scope.js';
 import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
 
 const goodPassword = 'goodpassword12';

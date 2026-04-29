@@ -1,3 +1,9 @@
+/**
+ * Auth Use Case Scope: request-level wiring that opens disposable database connections,
+ * checks configuration, and builds Auth Use Cases via `createAuthUseCasesForDatabase`.
+ * Routes and HTTP integration tests depend on this module instead of reaching into
+ * `auth-use-cases` or `auth-persistence` directly.
+ */
 import type { FastifyInstance } from 'fastify';
 
 import { withDisposableDatabase, type Database } from '@healthy/db';
@@ -13,6 +19,8 @@ import {
 } from './auth-use-cases.js';
 import { hashPasswordArgon2id, verifyPasswordArgon2id } from './hash-password.js';
 import { generateSessionToken } from './session-token.js';
+
+export type { AuthMeUser } from './auth-use-cases.js';
 
 /**
  * Outcome of resolving the current session for GET /auth/me, including configuration checks.

@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { clearSessionCookie } from '../auth/http-session.js';
-import { logoutFromAppRequest } from '../auth/auth-me-from-request.js';
+import { logoutFromAppRequest } from '../auth/auth-use-case-scope.js';
 import { getSessionTokenFromRequest } from '../auth/parse-bearer-cookie.js';
 
 /**

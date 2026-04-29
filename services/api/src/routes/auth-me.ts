@@ -1,8 +1,11 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import { getSessionTokenFromRequest } from '../auth/parse-bearer-cookie.js';
-import { resolveAuthMeFromAppRequest, type AuthMeFromAppRequestOutcome } from '../auth/auth-me-from-request.js';
-import type { AuthMeUser } from '../auth/auth-use-cases.js';
+import {
+  resolveAuthMeFromAppRequest,
+  type AuthMeFromAppRequestOutcome,
+  type AuthMeUser,
+} from '../auth/auth-use-case-scope.js';
 
 const meResponse = {
   type: 'object',
