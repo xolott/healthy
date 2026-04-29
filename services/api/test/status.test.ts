@@ -5,7 +5,8 @@ import type { RequestScope } from '../src/request-scope/index.js';
 
 function unusedCurrentSession(): RequestScope['currentSession'] {
   return {
-    async resolveFromRawToken(_rawToken: string) {
+    async resolveFromRawToken(rawToken: string) {
+      void rawToken;
       return { kind: 'unauthorized' as const, reason: 'missing_session' as const };
     },
   };

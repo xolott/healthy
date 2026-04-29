@@ -37,6 +37,19 @@ function useCases(store = createMemoryAuthPersistenceStore()) {
   };
 }
 
+describe('Auth Use Cases — isFirstOwnerSetupRequired (policy)', () => {
+  it('returns true when there is no active owner', async () => {
+    const { useCases: uc } = useCases();
+    await expect(uc.isFirstOwnerSetupRequired()).resolves.toBe(true);
+  });
+
+  it('returns false when an active owner exists', async () => {
+    const { store, useCases: uc } = useCases();
+    store.usersById.set(userId, baseUser);
+    await expect(uc.isFirstOwnerSetupRequired()).resolves.toBe(false);
+  });
+});
+
 describe('Auth Use Cases — resolveCurrentSession (policy, in-memory persistence)', () => {
   it('returns ok for an active session and active user; updates last_used_at', async () => {
     const { store, useCases: uc } = useCases();

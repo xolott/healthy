@@ -108,6 +108,8 @@ export type LogoutResult =
   | { kind: 'noop'; reason: 'session_not_found_or_already_revoked' };
 
 export type AuthUseCases = {
+  /** True when no active owner exists and first-owner bootstrap is required. */
+  isFirstOwnerSetupRequired(): Promise<boolean>;
   resolveCurrentSession(rawToken: string): Promise<ResolveCurrentSessionResult>;
   logout(rawToken: string | undefined): Promise<LogoutResult>;
   ownerLogin(
@@ -133,6 +135,11 @@ export type CreateAuthUseCasesInput = {
 
 export function createAuthUseCases(deps: CreateAuthUseCasesInput): AuthUseCases {
   return {
+    async isFirstOwnerSetupRequired(): Promise<boolean> {
+      const hasOwner = await deps.persistence.hasActiveOwner();
+      return !hasOwner;
+    },
+
     async resolveCurrentSession(rawToken: string): Promise<ResolveCurrentSessionResult> {
       const tokenHash = hashSessionTokenForLookup(rawToken);
       const now = deps.clock();
