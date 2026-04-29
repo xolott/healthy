@@ -1,5 +1,7 @@
 import 'fastify';
 
+import type { DatabaseAdapter } from '@healthy/db';
+
 /**
  * Scaffold typing for `@fastify/env`-populated Fastify.config.
  *
@@ -15,5 +17,7 @@ declare module 'fastify' {
       CORS_ORIGIN: string;
       DATABASE_URL?: string;
     };
+    /** Set by `registerDatabaseAdapter` after env load; `null` when persistence is not configured. */
+    databaseAdapter: DatabaseAdapter | null;
   }
 }
