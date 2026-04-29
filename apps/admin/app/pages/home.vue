@@ -33,50 +33,29 @@
 </template>
 
 <script setup lang="ts">
-import { useMutation, useQueryCache } from "@pinia/colada";
+import { useMutation } from "@pinia/colada";
 import { storeToRefs } from "pinia";
 
 import { Button } from "@/components/ui/button";
 import { useHealthyApiStore } from "@/stores/healthyApi";
-import { MissingAdminApiBaseUrlError } from "@/utils/firstOwnerOnboardingErrors";
-import { healthyAuthMeQueryKey, healthyPublicStatusQueryKey } from "@/utils/healthyApiQueryKeys";
 import { createHealthyApiClient } from "@/utils/healthyApiClient";
+import { performHealthyApiLogoutBestEffort } from "@/utils/sessionEndedChoreography";
 
 const api = useHealthyApiBaseUrl();
-const queryCache = useQueryCache();
 const apiStore = useHealthyApiStore();
+const { afterSessionEnded } = useSessionEndedChoreography();
 const { currentUser } = storeToRefs(apiStore);
 
 const displayName = computed(() => currentUser.value?.displayName ?? "");
 
 const { mutateAsync, isLoading } = useMutation({
   mutation: async () => {
-    const resolved = api.value;
-    if (!resolved.ok) {
-      throw new MissingAdminApiBaseUrlError();
-    }
-    const base = resolved.baseUrl;
-    try {
-      await createHealthyApiClient({ baseUrl: base }).logout();
-    } catch {
-      // Still clear local shell state if the API is unreachable.
-    }
+    await performHealthyApiLogoutBestEffort(api.value, (baseUrl) =>
+      createHealthyApiClient({ baseUrl }).logout(),
+    );
   },
   async onSuccess() {
-    apiStore.clearAuthenticatedState();
-    const resolved = api.value;
-    if (resolved.ok) {
-      await queryCache.invalidateQueries({
-        key: [...healthyPublicStatusQueryKey(resolved.baseUrl)],
-        exact: true,
-      });
-      await queryCache.invalidateQueries({
-        key: [...healthyAuthMeQueryKey(resolved.baseUrl)],
-        exact: true,
-      });
-    }
-    apiStore.markProbe();
-    await navigateTo("/login");
+    await afterSessionEnded();
   },
 });
 
@@ -93,10 +72,6 @@ onMounted(async () => {
 });
 
 async function onLogout() {
-  if (!api.value.ok) {
-    await navigateTo({ path: "/configuration-error", query: { reason: "missing" } });
-    return;
-  }
   await mutateAsync();
 }
 </script>
