@@ -226,7 +226,7 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
           (it) => pantrySearchMatches(
             _searchController.text,
             name: it.name,
-            brand: it.brand,
+            brand: _tab == _PantryTab.food ? it.brand : null,
           ),
         )
         .toList();

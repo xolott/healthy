@@ -1,5 +1,11 @@
 <script setup lang="ts">
 import { normalizeHealthyApiBaseUrl } from '@/utils/healthyApiClient';
+import {
+  pantryFoodCaloriesFromList,
+  pantryItemMatchesActiveTabSearch,
+  pantryRecipeCaloriesPerServingFromList,
+  type PantryWireItem,
+} from '@/utils/pantryCatalog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -8,72 +14,6 @@ import { Label } from '@/components/ui/label';
 const apiBase = useHealthyApiBaseUrl();
 
 const tab = ref<'food' | 'recipe'>('food');
-
-type PantryWireItem = {
-  id: string;
-  name: string;
-  iconKey: string;
-  itemType: string;
-  metadata?: Record<string, unknown>;
-};
-
-function pantryFoodCaloriesFromList(it: PantryWireItem): number | undefined {
-  if (it.itemType !== 'food') {
-    return undefined;
-  }
-  const meta = it.metadata;
-  if (meta === null || typeof meta !== 'object' || Array.isArray(meta)) {
-    return undefined;
-  }
-  const nutrients = meta['nutrients'];
-  if (nutrients === null || typeof nutrients !== 'object' || Array.isArray(nutrients)) {
-    return undefined;
-  }
-  const n = nutrients as Record<string, unknown>;
-  const raw = n['calories'];
-  return typeof raw === 'number' ? raw : undefined;
-}
-
-function pantryRecipeCaloriesPerServingFromList(it: PantryWireItem): number | undefined {
-  if (it.itemType !== 'recipe') {
-    return undefined;
-  }
-  const meta = it.metadata;
-  if (meta === null || typeof meta !== 'object' || Array.isArray(meta)) {
-    return undefined;
-  }
-  const nps = meta['nutrientsPerServing'];
-  if (nps === null || typeof nps !== 'object' || Array.isArray(nps)) {
-    return undefined;
-  }
-  const n = nps as Record<string, unknown>;
-  const raw = n['calories'];
-  return typeof raw === 'number' ? raw : undefined;
-}
-
-function pantryItemMatchesActiveTabSearch(
-  it: PantryWireItem,
-  qTrim: string,
-  activeTab: 'food' | 'recipe',
-): boolean {
-  if (qTrim === '') {
-    return true;
-  }
-  const lower = qTrim.toLowerCase();
-  if (it.name.toLowerCase().includes(lower)) {
-    return true;
-  }
-  if (activeTab === 'food') {
-    const meta = it.metadata;
-    if (meta !== null && typeof meta === 'object' && !Array.isArray(meta)) {
-      const b = meta['brand'];
-      if (typeof b === 'string' && b.trim() !== '' && b.toLowerCase().includes(lower)) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
 
 const referenceError = ref<string | null>(null);
 const nutrientsCount = ref<number | null>(null);
@@ -167,7 +107,7 @@ const itemsLoading = ref(false);
 const itemSearchQuery = ref('');
 
 const displayedItems = computed(() => {
-  const q = itemSearchQuery.value.trim();
+  const q = itemSearchQuery.value;
   return items.value.filter((it) => pantryItemMatchesActiveTabSearch(it, q, tab.value));
 });
 

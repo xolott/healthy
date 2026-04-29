@@ -16,6 +16,16 @@ void main() {
   });
 
   test(
+    'pantrySearchMatches with null brand does not match brand-only query (recipe tab parity)',
+    () {
+      expect(
+        pantrySearchMatches('mill', name: 'Chili', brand: null),
+        isFalse,
+      );
+    },
+  );
+
+  test(
     'foodListCaloriesFromMetadata reads nutrients.calories for food metadata',
     () {
       expect(
