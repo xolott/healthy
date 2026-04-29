@@ -1,9 +1,15 @@
-import {
-  createSessionRepository,
-  createUserRepository,
-  type Database,
-} from '@healthy/db';
-import type { UserRow } from '@healthy/db/schema';
+import { eq } from 'drizzle-orm';
+
+import { createSessionRepository, createUserRepository, type Database } from '@healthy/db';
+import { sessions as sessionsTable, users as usersTable, type UserRow } from '@healthy/db/schema';
+
+/**
+ * How persisted auth matches stored `users.email` (trim + lowercase).
+ * Kept in the auth slice; user inserts in @healthy/db use the same rules internally.
+ */
+export function canonicalizeAuthEmailForPersistence(email: string): string {
+  return email.trim().toLowerCase();
+}
 
 /**
  * Session facts for current-session policy (intent-shaped, not raw Drizzle rows).
@@ -117,15 +123,16 @@ function toUserForOwnerLogin(row: UserRow): AuthUserForOwnerLogin {
 }
 
 /**
- * Drizzle-backed adapter composing existing session and user repositories.
+ * Drizzle-backed adapter. Owner-login persistence queries run directly on `users` / `sessions`;
+ * other paths compose the package session and user repositories.
  */
 export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
-  const sessions = createSessionRepository(db);
-  const users = createUserRepository(db);
+  const sessionRepo = createSessionRepository(db);
+  const userRepo = createUserRepository(db);
 
   const self: AuthPersistence = {
     async findSessionByTokenHash(tokenHash) {
-      const row = await sessions.findSessionByTokenHash(tokenHash);
+      const row = await sessionRepo.findSessionByTokenHash(tokenHash);
       if (row === undefined) {
         return undefined;
       }
@@ -133,12 +140,12 @@ export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
     },
 
     async revokeSessionByTokenHash(tokenHash, at) {
-      const row = await sessions.revokeSessionByTokenHash(tokenHash, at);
+      const row = await sessionRepo.revokeSessionByTokenHash(tokenHash, at);
       return { revoked: row !== undefined };
     },
 
     async findUserById(userId) {
-      const row = await users.findUserById(userId);
+      const row = await userRepo.findUserById(userId);
       if (row === undefined) {
         return undefined;
       }
@@ -146,11 +153,13 @@ export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
     },
 
     async touchSessionLastUsedByTokenHash(tokenHash, at) {
-      await sessions.setLastUsedAtByTokenHash(tokenHash, at);
+      await sessionRepo.setLastUsedAtByTokenHash(tokenHash, at);
     },
 
     async findUserForOwnerLoginByEmail(email) {
-      const row = await users.findUserByEmail(email);
+      const key = canonicalizeAuthEmailForPersistence(email);
+      const rows = await db.select().from(usersTable).where(eq(usersTable.email, key)).limit(1);
+      const row = rows[0];
       if (row === undefined) {
         return undefined;
       }
@@ -158,26 +167,36 @@ export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
     },
 
     async createOwnerLoginSession(input) {
-      await sessions.createSession({
-        userId: input.userId,
-        tokenHash: input.tokenHash,
-        expiresAt: input.expiresAt,
-        lastUsedAt: input.lastUsedAt,
-        ipAddress: input.ipAddress,
-        userAgent: input.userAgent,
-      });
+      const [row] = await db
+        .insert(sessionsTable)
+        .values({
+          userId: input.userId,
+          tokenHash: input.tokenHash,
+          expiresAt: input.expiresAt,
+          lastUsedAt: input.lastUsedAt,
+          ipAddress: input.ipAddress,
+          userAgent: input.userAgent,
+        })
+        .returning();
+      if (row === undefined) {
+        throw new Error('insert did not return a row');
+      }
     },
 
     async setOwnerLastLoginAt(userId, at) {
-      await users.setLastLoginAt(userId, at);
+      const now = new Date();
+      await db
+        .update(usersTable)
+        .set({ lastLoginAt: at, updatedAt: now })
+        .where(eq(usersTable.id, userId));
     },
 
     async hasActiveOwner() {
-      return users.hasActiveOwner();
+      return userRepo.hasActiveOwner();
     },
 
     async createFirstOwnerIfNoneExists(input) {
-      const outcome = await users.createFirstOwnerIfNoneExists({
+      const outcome = await userRepo.createFirstOwnerIfNoneExists({
         email: input.email,
         passwordHash: input.passwordHash,
         displayName: input.displayName,

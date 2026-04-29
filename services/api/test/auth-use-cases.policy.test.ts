@@ -1,11 +1,10 @@
-import { normalizeEmail } from '@healthy/db';
 import { describe, expect, it } from 'vitest';
 
 import {
   createMemoryAuthPersistence,
   createMemoryAuthPersistenceStore,
 } from '../src/auth/auth-persistence-memory.js';
-import type { AuthUserForOwnerLogin } from '../src/auth/auth-persistence.js';
+import { canonicalizeAuthEmailForPersistence, type AuthUserForOwnerLogin } from '../src/auth/auth-persistence.js';
 import { createAuthUseCases } from '../src/auth/auth-use-cases.js';
 import { MIN_PASSWORD_LENGTH } from '../src/auth/password-policy.js';
 import { hashSessionTokenForLookup } from '../src/auth/session-token.js';
@@ -144,7 +143,7 @@ function seedActiveOwnerForLogin(
     passwordHash: storedLoginHashFixture,
     ...overrides,
   };
-  store.usersByEmailForLogin.set(normalizeEmail(row.email), row);
+  store.usersByEmailForLogin.set(canonicalizeAuthEmailForPersistence(row.email), row);
 }
 
 function ownerLoginUseCases(
@@ -242,6 +241,18 @@ describe('Auth Use Cases — ownerLogin (policy, in-memory persistence)', () => 
         kind: 'invalid_credentials',
       });
     }
+  });
+
+  it('resolves owner by email using persistence canonicalization (case / outer whitespace)', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    seedActiveOwnerForLogin(store);
+    const uc = ownerLoginUseCases(store);
+    const r = await uc.ownerLogin('  OWNER@EXAMPLE.COM ', goodLoginPassword, ctx);
+    expect(r.kind).toBe('success');
+    if (r.kind !== 'success') {
+      return;
+    }
+    expect(r.user.email).toBe('owner@example.com');
   });
 
   it('creates session and last-login with deterministic token and clock on success', async () => {

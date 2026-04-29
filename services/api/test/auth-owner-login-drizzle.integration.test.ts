@@ -62,4 +62,30 @@ describe('Drizzle Auth Persistence — ownerLogin (integration)', () => {
     expect(userAgain?.lastLoginAt).toBeDefined();
     expect(userAgain!.lastLoginAt!.getTime()).toBeLessThanOrEqual(Date.now());
   });
+
+  it('owner login matches stored email after persistence canonicalization', async () => {
+    const userRepo = createUserRepository(harness.db);
+    await userRepo.createUser({
+      email: 'mixed-case@example.com',
+      passwordHash: await hashPasswordArgon2id(goodPassword),
+      displayName: 'Mixed Case',
+      role: 'owner',
+      status: 'active',
+    });
+
+    const useCases = createAuthUseCasesForDatabase(harness.db);
+    const r = await useCases.ownerLogin('  MIXED-CASE@EXAMPLE.COM ', goodPassword, {
+      ip: null,
+      userAgent: null,
+    });
+
+    expect(r.kind).toBe('success');
+    if (r.kind !== 'success') {
+      return;
+    }
+    expect(r.user.email).toBe('mixed-case@example.com');
+
+    const stored = await userRepo.findUserByEmail('mixed-case@example.com');
+    expect(stored?.lastLoginAt).toBeDefined();
+  });
 });

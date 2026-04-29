@@ -9,7 +9,6 @@ export {
   createUserRepository,
   FirstOwnerAlreadyExistsError,
   LastActiveOwnerInvariantError,
-  normalizeEmail,
   type CreateFirstOwnerInput,
   type CreateUserInput,
   type UserRepository,

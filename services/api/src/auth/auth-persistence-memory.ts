@@ -1,13 +1,12 @@
-import { normalizeEmail } from '@healthy/db';
-
-import type {
-  AuthPersistence,
-  AuthSessionFacts,
-  AuthUserFacts,
-  AuthUserForOwnerLogin,
-  CreateFirstOwnerIfNoneExistsOutcome,
-  CreateFirstOwnerUserInput,
-  OwnerLoginSessionInsert,
+import {
+  canonicalizeAuthEmailForPersistence,
+  type AuthPersistence,
+  type AuthSessionFacts,
+  type AuthUserFacts,
+  type AuthUserForOwnerLogin,
+  type CreateFirstOwnerIfNoneExistsOutcome,
+  type CreateFirstOwnerUserInput,
+  type OwnerLoginSessionInsert,
 } from './auth-persistence.js';
 
 export type MemoryAuthSessionRecord = AuthSessionFacts;
@@ -18,7 +17,7 @@ export type MemoryAuthSessionRecord = AuthSessionFacts;
 export type MemoryAuthPersistenceStore = {
   sessionsByTokenHash: Map<string, MemoryAuthSessionRecord>;
   usersById: Map<string, AuthUserFacts>;
-  /** Normalized email (see {@link normalizeEmail}) → user row for owner login tests. */
+  /** Canonical email (see {@link canonicalizeAuthEmailForPersistence}) → user row for owner login tests. */
   usersByEmailForLogin: Map<string, AuthUserForOwnerLogin>;
   lastLoginAtByUserId: Map<string, Date>;
 };
@@ -73,7 +72,7 @@ export function createMemoryAuthPersistence(store: MemoryAuthPersistenceStore): 
     },
 
     async findUserForOwnerLoginByEmail(email) {
-      const key = normalizeEmail(email);
+      const key = canonicalizeAuthEmailForPersistence(email);
       const row = store.usersByEmailForLogin.get(key);
       return row === undefined ? undefined : { ...row };
     },
@@ -100,7 +99,7 @@ export function createMemoryAuthPersistence(store: MemoryAuthPersistenceStore): 
         return { kind: 'already_exists' };
       }
       const id = `user-${store.usersById.size + 1}`;
-      const email = normalizeEmail(input.email);
+      const email = canonicalizeAuthEmailForPersistence(input.email);
       const row: AuthUserFacts = {
         id,
         email,
