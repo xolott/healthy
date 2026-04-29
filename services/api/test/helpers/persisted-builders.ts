@@ -8,6 +8,8 @@ import { and, count, eq, isNull } from 'drizzle-orm';
 
 import type { Database } from '@healthy/db';
 import { canonicalizeAuthEmailForPersistence } from '../../src/auth/auth-persistence.js';
+import { hashPasswordArgon2id } from '../../src/auth/hash-password.js';
+import { generateSessionToken } from '../../src/auth/session-token.js';
 import { pantryItems, sessions, users, type PantryItemRow, type SessionRow, type UserRow } from '@healthy/db/schema';
 
 export type PersistedUserInsertInput = {
@@ -17,6 +19,9 @@ export type PersistedUserInsertInput = {
   role: NonNullable<UserRow['role']>;
   status: NonNullable<UserRow['status']>;
 };
+
+/** Shared default password for API integration tests using {@link insertPersistedUserWithBearerSession}. */
+export const INTEGRATION_TEST_PLAIN_PASSWORD = 'goodpassword12';
 
 export type PersistedSessionInsertInput = {
   userId: string;
@@ -66,6 +71,54 @@ export async function insertPersistedSession(
     throw new Error('insertPersistedSession did not return a row');
   }
   return row;
+}
+
+/**
+ * Session row plus Bearer headers when the user row already exists (e.g. after pantry seed inserts).
+ */
+export async function insertBearerSessionForUser(db: Database, userId: string) {
+  const { rawToken, tokenHash } = generateSessionToken();
+  await insertPersistedSession(db, {
+    userId,
+    tokenHash,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  });
+  return {
+    rawToken,
+    authHeaders: {
+      authorization: `Bearer ${rawToken}`,
+      accept: 'application/json',
+    },
+  };
+}
+
+/** Inserts user + active session row; Bearer token aligned with hashed session record. */
+export type PersistedUserWithBearerSessionInput = Omit<PersistedUserInsertInput, 'passwordHash'> & {
+  plainPassword: string;
+};
+
+export async function insertPersistedUserWithBearerSession(db: Database, input: PersistedUserWithBearerSessionInput) {
+  const user = await insertPersistedUser(db, {
+    email: input.email,
+    passwordHash: await hashPasswordArgon2id(input.plainPassword),
+    displayName: input.displayName,
+    role: input.role,
+    status: input.status,
+  });
+  const { rawToken, tokenHash } = generateSessionToken();
+  await insertPersistedSession(db, {
+    userId: user.id,
+    tokenHash,
+    expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+  });
+  return {
+    user,
+    rawToken,
+    authHeaders: {
+      authorization: `Bearer ${rawToken}`,
+      accept: 'application/json',
+    },
+  };
 }
 
 export async function persistedFindUserByEmail(db: Database, email: string): Promise<UserRow | undefined> {

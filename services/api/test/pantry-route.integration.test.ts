@@ -4,21 +4,22 @@ import { eq } from 'drizzle-orm';
 
 import { users, recipeIngredients, pantryItems } from '@healthy/db/schema';
 
-import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
-import { generateSessionToken } from '../src/auth/session-token.js';
 import { buildApp } from '../src/app.js';
+import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { STORED_GRAMS_FOR_ONE_OUNCE } from '../src/pantry/create-food-payload.js';
 import { PANTRY_ICON_KEYS } from '../src/pantry/pantry-icon-keys.js';
 import { PREDEFINED_SERVING_UNIT_ENTRIES } from '../src/pantry/predefined-serving-units.js';
 import {
+  insertBearerSessionForUser,
   insertPersistedPantryItem,
-  insertPersistedSession,
   insertPersistedUser,
+  insertPersistedUserWithBearerSession,
+  INTEGRATION_TEST_PLAIN_PASSWORD,
   persistedFindPantryItemById,
 } from './helpers/persisted-builders.js';
 import { startPostgresTestDatabase, type PostgresTestDatabase } from '@healthy/db/test';
 
-const goodPassword = 'goodpassword12';
+const goodPassword = INTEGRATION_TEST_PLAIN_PASSWORD;
 
 describe('Pantry routes (integration)', () => {
   let harness: PostgresTestDatabase;
@@ -53,18 +54,12 @@ describe('Pantry routes (integration)', () => {
   });
 
   it('GET /pantry/reference returns seeded nutrients and stable ordered icon keys', async () => {
-    const owner = await insertPersistedUser(harness.db, {
+    const { authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
       email: 'pantry-ref@example.com',
-      passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Pantry Tester',
       role: 'owner',
       status: 'active',
-    });
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: owner.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      plainPassword: goodPassword,
     });
 
     const app = await buildApp();
@@ -72,10 +67,7 @@ describe('Pantry routes (integration)', () => {
       const res = await app.inject({
         method: 'GET',
         url: '/pantry/reference',
-        headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
-        },
+        headers: authHeaders,
       });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload) as {
@@ -98,13 +90,6 @@ describe('Pantry routes (integration)', () => {
   });
 
   it('GET /pantry/items returns empty catalog for Foods when another user owns items only', async () => {
-    const userA = await insertPersistedUser(harness.db, {
-      email: 'user-a@example.com',
-      passwordHash: await hashPasswordArgon2id(goodPassword),
-      displayName: 'User A',
-      role: 'owner',
-      status: 'active',
-    });
     const userB = await insertPersistedUser(harness.db, {
       email: 'user-b@example.com',
       passwordHash: await hashPasswordArgon2id(goodPassword),
@@ -120,11 +105,12 @@ describe('Pantry routes (integration)', () => {
       iconKey: 'food_apple',
     });
 
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: userA.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    const { authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'user-a@example.com',
+      displayName: 'User A',
+      role: 'owner',
+      status: 'active',
+      plainPassword: goodPassword,
     });
 
     const app = await buildApp();
@@ -132,10 +118,62 @@ describe('Pantry routes (integration)', () => {
       const res = await app.inject({
         method: 'GET',
         url: '/pantry/items?itemType=food',
-        headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+        headers: authHeaders,
+      });
+      expect(res.statusCode).toBe(200);
+      const body = JSON.parse(res.payload) as { items: unknown[] };
+      expect(body.items).toHaveLength(0);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('GET /pantry/items returns empty catalog for Recipes when another user owns items only', async () => {
+    const userB = await insertPersistedUser(harness.db, {
+      email: 'other-recipes@example.com',
+      passwordHash: await hashPasswordArgon2id(goodPassword),
+      displayName: 'Other Recipes',
+      role: 'owner',
+      status: 'active',
+    });
+    await insertPersistedPantryItem(harness.db, {
+      ownerUserId: userB.id,
+      itemType: 'recipe',
+      name: 'Secret Chili',
+      iconKey: 'recipe_pot',
+      metadata: {
+        kind: 'recipe',
+        servings: 4,
+        servingLabel: 'bowl',
+        nutrients: {
+          calories: 400,
+          protein: 20,
+          fat: 15,
+          carbohydrates: 40,
         },
+        nutrientsPerServing: {
+          calories: 100,
+          protein: 5,
+          fat: 3.75,
+          carbohydrates: 10,
+        },
+      },
+    });
+
+    const { authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'solo-recipes@example.com',
+      displayName: 'Solo',
+      role: 'owner',
+      status: 'active',
+      plainPassword: goodPassword,
+    });
+
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: 'GET',
+        url: '/pantry/items?itemType=recipe',
+        headers: authHeaders,
       });
       expect(res.statusCode).toBe(200);
       const body = JSON.parse(res.payload) as { items: unknown[] };
@@ -166,22 +204,14 @@ describe('Pantry routes (integration)', () => {
       iconKey: 'recipe_pot',
     });
 
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: owner.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    });
+    const { authHeaders } = await insertBearerSessionForUser(harness.db, owner.id);
 
     const app = await buildApp();
     try {
       let res = await app.inject({
         method: 'GET',
         url: '/pantry/items?itemType=food',
-        headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
-        },
+        headers: authHeaders,
       });
       let body = JSON.parse(res.payload) as { items: { name: string }[] };
       expect(body.items).toHaveLength(1);
@@ -190,10 +220,7 @@ describe('Pantry routes (integration)', () => {
       res = await app.inject({
         method: 'GET',
         url: '/pantry/items?itemType=recipe',
-        headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
-        },
+        headers: authHeaders,
       });
       body = JSON.parse(res.payload) as { items: { name: string }[] };
       expect(body.items).toHaveLength(1);
@@ -233,22 +260,14 @@ describe('Pantry routes (integration)', () => {
       iconKey: 'food_milk',
     });
 
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: owner.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    });
+    const { authHeaders } = await insertBearerSessionForUser(harness.db, owner.id);
 
     const app = await buildApp();
     try {
       let res = await app.inject({
         method: 'GET',
         url: `/pantry/items/${mine.id}`,
-        headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
-        },
+        headers: authHeaders,
       });
       expect(res.statusCode).toBe(200);
       const detail = JSON.parse(res.payload) as { item: { id: string; name: string; itemType: string } };
@@ -257,20 +276,14 @@ describe('Pantry routes (integration)', () => {
       res = await app.inject({
         method: 'GET',
         url: '/pantry/items/00000000-0000-0000-0000-000000000001',
-        headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
-        },
+        headers: authHeaders,
       });
       expect(res.statusCode).toBe(404);
 
       res = await app.inject({
         method: 'GET',
         url: `/pantry/items/${theirs.id}`,
-        headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
-        },
+        headers: authHeaders,
       });
       expect(res.statusCode).toBe(404);
     } finally {
@@ -301,18 +314,12 @@ describe('Pantry routes (integration)', () => {
   });
 
   it('POST /pantry/items/food creates a Food with stored grams and nutrients', async () => {
-    const owner = await insertPersistedUser(harness.db, {
+    const { user: owner, authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
       email: 'create-food@example.com',
-      passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Food Creator',
       role: 'owner',
       status: 'active',
-    });
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: owner.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      plainPassword: goodPassword,
     });
 
     const app = await buildApp();
@@ -321,8 +328,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/food',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -362,7 +368,7 @@ describe('Pantry routes (integration)', () => {
       const listRes = await app.inject({
         method: 'GET',
         url: '/pantry/items?itemType=food',
-        headers: { authorization: `Bearer ${rawToken}`, accept: 'application/json' },
+        headers: authHeaders,
       });
       expect(listRes.statusCode).toBe(200);
       const listBody = JSON.parse(listRes.payload) as {
@@ -379,18 +385,12 @@ describe('Pantry routes (integration)', () => {
   });
 
   it('POST /pantry/items/food normalizes ounces to grams at the boundary', async () => {
-    const owner = await insertPersistedUser(harness.db, {
+    const { authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
       email: 'oz-food@example.com',
-      passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Oz Owner',
       role: 'owner',
       status: 'active',
-    });
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: owner.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      plainPassword: goodPassword,
     });
 
     const app = await buildApp();
@@ -399,8 +399,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/food',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -421,18 +420,12 @@ describe('Pantry routes (integration)', () => {
   });
 
   it('POST /pantry/items/food returns invalid_input for bad iconKey', async () => {
-    const owner = await insertPersistedUser(harness.db, {
+    const { authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
       email: 'bad-icon@example.com',
-      passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Bad Icon',
       role: 'owner',
       status: 'active',
-    });
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: owner.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      plainPassword: goodPassword,
     });
 
     const app = await buildApp();
@@ -441,8 +434,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/food',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -462,18 +454,12 @@ describe('Pantry routes (integration)', () => {
   });
 
   it('POST /pantry/items/food persists serving options and GET detail returns them', async () => {
-    const owner = await insertPersistedUser(harness.db, {
+    const { authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
       email: 'servings-food@example.com',
-      passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Servings Owner',
       role: 'owner',
       status: 'active',
-    });
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: owner.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      plainPassword: goodPassword,
     });
 
     const app = await buildApp();
@@ -482,8 +468,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/food',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -515,7 +500,7 @@ describe('Pantry routes (integration)', () => {
       const detail = await app.inject({
         method: 'GET',
         url: `/pantry/items/${created.item.id}`,
-        headers: { authorization: `Bearer ${rawToken}`, accept: 'application/json' },
+        headers: authHeaders,
       });
       expect(detail.statusCode).toBe(200);
       const detailBody = JSON.parse(detail.payload) as {
@@ -528,18 +513,12 @@ describe('Pantry routes (integration)', () => {
   });
 
   it('POST /pantry/items/food returns invalid_input for duplicate serving unit entries', async () => {
-    const owner = await insertPersistedUser(harness.db, {
+    const { authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
       email: 'dup-unit@example.com',
-      passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Dup Owner',
       role: 'owner',
       status: 'active',
-    });
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: owner.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      plainPassword: goodPassword,
     });
 
     const app = await buildApp();
@@ -548,8 +527,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/food',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -573,18 +551,12 @@ describe('Pantry routes (integration)', () => {
   });
 
   it('POST /pantry/items/recipe creates recipe, persists ingredients, and GET detail includes ingredients', async () => {
-    const owner = await insertPersistedUser(harness.db, {
+    const { authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
       email: 'recipe-create@example.com',
-      passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Recipe Creator',
       role: 'owner',
       status: 'active',
-    });
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: owner.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      plainPassword: goodPassword,
     });
 
     const app = await buildApp();
@@ -593,8 +565,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/food',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -611,8 +582,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/food',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -630,8 +600,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/recipe',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -679,7 +648,7 @@ describe('Pantry routes (integration)', () => {
       const detail = await app.inject({
         method: 'GET',
         url: `/pantry/items/${created.item.id}`,
-        headers: { authorization: `Bearer ${rawToken}`, accept: 'application/json' },
+        headers: authHeaders,
       });
       expect(detail.statusCode).toBe(200);
       const detailBody = JSON.parse(detail.payload) as {
@@ -694,18 +663,12 @@ describe('Pantry routes (integration)', () => {
   });
 
   it('POST /pantry/items/recipe aggregates nutrients from nested recipe ingredients', async () => {
-    const owner = await insertPersistedUser(harness.db, {
+    const { authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
       email: 'nested-recipe@example.com',
-      passwordHash: await hashPasswordArgon2id(goodPassword),
       displayName: 'Nested',
       role: 'owner',
       status: 'active',
-    });
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: owner.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+      plainPassword: goodPassword,
     });
 
     const app = await buildApp();
@@ -714,8 +677,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/food',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -732,8 +694,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/recipe',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -754,8 +715,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/recipe',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -812,12 +772,7 @@ describe('Pantry routes (integration)', () => {
       },
     });
 
-    const { rawToken, tokenHash } = generateSessionToken();
-    await insertPersistedSession(harness.db, {
-      userId: userA.id,
-      tokenHash,
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
-    });
+    const { authHeaders } = await insertBearerSessionForUser(harness.db, userA.id);
 
     const app = await buildApp();
     try {
@@ -825,8 +780,7 @@ describe('Pantry routes (integration)', () => {
         method: 'POST',
         url: '/pantry/items/recipe',
         headers: {
-          authorization: `Bearer ${rawToken}`,
-          accept: 'application/json',
+          ...authHeaders,
           'content-type': 'application/json',
         },
         payload: {
@@ -836,6 +790,77 @@ describe('Pantry routes (integration)', () => {
           ingredients: [
             {
               foodId: bFood.id,
+              quantity: 1,
+              servingOption: { kind: 'base' },
+            },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      const err = JSON.parse(res.payload) as { error: string };
+      expect(err.error).toBe('invalid_input');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('POST /pantry/items/recipe rejects a recipe id owned by another user', async () => {
+    const userA = await insertPersistedUser(harness.db, {
+      email: 'rec-a-r2@example.com',
+      passwordHash: await hashPasswordArgon2id(goodPassword),
+      displayName: 'A',
+      role: 'owner',
+      status: 'active',
+    });
+    const userB = await insertPersistedUser(harness.db, {
+      email: 'rec-b-r2@example.com',
+      passwordHash: await hashPasswordArgon2id(goodPassword),
+      displayName: 'B',
+      role: 'owner',
+      status: 'active',
+    });
+    const bRecipe = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: userB.id,
+      itemType: 'recipe',
+      name: 'Their Bowl',
+      iconKey: 'recipe_pot',
+      metadata: {
+        kind: 'recipe',
+        servings: 1,
+        servingLabel: 'serving',
+        nutrients: {
+          calories: 200,
+          protein: 8,
+          fat: 10,
+          carbohydrates: 20,
+        },
+        nutrientsPerServing: {
+          calories: 200,
+          protein: 8,
+          fat: 10,
+          carbohydrates: 20,
+        },
+      },
+    });
+
+    const { authHeaders } = await insertBearerSessionForUser(harness.db, userA.id);
+
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/pantry/items/recipe',
+        headers: {
+          ...authHeaders,
+          'content-type': 'application/json',
+        },
+        payload: {
+          name: 'Steal Recipe',
+          iconKey: 'recipe_pot',
+          servings: 1,
+          ingredients: [
+            {
+              recipeId: bRecipe.id,
               quantity: 1,
               servingOption: { kind: 'base' },
             },
