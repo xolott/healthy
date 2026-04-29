@@ -18,17 +18,35 @@ describe('POST /auth/login (unit)', () => {
         payload: JSON.stringify({ email: 'a@b.com', password: 'x'.repeat(12) }),
       });
       expect(res.statusCode).toBe(503);
+      expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
     } finally {
       await app.close();
     }
   });
 
-  it('invokes injected runLogin handler', async () => {
+  it('invokes request scope ownerLogin and maps invalid_credentials to 401', async () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/healthy_test');
     const app = await buildApp({
-      ownerLoginRouteOptions: {
-        runLogin: async (_req, reply) => {
-          return reply.status(401).send({ error: 'invalid_credentials' });
+      requestScope: {
+        status: {
+          async activeOwnerExists() {
+            return { kind: 'ok', hasActiveOwner: true };
+          },
+        },
+        currentSession: {
+          async resolveFromRawToken() {
+            return { kind: 'unauthorized', reason: 'missing_session' };
+          },
+        },
+        logout: {
+          async logoutWithRawToken() {
+            return { kind: 'skipped', reason: 'no_raw_token' };
+          },
+        },
+        ownerLogin: {
+          async loginWithEmailPassword() {
+            return { kind: 'invalid_credentials' };
+          },
         },
       },
     });
@@ -40,6 +58,46 @@ describe('POST /auth/login (unit)', () => {
         payload: JSON.stringify({ email: 'a@b.com', password: 'anything' }),
       });
       expect(res.statusCode).toBe(401);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns 503 with service_unavailable when request scope reports persistence_unavailable', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/healthy_test');
+    const app = await buildApp({
+      requestScope: {
+        status: {
+          async activeOwnerExists() {
+            return { kind: 'ok', hasActiveOwner: true };
+          },
+        },
+        currentSession: {
+          async resolveFromRawToken() {
+            return { kind: 'unauthorized', reason: 'missing_session' };
+          },
+        },
+        logout: {
+          async logoutWithRawToken() {
+            return { kind: 'skipped', reason: 'no_raw_token' };
+          },
+        },
+        ownerLogin: {
+          async loginWithEmailPassword() {
+            return { kind: 'persistence_unavailable' };
+          },
+        },
+      },
+    });
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({ email: 'a@b.com', password: 'anything' }),
+      });
+      expect(res.statusCode).toBe(503);
+      expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
     } finally {
       await app.close();
     }

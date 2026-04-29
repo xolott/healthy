@@ -1,7 +1,8 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { appendSessionCookie, getRequestIp } from '../auth/http-session.js';
-import { ownerLoginFromAppRequest } from '../auth/auth-use-case-scope.js';
+import type { PublicOwnerLoginOutcome } from '../request-scope/index.js';
+import { createRequestScopeForApp, type RequestScope } from '../request-scope/index.js';
 
 const postBodySchema = {
   type: 'object',
@@ -61,21 +62,64 @@ const invalidCredentialsResponse = {
   },
 } as const;
 
-/**
- * @public For tests: replace the default handler.
- */
-export type OwnerLoginRouteOptions = {
-  runLogin?: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
-};
+const serviceUnavailableResponse = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['error'],
+  properties: {
+    error: { type: 'string', enum: ['service_unavailable'] },
+  },
+} as const;
 
-export async function registerOwnerLoginRoute(
-  app: FastifyInstance,
-  options?: OwnerLoginRouteOptions,
+function resolveRequestScope(app: FastifyInstance, scope: RequestScope | undefined): RequestScope {
+  return scope ?? createRequestScopeForApp(app);
+}
+
+function sendOwnerLoginOutcome(
+  reply: FastifyReply,
+  outcome: PublicOwnerLoginOutcome,
+  secureCookie: boolean,
 ) {
-  if (options?.runLogin !== undefined) {
-    app.post('/auth/login', options.runLogin);
-    return;
+  switch (outcome.kind) {
+    case 'persistence_not_configured':
+    case 'persistence_unavailable':
+      return reply.status(503).send({ error: 'service_unavailable' });
+    case 'invalid_input':
+      return reply.status(400).send({
+        error: 'invalid_input',
+        field: outcome.field,
+        message: outcome.message,
+      });
+    case 'invalid_credentials':
+      return reply.status(401).send({ error: 'invalid_credentials' });
+    case 'success': {
+      const maxAge = Math.max(
+        60,
+        Math.floor((outcome.sessionExpiresAt.getTime() - Date.now()) / 1000),
+      );
+      appendSessionCookie(reply, outcome.rawSessionToken, maxAge, secureCookie);
+      return reply.status(200).send({
+        user: {
+          id: outcome.user.id,
+          email: outcome.user.email,
+          displayName: outcome.user.displayName,
+          role: outcome.user.role,
+        },
+        session: {
+          token: outcome.rawSessionToken,
+          expiresAt: outcome.sessionExpiresAt.toISOString(),
+        },
+      });
+    }
+    default: {
+      const _exhaustive: never = outcome;
+      return _exhaustive;
+    }
   }
+}
+
+export async function registerOwnerLoginRoute(app: FastifyInstance, requestScope?: RequestScope) {
+  const scope = resolveRequestScope(app, requestScope);
 
   app.post<{ Body: { email: string; password: string } }>(
     '/auth/login',
@@ -89,55 +133,21 @@ export async function registerOwnerLoginRoute(
           200: postResponse200,
           400: invalidInputResponse,
           401: invalidCredentialsResponse,
-          503: { type: 'object' },
+          503: serviceUnavailableResponse,
         },
       },
     },
     async (request, reply) => {
       const body = request.body;
 
-      const secure = request.protocol === 'https';
+      const secureCookie = request.protocol === 'https';
       const ctx = {
         ip: getRequestIp(request),
         userAgent: (request.headers['user-agent'] ?? null) as string | null,
       };
 
-      const result = await ownerLoginFromAppRequest(app, body.email, body.password, ctx);
-
-      if (result.kind === 'service_unavailable') {
-        return reply.status(503).send({ error: 'service_unavailable' });
-      }
-
-      if (result.kind === 'invalid_input') {
-        return reply.status(400).send({
-          error: 'invalid_input',
-          field: result.field,
-          message: result.message,
-        });
-      }
-
-      if (result.kind === 'invalid_credentials') {
-        return reply.status(401).send({ error: 'invalid_credentials' });
-      }
-
-      const maxAge = Math.max(
-        60,
-        Math.floor((result.sessionExpiresAt.getTime() - Date.now()) / 1000),
-      );
-      appendSessionCookie(reply, result.rawSessionToken, maxAge, secure);
-
-      return reply.status(200).send({
-        user: {
-          id: result.user.id,
-          email: result.user.email,
-          displayName: result.user.displayName,
-          role: result.user.role,
-        },
-        session: {
-          token: result.rawSessionToken,
-          expiresAt: result.sessionExpiresAt.toISOString(),
-        },
-      });
+      const outcome = await scope.ownerLogin.loginWithEmailPassword(body.email, body.password, ctx);
+      return sendOwnerLoginOutcome(reply, outcome, secureCookie);
     },
   );
 }

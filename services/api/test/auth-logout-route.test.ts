@@ -52,6 +52,11 @@ describe('POST /auth/logout (unit)', () => {
             return { kind: 'persistence_unavailable' };
           },
         },
+        ownerLogin: {
+          async loginWithEmailPassword() {
+            return { kind: 'invalid_credentials' };
+          },
+        },
       },
     });
     try {

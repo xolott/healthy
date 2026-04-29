@@ -51,6 +51,11 @@ describe('Request Scope (public status / active owner)', () => {
           return { kind: 'skipped', reason: 'no_raw_token' };
         },
       },
+      ownerLogin: {
+        async loginWithEmailPassword() {
+          return { kind: 'invalid_credentials' };
+        },
+      },
     };
     await expect(fake.status.activeOwnerExists()).resolves.toEqual({
       kind: 'ok',
@@ -106,6 +111,40 @@ describe('Request Scope (logout)', () => {
     await registerEnv(app);
     const scope = createRequestScopeForApp(app);
     const outcome = await scope.logout.logoutWithRawToken('any');
+    expect(outcome.kind).toBe('persistence_unavailable');
+  });
+});
+
+describe('Request Scope (owner login)', () => {
+  let app: FastifyInstance | undefined;
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    if (app !== undefined) {
+      await app.close();
+      app = undefined;
+    }
+  });
+
+  it('loginWithEmailPassword reports persistence_not_configured when DATABASE_URL is missing', async () => {
+    vi.stubEnv('DATABASE_URL', '');
+    app = Fastify({ logger: false });
+    await registerEnv(app);
+    const scope = createRequestScopeForApp(app);
+    await expect(
+      scope.ownerLogin.loginWithEmailPassword('a@b.com', 'x'.repeat(12), { ip: null, userAgent: null }),
+    ).resolves.toEqual({ kind: 'persistence_not_configured' });
+  });
+
+  it('loginWithEmailPassword reports persistence_unavailable when the database connection fails', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgresql://127.0.0.1:1/unreachable_for_owner_login_scope_test');
+    app = Fastify({ logger: false });
+    await registerEnv(app);
+    const scope = createRequestScopeForApp(app);
+    const outcome = await scope.ownerLogin.loginWithEmailPassword('a@b.com', 'x'.repeat(12), {
+      ip: null,
+      userAgent: null,
+    });
     expect(outcome.kind).toBe('persistence_unavailable');
   });
 });

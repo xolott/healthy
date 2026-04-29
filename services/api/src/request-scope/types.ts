@@ -1,4 +1,8 @@
-import type { LogoutResult, ResolveCurrentSessionResult } from '../auth/auth-use-cases.js';
+import type {
+  LogoutResult,
+  OwnerLoginResult,
+  ResolveCurrentSessionResult,
+} from '../auth/auth-use-cases.js';
 
 /**
  * Request Scope exposes infrastructure-backed capabilities without route-shaped HTTP outcomes.
@@ -39,8 +43,25 @@ export type RequestScopeLogoutCapability = {
   logoutWithRawToken(rawToken: string | undefined): Promise<PublicLogoutOutcome>;
 };
 
+/**
+ * Owner login: persistence gate plus closed login outcomes from auth use cases.
+ */
+export type PublicOwnerLoginOutcome =
+  | { kind: 'persistence_not_configured' }
+  | { kind: 'persistence_unavailable' }
+  | OwnerLoginResult;
+
+export type RequestScopeOwnerLoginCapability = {
+  loginWithEmailPassword(
+    rawEmail: string,
+    rawPassword: string,
+    ctx: { ip: string | null; userAgent: string | null },
+  ): Promise<PublicOwnerLoginOutcome>;
+};
+
 export type RequestScope = {
   status: RequestScopeStatusCapability;
   currentSession: RequestScopeCurrentSessionCapability;
   logout: RequestScopeLogoutCapability;
+  ownerLogin: RequestScopeOwnerLoginCapability;
 };

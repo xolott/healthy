@@ -9,23 +9,11 @@ import type { FastifyInstance } from 'fastify';
 import { withDisposableDatabase, type Database } from '@healthy/db';
 
 import { createDrizzleAuthPersistence } from './auth-persistence.js';
-import {
-  createAuthUseCases,
-  type OwnerLoginResult,
-  validateFirstOwnerSetupPayload,
-  type FirstOwnerSetupResult,
-} from './auth-use-cases.js';
+import { createAuthUseCases, validateFirstOwnerSetupPayload, type FirstOwnerSetupResult } from './auth-use-cases.js';
 import { hashPasswordArgon2id, verifyPasswordArgon2id } from './hash-password.js';
 import { generateSessionToken } from './session-token.js';
 
 export type { AuthMeUser } from './auth-use-cases.js';
-
-/**
- * Owner login from app configuration (database URL check + disposable connection).
- */
-export type OwnerLoginFromAppRequestOutcome =
-  | { kind: 'service_unavailable' }
-  | OwnerLoginResult;
 
 /**
  * First-owner setup from app configuration (database URL check + disposable connection).
@@ -89,23 +77,3 @@ export async function firstOwnerSetupFromAppRequest(
   });
 }
 
-/**
- * Runs owner email/password login using app configuration: disposable DB connection
- * and factory-created Auth Use Cases.
- */
-export async function ownerLoginFromAppRequest(
-  app: FastifyInstance,
-  rawEmail: string,
-  rawPassword: string,
-  ctx: { ip: string | null; userAgent: string | null },
-): Promise<OwnerLoginFromAppRequestOutcome> {
-  const url = getAuthDatabaseUrl(app);
-  if (url === undefined) {
-    return { kind: 'service_unavailable' };
-  }
-
-  return withDisposableDatabase(url, async (db) => {
-    const useCases = createAuthUseCasesForDatabase(db);
-    return useCases.ownerLogin(rawEmail, rawPassword, ctx);
-  });
-}

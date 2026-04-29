@@ -19,6 +19,14 @@ function unusedLogout(): RequestScope['logout'] {
   };
 }
 
+function unusedOwnerLogin(): RequestScope['ownerLogin'] {
+  return {
+    async loginWithEmailPassword() {
+      return { kind: 'invalid_credentials' };
+    },
+  };
+}
+
 describe('GET /status', () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
@@ -40,6 +48,7 @@ describe('GET /status', () => {
         },
         currentSession: unusedCurrentSession(),
         logout: unusedLogout(),
+        ownerLogin: unusedOwnerLogin(),
       },
     });
 
@@ -66,6 +75,7 @@ describe('GET /status', () => {
         },
         currentSession: unusedCurrentSession(),
         logout: unusedLogout(),
+        ownerLogin: unusedOwnerLogin(),
       },
     });
 
@@ -102,6 +112,7 @@ describe('GET /status', () => {
         },
         currentSession: unusedCurrentSession(),
         logout: unusedLogout(),
+        ownerLogin: unusedOwnerLogin(),
       },
     });
 

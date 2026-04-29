@@ -67,5 +67,26 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
         }
       },
     },
+    ownerLogin: {
+      async loginWithEmailPassword(
+        rawEmail: string,
+        rawPassword: string,
+        ctx: { ip: string | null; userAgent: string | null },
+      ) {
+        const url = app.config.DATABASE_URL?.trim();
+        if (url === undefined || url === '') {
+          return { kind: 'persistence_not_configured' };
+        }
+        try {
+          return await withDisposableDatabase(url, async (db) => {
+            const useCases = createAuthUseCasesForDatabase(db);
+            return useCases.ownerLogin(rawEmail, rawPassword, ctx);
+          });
+        } catch (err) {
+          app.log.warn({ err }, 'owner login database operation failed');
+          return { kind: 'persistence_unavailable' };
+        }
+      },
+    },
   };
 }
