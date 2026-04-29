@@ -44,18 +44,6 @@
     "./client": {
       "types": "./dist/client.d.ts",
       "import": "./dist/client.js"
-    },
-    "./users": {
-      "types": "./dist/users/index.d.ts",
-      "import": "./dist/users/index.js"
-    },
-    "./sessions": {
-      "types": "./dist/sessions/index.d.ts",
-      "import": "./dist/sessions/index.js"
-    },
-    "./audit-logs": {
-      "types": "./dist/audit-logs/index.d.ts",
-      "import": "./dist/audit-logs/index.js"
     }
   },
   "files": [

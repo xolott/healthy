@@ -1,11 +1,14 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, count, eq, isNull } from 'drizzle-orm';
 
-import { createUserRepository, type Database } from '@healthy/db';
-import { sessions as sessionsTable, users as usersTable, type UserRow } from '@healthy/db/schema';
+import type { Database } from '@healthy/db';
+import {
+  sessions as sessionsTable,
+  users as usersTable,
+  type UserRow,
+} from '@healthy/db/schema';
 
 /**
  * How persisted auth matches stored `users.email` (trim + lowercase).
- * Kept in the auth slice; user inserts in @healthy/db use the same rules internally.
  */
 export function canonicalizeAuthEmailForPersistence(email: string): string {
   return email.trim().toLowerCase();
@@ -122,14 +125,27 @@ function toUserForOwnerLogin(row: UserRow): AuthUserForOwnerLogin {
   };
 }
 
+/** Unique violation — e.g. concurrent first-owner setups racing on the same email. */
+function isPgUniqueViolation(e: unknown): boolean {
+  let current: unknown = e;
+  for (let depth = 0; depth < 8 && current !== null && current !== undefined; depth += 1) {
+    if (typeof current === 'object' && 'code' in current && (current as { code: unknown }).code === '23505') {
+      return true;
+    }
+    if (typeof current === 'object' && current !== null && 'cause' in current) {
+      current = (current as { cause: unknown }).cause;
+    } else {
+      break;
+    }
+  }
+  return false;
+}
+
 /**
- * Drizzle-backed adapter. Current-session lookups (session row, user row, touch, revoke), owner-login
- * session inserts, and email-scoped reads run as Drizzle queries on `sessions` / `users`. First-owner
- * and owner-count helpers still use the `@healthy/db` user repository.
+ * Drizzle-backed adapter. Session and user reads/writes use Drizzle on `sessions` / `users`;
+ * first-owner bootstrap matches prior repository semantics (active-owner gate + unique handling).
  */
 export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
-  const userRepo = createUserRepository(db);
-
   const self: AuthPersistence = {
     async findSessionByTokenHash(tokenHash) {
       const rows = await db
@@ -207,19 +223,50 @@ export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
     },
 
     async hasActiveOwner() {
-      return userRepo.hasActiveOwner();
+      const [row] = await db
+        .select({ n: count() })
+        .from(usersTable)
+        .where(
+          and(eq(usersTable.role, 'owner'), eq(usersTable.status, 'active'), isNull(usersTable.deletedAt)),
+        );
+      return Number(row?.n ?? 0) > 0;
     },
 
     async createFirstOwnerIfNoneExists(input) {
-      const outcome = await userRepo.createFirstOwnerIfNoneExists({
-        email: input.email,
-        passwordHash: input.passwordHash,
-        displayName: input.displayName,
-      });
-      if (outcome.kind === 'already_exists') {
+      const [countRow] = await db
+        .select({ n: count() })
+        .from(usersTable)
+        .where(
+          and(eq(usersTable.role, 'owner'), eq(usersTable.status, 'active'), isNull(usersTable.deletedAt)),
+        );
+      if (Number(countRow?.n ?? 0) > 0) {
         return { kind: 'already_exists' };
       }
-      return { kind: 'created', user: toUserFacts(outcome.row) };
+      const normalized = canonicalizeAuthEmailForPersistence(input.email);
+      const now = new Date();
+      try {
+        const rows = await db
+          .insert(usersTable)
+          .values({
+            email: normalized,
+            passwordHash: input.passwordHash,
+            displayName: input.displayName,
+            role: 'owner',
+            status: 'active',
+            updatedAt: now,
+          })
+          .returning();
+        const row = rows[0];
+        if (row === undefined) {
+          throw new Error('insert did not return a row');
+        }
+        return { kind: 'created', user: toUserFacts(row) };
+      } catch (e) {
+        if (isPgUniqueViolation(e)) {
+          return { kind: 'already_exists' };
+        }
+        throw e;
+      }
     },
 
     async withTransaction(fn) {

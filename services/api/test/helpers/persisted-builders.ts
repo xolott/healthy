@@ -1,13 +1,13 @@
 /**
  * API integration test helpers for persisted rows. Uses Drizzle directly against the harness
  * database so tests do not depend on {@link createUserRepository} / {@link createSessionRepository}.
- * Email normalization matches production persistence (same {@link normalizeEmail} as repositories).
+ * Email canonicalization matches {@link canonicalizeAuthEmailForPersistence}.
  */
 
 import { and, count, eq, isNull } from 'drizzle-orm';
 
 import type { Database } from '@healthy/db';
-import { normalizeEmail } from '@healthy/db/users';
+import { canonicalizeAuthEmailForPersistence } from '../../src/auth/auth-persistence.js';
 import { sessions, users, type SessionRow, type UserRow } from '@healthy/db/schema';
 
 export type PersistedUserInsertInput = {
@@ -28,7 +28,7 @@ export type PersistedSessionInsertInput = {
 };
 
 export async function insertPersistedUser(db: Database, input: PersistedUserInsertInput): Promise<UserRow> {
-  const email = normalizeEmail(input.email);
+  const email = canonicalizeAuthEmailForPersistence(input.email);
   const now = new Date();
   const [row] = await db
     .insert(users)
@@ -69,7 +69,7 @@ export async function insertPersistedSession(
 }
 
 export async function persistedFindUserByEmail(db: Database, email: string): Promise<UserRow | undefined> {
-  const normalized = normalizeEmail(email);
+  const normalized = canonicalizeAuthEmailForPersistence(email);
   const [row] = await db.select().from(users).where(eq(users.email, normalized)).limit(1);
   return row;
 }
