@@ -47,14 +47,26 @@ Adapter code: `services/api/src/auth/auth-persistence-memory.ts`.
 
 ### Auth Use Case Scope
 
-A request helper that creates Auth Use Cases from the configured database and
-deterministic collaborators. Routes use this helper instead of receiving raw
-Drizzle database handles.
+Factory that builds Auth Use Cases from an existing Drizzle database handle plus
+deterministic hashing and session collaborators. Implemented as
+`services/api/src/auth/auth-use-case-scope.ts`:
+`createAuthUseCasesForDatabase`; `AuthMeUser` is re-exported for consumers that anchor
+on this module.
 
-Implemented as `services/api/src/auth/auth-use-case-scope.ts` (`createAuthUseCasesForDatabase`,
-`*FromAppRequest` helpers, and types such as `AuthMeUser` re-exported for route
-layers). Policy tests construct `createAuthUseCases` with the Auth Test Adapter
-directly; repository shape in `@healthy/db` is unchanged in this seam.
+`createRequestScopeForApp` invokes that factory inside disposable database scopes.
+Routes consume Request Scope capabilities only—they do not import this factory.
+
+Policy tests construct `createAuthUseCases` with the Auth Test Adapter directly.
+Repository shape in `@healthy/db` is unchanged in this seam.
+
+### Request Scope
+
+The API request seam that owns configured persistence access and HTTP request
+context extraction before route handlers translate use-case outcomes to HTTP.
+
+Request Scope exposes auth and status capabilities plus request context; it does
+not expose raw database handles or route-ready HTTP outcomes. Decision record:
+`docs/adr/0001-request-scope-boundary.md`.
 
 ### Active Owner
 

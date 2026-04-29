@@ -1,11 +1,10 @@
 /**
- * Auth Use Case Scope: request-level wiring that opens disposable database connections,
- * checks configuration, and builds Auth Use Cases via `createAuthUseCasesForDatabase`.
- * Routes and HTTP integration tests depend on this module instead of reaching into
- * `auth-use-cases` or `auth-persistence` directly.
+ * Constructs Auth Use Cases backed by Drizzle persistence on an existing database handle.
+ * `createRequestScopeForApp` uses this inside disposable-database scopes; Drizzle-backed
+ * integration tests call it with an open harness handle. Routes depend on Request Scope only.
  */
 
-import { withDisposableDatabase, type Database } from '@healthy/db';
+import type { Database } from '@healthy/db';
 
 import { createDrizzleAuthPersistence } from './auth-persistence.js';
 import { createAuthUseCases } from './auth-use-cases.js';
