@@ -86,8 +86,6 @@ Optional: open Drizzle Studio against the same URL:
 pnpm --filter @healthy/db db:studio
 ```
 
-Integration tests apply the same migration folder programmatically via **`startPostgresTestDatabase`** from **`@healthy/db/test`** (`drizzle-orm/postgres-js/migrator`; canonical Postgres Testcontainers harness).
-
 ## Initial schema boundaries
 
 The first migrations establish **identity and platform audit** only:
@@ -111,10 +109,22 @@ Keep new tables cohesive with the above boundaries: extend `packages/db/src/sche
 
 Root `**pnpm test`** runs Turbo `**test**` in every workspace that defines it, including `**@healthy/db**`, `**api**`, and `**admin**`.
 
+### Canonical PostgreSQL integration harness
+
+Integration tests that need a migrated PostgreSQL instance should use the **canonical harness** exported from **`@healthy/db/test`** (the package’s explicit `**./test**` export in `package.json`, not the main `@healthy/db` entry). Import **`startPostgresTestDatabase`** (and the **`PostgresTestDatabase`** type when needed) from that subpath so every workspace shares the same Testcontainers lifecycle, migration folder resolution, and teardown behaviour. Avoid private, package-local copies of container startup or migration wiring; new tests should depend on this export instead.
+
+The harness returns a **`PostgresTestDatabase`** value with:
+
+- **`db`** — typed Drizzle **`Database`** handle (`drizzle-orm` with this package’s schema), suitable for the same query patterns as application code
+- **`connectionUri`** — JDBC-style URL string for code paths that configure Postgres via a URL (for example `createDatabaseAdapter(connectionUri)`)
+- **`dispose`** — async function to shut down the client and container; call it from `afterAll` (or equivalent) so resources are released reliably
+
+Unit tests that do not touch Postgres do not need this helper.
+
 `**@healthy/db` tests:**
 
 - Unit-style tests under `packages/db/test/*.test.ts` (no database).
-- Integration tests (`*.integration.test.ts`) start **PostgreSQL in Docker** via `@testcontainers/postgresql` (`postgres:16-alpine`).
+- Integration tests (`*.integration.test.ts`) start **PostgreSQL in Docker** via `@testcontainers/postgresql` (`postgres:16-alpine`), typically through **`startPostgresTestDatabase`** from **`@healthy/db/test`**.
 
 **Prerequisites for `@healthy/db` integration tests:** a working **Docker** (or compatible) engine so Testcontainers can pull and run the image. If Docker is unavailable, those tests fail at container start; unit tests can still pass when run in isolation:
 
