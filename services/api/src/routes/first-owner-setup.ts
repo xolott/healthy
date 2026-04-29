@@ -1,7 +1,8 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { appendSessionCookie, getRequestIp } from '../auth/http-session.js';
-import { firstOwnerSetupFromAppRequest } from '../auth/auth-use-case-scope.js';
+import type { PublicFirstOwnerSetupOutcome } from '../request-scope/index.js';
+import { createRequestScopeForApp, type RequestScope } from '../request-scope/index.js';
 
 const postBodySchema = {
   type: 'object',
@@ -42,21 +43,70 @@ const postResponse201 = {
   },
 } as const;
 
-/**
- * @public For tests: replace the default handler.
- */
-export type FirstOwnerRouteOptions = {
-  runSetup?: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
-};
+const serviceUnavailableResponse = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['error'],
+  properties: {
+    error: { type: 'string', enum: ['service_unavailable'] },
+  },
+} as const;
 
-export async function registerFirstOwnerSetupRoute(
-  app: FastifyInstance,
-  options?: FirstOwnerRouteOptions,
+function resolveRequestScope(app: FastifyInstance, scope: RequestScope | undefined): RequestScope {
+  return scope ?? createRequestScopeForApp(app);
+}
+
+function sendFirstOwnerSetupOutcome(
+  reply: FastifyReply,
+  outcome: PublicFirstOwnerSetupOutcome,
+  secureCookie: boolean,
 ) {
-  if (options?.runSetup !== undefined) {
-    app.post('/setup/first-owner', options.runSetup);
-    return;
+  switch (outcome.kind) {
+    case 'persistence_not_configured':
+    case 'persistence_unavailable':
+      return reply.status(503).send({ error: 'service_unavailable' });
+    case 'invalid_input':
+      return reply.status(400).send({
+        error: 'invalid_input',
+        field: outcome.field,
+        message: outcome.message,
+      });
+    case 'password_policy':
+      return reply.status(400).send({
+        error: 'password_policy',
+        minLength: outcome.minLength,
+        message: outcome.message,
+      });
+    case 'setup_unavailable':
+      return reply.status(404).send({ error: 'not_found' });
+    case 'success': {
+      const maxAge = Math.max(
+        60,
+        Math.floor((outcome.sessionExpiresAt.getTime() - Date.now()) / 1000),
+      );
+      appendSessionCookie(reply, outcome.rawSessionToken, maxAge, secureCookie);
+      return reply.status(201).send({
+        user: {
+          id: outcome.user.id,
+          email: outcome.user.email,
+          displayName: outcome.user.displayName,
+          role: outcome.user.role,
+        },
+        session: {
+          token: outcome.rawSessionToken,
+          expiresAt: outcome.sessionExpiresAt.toISOString(),
+        },
+      });
+    }
+    default: {
+      const _exhaustive: never = outcome;
+      return _exhaustive;
+    }
   }
+}
+
+export async function registerFirstOwnerSetupRoute(app: FastifyInstance, requestScope?: RequestScope) {
+  const scope = resolveRequestScope(app, requestScope);
 
   app.post<{ Body: { displayName: string; email: string; password: string } }>(
     '/setup/first-owner',
@@ -66,7 +116,7 @@ export async function registerFirstOwnerSetupRoute(
         description:
           'When no active owner exists, create the initial owner, issue a 30-day session, and return the opaque token for mobile Bearer transport. Browsers also receive an HttpOnly cookie. After setup, this path responds with a neutral not-found when setup is not available.',
         body: postBodySchema,
-        response: { 201: postResponse201 },
+        response: { 201: postResponse201, 503: serviceUnavailableResponse },
       },
     },
     async (request, reply) => {
@@ -78,53 +128,13 @@ export async function registerFirstOwnerSetupRoute(
         userAgent: (request.headers['user-agent'] ?? null) as string | null,
       };
 
-      const result = await firstOwnerSetupFromAppRequest(
-        app,
+      const outcome = await scope.firstOwnerSetup.setupFirstOwner(
         body.displayName,
         body.email,
         body.password,
         ctx,
       );
-
-      if (result.kind === 'service_unavailable') {
-        return reply.status(503).send({ error: 'service_unavailable' });
-      }
-      if (result.kind === 'invalid_input') {
-        return reply.status(400).send({
-          error: 'invalid_input',
-          field: result.field,
-          message: result.message,
-        });
-      }
-      if (result.kind === 'password_policy') {
-        return reply.status(400).send({
-          error: 'password_policy',
-          minLength: result.minLength,
-          message: result.message,
-        });
-      }
-      if (result.kind === 'setup_unavailable') {
-        return reply.status(404).send({ error: 'not_found' });
-      }
-
-      const maxAge = Math.max(
-        60,
-        Math.floor((result.sessionExpiresAt.getTime() - Date.now()) / 1000),
-      );
-      appendSessionCookie(reply, result.rawSessionToken, maxAge, secure);
-
-      return reply.status(201).send({
-        user: {
-          id: result.user.id,
-          email: result.user.email,
-          displayName: result.user.displayName,
-          role: result.user.role,
-        },
-        session: {
-          token: result.rawSessionToken,
-          expiresAt: result.sessionExpiresAt.toISOString(),
-        },
-      });
+      return sendFirstOwnerSetupOutcome(reply, outcome, secure);
     },
   );
 }

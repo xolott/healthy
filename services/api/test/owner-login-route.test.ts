@@ -48,6 +48,11 @@ describe('POST /auth/login (unit)', () => {
             return { kind: 'invalid_credentials' };
           },
         },
+        firstOwnerSetup: {
+          async setupFirstOwner() {
+            return { kind: 'setup_unavailable' };
+          },
+        },
       },
     });
     try {
@@ -85,6 +90,11 @@ describe('POST /auth/login (unit)', () => {
         ownerLogin: {
           async loginWithEmailPassword() {
             return { kind: 'persistence_unavailable' };
+          },
+        },
+        firstOwnerSetup: {
+          async setupFirstOwner() {
+            return { kind: 'setup_unavailable' };
           },
         },
       },

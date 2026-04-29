@@ -46,6 +46,52 @@ describe('POST /setup/first-owner', () => {
       }),
     });
     expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
+  });
+
+  it('returns 503 service_unavailable when request scope reports persistence_unavailable', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/healthy_test');
+    app = await buildApp({
+      requestScope: {
+        status: {
+          async activeOwnerExists() {
+            return { kind: 'ok', hasActiveOwner: false };
+          },
+        },
+        currentSession: {
+          async resolveFromRawToken() {
+            return { kind: 'unauthorized', reason: 'missing_session' };
+          },
+        },
+        logout: {
+          async logoutWithRawToken() {
+            return { kind: 'skipped', reason: 'no_raw_token' };
+          },
+        },
+        ownerLogin: {
+          async loginWithEmailPassword() {
+            return { kind: 'invalid_credentials' };
+          },
+        },
+        firstOwnerSetup: {
+          async setupFirstOwner() {
+            return { kind: 'persistence_unavailable' };
+          },
+        },
+      },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/setup/first-owner',
+      headers: { 'content-type': 'application/json' },
+      payload: JSON.stringify({
+        displayName: 'Owner',
+        email: 'o@example.com',
+        password: 'x'.repeat(MIN_PASSWORD_LENGTH),
+      }),
+    });
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
   });
 });
 
@@ -101,6 +147,11 @@ describe('GET /auth/me', () => {
             return { kind: 'invalid_credentials' };
           },
         },
+        firstOwnerSetup: {
+          async setupFirstOwner() {
+            return { kind: 'setup_unavailable' };
+          },
+        },
       },
     });
     const res = await app.inject({
@@ -147,6 +198,11 @@ describe('GET /auth/me (request-scope stub)', () => {
         ownerLogin: {
           async loginWithEmailPassword() {
             return { kind: 'invalid_credentials' };
+          },
+        },
+        firstOwnerSetup: {
+          async setupFirstOwner() {
+            return { kind: 'setup_unavailable' };
           },
         },
       },

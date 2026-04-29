@@ -27,6 +27,14 @@ function unusedOwnerLogin(): RequestScope['ownerLogin'] {
   };
 }
 
+function unusedFirstOwnerSetup(): RequestScope['firstOwnerSetup'] {
+  return {
+    async setupFirstOwner() {
+      return { kind: 'setup_unavailable' };
+    },
+  };
+}
+
 describe('GET /status', () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
@@ -49,6 +57,7 @@ describe('GET /status', () => {
         currentSession: unusedCurrentSession(),
         logout: unusedLogout(),
         ownerLogin: unusedOwnerLogin(),
+        firstOwnerSetup: unusedFirstOwnerSetup(),
       },
     });
 
@@ -76,6 +85,7 @@ describe('GET /status', () => {
         currentSession: unusedCurrentSession(),
         logout: unusedLogout(),
         ownerLogin: unusedOwnerLogin(),
+        firstOwnerSetup: unusedFirstOwnerSetup(),
       },
     });
 
@@ -113,6 +123,7 @@ describe('GET /status', () => {
         currentSession: unusedCurrentSession(),
         logout: unusedLogout(),
         ownerLogin: unusedOwnerLogin(),
+        firstOwnerSetup: unusedFirstOwnerSetup(),
       },
     });
 

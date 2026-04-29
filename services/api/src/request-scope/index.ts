@@ -1,10 +1,12 @@
 export type {
   PublicCurrentSessionOutcome,
+  PublicFirstOwnerSetupOutcome,
   PublicLogoutOutcome,
   PublicOwnerLoginOutcome,
   PublicStatusActiveOwnerOutcome,
   RequestScope,
   RequestScopeCurrentSessionCapability,
+  RequestScopeFirstOwnerSetupCapability,
   RequestScopeLogoutCapability,
   RequestScopeOwnerLoginCapability,
   RequestScopeStatusCapability,

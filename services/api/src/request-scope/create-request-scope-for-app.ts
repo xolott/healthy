@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 
 import { createUserRepository, withDisposableDatabase } from '@healthy/db';
 
+import { validateFirstOwnerSetupPayload } from '../auth/auth-use-cases.js';
 import { createAuthUseCasesForDatabase } from '../auth/auth-use-case-scope.js';
 
 import type { RequestScope } from './types.js';
@@ -84,6 +85,32 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
           });
         } catch (err) {
           app.log.warn({ err }, 'owner login database operation failed');
+          return { kind: 'persistence_unavailable' };
+        }
+      },
+    },
+    firstOwnerSetup: {
+      async setupFirstOwner(
+        rawDisplayName: string,
+        rawEmail: string,
+        rawPassword: string,
+        ctx: { setCookie: boolean; ip: string | null; userAgent: string | null },
+      ) {
+        const url = app.config.DATABASE_URL?.trim();
+        if (url === undefined || url === '') {
+          const pre = validateFirstOwnerSetupPayload(rawDisplayName, rawEmail, rawPassword);
+          if (pre.kind !== 'ok') {
+            return pre;
+          }
+          return { kind: 'persistence_not_configured' };
+        }
+        try {
+          return await withDisposableDatabase(url, async (db) => {
+            const useCases = createAuthUseCasesForDatabase(db);
+            return useCases.firstOwnerSetup(rawDisplayName, rawEmail, rawPassword, ctx);
+          });
+        } catch (err) {
+          app.log.warn({ err }, 'first owner setup database operation failed');
           return { kind: 'persistence_unavailable' };
         }
       },

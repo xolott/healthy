@@ -56,6 +56,11 @@ describe('Request Scope (public status / active owner)', () => {
           return { kind: 'invalid_credentials' };
         },
       },
+      firstOwnerSetup: {
+        async setupFirstOwner() {
+          return { kind: 'setup_unavailable' };
+        },
+      },
     };
     await expect(fake.status.activeOwnerExists()).resolves.toEqual({
       kind: 'ok',
@@ -142,6 +147,63 @@ describe('Request Scope (owner login)', () => {
     await registerEnv(app);
     const scope = createRequestScopeForApp(app);
     const outcome = await scope.ownerLogin.loginWithEmailPassword('a@b.com', 'x'.repeat(12), {
+      ip: null,
+      userAgent: null,
+    });
+    expect(outcome.kind).toBe('persistence_unavailable');
+  });
+});
+
+describe('Request Scope (first-owner setup)', () => {
+  let app: FastifyInstance | undefined;
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    if (app !== undefined) {
+      await app.close();
+      app = undefined;
+    }
+  });
+
+  it('returns validation outcomes without persistence_not_configured when DATABASE_URL is missing', async () => {
+    vi.stubEnv('DATABASE_URL', '');
+    app = Fastify({ logger: false });
+    await registerEnv(app);
+    const scope = createRequestScopeForApp(app);
+    await expect(
+      scope.firstOwnerSetup.setupFirstOwner('Owner', 'bad-email', 'x'.repeat(12), {
+        setCookie: true,
+        ip: null,
+        userAgent: null,
+      }),
+    ).resolves.toEqual({
+      kind: 'invalid_input',
+      field: 'email',
+      message: 'Email is invalid',
+    });
+  });
+
+  it('setupFirstOwner reports persistence_not_configured when DATABASE_URL is missing and payload passes validation', async () => {
+    vi.stubEnv('DATABASE_URL', '');
+    app = Fastify({ logger: false });
+    await registerEnv(app);
+    const scope = createRequestScopeForApp(app);
+    await expect(
+      scope.firstOwnerSetup.setupFirstOwner('Owner', 'o@example.com', 'x'.repeat(12), {
+        setCookie: true,
+        ip: null,
+        userAgent: null,
+      }),
+    ).resolves.toEqual({ kind: 'persistence_not_configured' });
+  });
+
+  it('setupFirstOwner reports persistence_unavailable when the database connection fails', async () => {
+    vi.stubEnv('DATABASE_URL', 'postgresql://127.0.0.1:1/unreachable_for_first_owner_scope_test');
+    app = Fastify({ logger: false });
+    await registerEnv(app);
+    const scope = createRequestScopeForApp(app);
+    const outcome = await scope.firstOwnerSetup.setupFirstOwner('Owner', 'o@example.com', 'x'.repeat(12), {
+      setCookie: true,
       ip: null,
       userAgent: null,
     });

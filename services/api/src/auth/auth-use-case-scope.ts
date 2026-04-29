@@ -4,34 +4,15 @@
  * Routes and HTTP integration tests depend on this module instead of reaching into
  * `auth-use-cases` or `auth-persistence` directly.
  */
-import type { FastifyInstance } from 'fastify';
 
 import { withDisposableDatabase, type Database } from '@healthy/db';
 
 import { createDrizzleAuthPersistence } from './auth-persistence.js';
-import { createAuthUseCases, validateFirstOwnerSetupPayload, type FirstOwnerSetupResult } from './auth-use-cases.js';
+import { createAuthUseCases } from './auth-use-cases.js';
 import { hashPasswordArgon2id, verifyPasswordArgon2id } from './hash-password.js';
 import { generateSessionToken } from './session-token.js';
 
 export type { AuthMeUser } from './auth-use-cases.js';
-
-/**
- * First-owner setup from app configuration (database URL check + disposable connection).
- */
-export type FirstOwnerSetupFromAppRequestOutcome =
-  | { kind: 'service_unavailable' }
-  | FirstOwnerSetupResult;
-
-/**
- * Returns a trimmed database URL when the app is configured for auth database access.
- */
-export function getAuthDatabaseUrl(app: FastifyInstance): string | undefined {
-  const url = app.config.DATABASE_URL?.trim();
-  if (url === undefined || url === '') {
-    return undefined;
-  }
-  return url;
-}
 
 /**
  * Builds Auth Use Cases backed by Drizzle persistence on an existing database handle
@@ -54,26 +35,3 @@ export function createAuthUseCasesForDatabase(
     hashPassword: overrides?.hashPassword ?? hashPasswordArgon2id,
   });
 }
-
-export async function firstOwnerSetupFromAppRequest(
-  app: FastifyInstance,
-  rawDisplayName: string,
-  rawEmail: string,
-  rawPassword: string,
-  ctx: { setCookie: boolean; ip: string | null; userAgent: string | null },
-): Promise<FirstOwnerSetupFromAppRequestOutcome> {
-  const url = getAuthDatabaseUrl(app);
-  if (url === undefined) {
-    const pre = validateFirstOwnerSetupPayload(rawDisplayName, rawEmail, rawPassword);
-    if (pre.kind !== 'ok') {
-      return pre;
-    }
-    return { kind: 'service_unavailable' };
-  }
-
-  return withDisposableDatabase(url, async (db) => {
-    const useCases = createAuthUseCasesForDatabase(db);
-    return useCases.firstOwnerSetup(rawDisplayName, rawEmail, rawPassword, ctx);
-  });
-}
-

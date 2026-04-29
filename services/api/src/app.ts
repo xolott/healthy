@@ -5,7 +5,7 @@ import { registerCors } from './plugins/cors.js';
 import { registerSensible } from './plugins/sensible.js';
 import { registerSwagger } from './plugins/swagger.js';
 import { registerHealthRoutes } from './routes/health.js';
-import { registerFirstOwnerSetupRoute, type FirstOwnerRouteOptions } from './routes/first-owner-setup.js';
+import { registerFirstOwnerSetupRoute } from './routes/first-owner-setup.js';
 import { registerAuthLogoutRoute } from './routes/auth-logout.js';
 import { registerAuthMeRoute } from './routes/auth-me.js';
 import { registerOwnerLoginRoute } from './routes/owner-login.js';
@@ -16,7 +16,6 @@ import { summarizeLogger } from './utils/logger.js';
 export type BuildAppOptions = {
   /** Test-only override; production uses `createRequestScopeForApp(app)`. */
   requestScope?: RequestScope;
-  firstOwnerRouteOptions?: FirstOwnerRouteOptions;
 };
 
 export async function buildApp(options?: BuildAppOptions) {
@@ -28,7 +27,7 @@ export async function buildApp(options?: BuildAppOptions) {
   await registerSwagger(app);
   await registerHealthRoutes(app);
   await registerStatusRoutes(app, options?.requestScope);
-  await registerFirstOwnerSetupRoute(app, options?.firstOwnerRouteOptions);
+  await registerFirstOwnerSetupRoute(app, options?.requestScope);
   await registerOwnerLoginRoute(app, options?.requestScope);
   await registerAuthMeRoute(app, options?.requestScope);
   await registerAuthLogoutRoute(app, options?.requestScope);

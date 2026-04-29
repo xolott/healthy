@@ -57,6 +57,11 @@ describe('POST /auth/logout (unit)', () => {
             return { kind: 'invalid_credentials' };
           },
         },
+        firstOwnerSetup: {
+          async setupFirstOwner() {
+            return { kind: 'setup_unavailable' };
+          },
+        },
       },
     });
     try {
