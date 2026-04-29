@@ -32,6 +32,13 @@ The first Drizzle-backed Auth Persistence adapter composes the existing
 
 Adapter code: `services/api/src/auth/auth-persistence.ts`.
 
+### Setup Status Persistence
+
+The small persistence seam used by Request Scope status capabilities to surface
+**first-owner setup eligibility**: whether the initial owner bootstrap flow is
+still required. Public status checks consume that intent instead of expressing
+the same rule as predicates over the Active Owner store.
+
 ### Auth Result
 
 Expected Auth Use Cases outcomes are closed tagged unions, not domain
@@ -88,6 +95,14 @@ PostgreSQL client.
 
 Request Scope is built on Database Adapter-backed capabilities. Routes depend on
 Request Scope outcomes, not on database construction, pooling, or teardown.
+
+### Database Package Boundary
+
+The public boundary of `@healthy/db`: **database lifecycle and schema**
+primitives—creating and disposing the typed Drizzle database, lifecycle helpers
+such as adapters, and schema-owned tables and types exported from `@healthy/db/schema`.
+Downstream modules build intent-shaped persistence on top of these primitives;
+the package boundary is not repository-factory-shaped exports as the stable API.
 
 ### Active Owner
 
