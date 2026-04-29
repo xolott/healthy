@@ -1,9 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { withDisposableDatabase } from '@healthy/db';
-
 import { getSessionTokenFromRequest } from '../auth/parse-bearer-cookie.js';
-import { resolveAuthMeUser, type AuthMeUser } from '../auth/resolve-auth-me.js';
+import { resolveAuthMeFromAppRequest, type AuthMeFromAppRequestOutcome } from '../auth/auth-me-from-request.js';
+import type { AuthMeUser } from '../auth/auth-use-cases.js';
 
 const meResponse = {
   type: 'object',
@@ -23,6 +22,21 @@ const meResponse = {
     },
   },
 } as const;
+
+function sendAuthMeOutcome(reply: FastifyReply, outcome: AuthMeFromAppRequestOutcome) {
+  switch (outcome.kind) {
+    case 'service_unavailable':
+      return reply.status(503).send({ error: 'service_unavailable' });
+    case 'ok':
+      return reply.status(200).send({ user: outcome.user });
+    case 'unauthorized':
+      return reply.status(401).send({ error: 'unauthorized' });
+    default: {
+      const _exhaustive: never = outcome;
+      return _exhaustive;
+    }
+  }
+}
 
 /**
  * @public For tests: replace the default current-user resolution.
@@ -56,16 +70,8 @@ export async function registerAuthMeRoute(app: FastifyInstance, options?: AuthMe
         return reply.status(401).send({ error: 'unauthorized' });
       }
 
-      const url = app.config.DATABASE_URL?.trim();
-      if (url === undefined || url === '') {
-        return reply.status(503).send({ error: 'service_unavailable' });
-      }
-
-      const u = await withDisposableDatabase(url, (db) => resolveAuthMeUser(db, rawToken));
-      if (u === 'unauthorized') {
-        return reply.status(401).send({ error: 'unauthorized' });
-      }
-      return reply.status(200).send({ user: u });
+      const outcome = await resolveAuthMeFromAppRequest(app, rawToken);
+      return sendAuthMeOutcome(reply, outcome);
     },
   );
 }
