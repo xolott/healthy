@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
 import '../../shared/widgets/shell_scaffold.dart';
+import 'pantry_http.dart';
 import 'pantry_create_food_validation.dart';
 
 class _ServingUnitWire {
@@ -107,7 +107,7 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
     }
     try {
       final uri = Uri.parse('$base/pantry/reference');
-      final res = await http.get(
+      final res = await PantryHttp.get(
         uri,
         headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
       );
@@ -271,7 +271,7 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
     });
 
     try {
-      final res = await http.post(
+      final res = await PantryHttp.post(
         uri,
         headers: {
           'Authorization': 'Bearer $token',

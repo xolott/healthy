@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
 import '../../shared/widgets/shell_scaffold.dart';
+import 'pantry_http.dart';
 
 class _PantryOption {
   const _PantryOption({
@@ -177,7 +177,7 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
     }
     try {
       final refUri = Uri.parse('$base/pantry/reference');
-      final refRes = await http.get(
+      final refRes = await PantryHttp.get(
         refUri,
         headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
       );
@@ -204,7 +204,7 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
 
       Future<Map<String, dynamic>> fetchItems(String itemType) async {
         final uri = Uri.parse('$base/pantry/items').replace(queryParameters: {'itemType': itemType});
-        final res = await http.get(
+        final res = await PantryHttp.get(
           uri,
           headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
         );
@@ -402,7 +402,7 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
     });
     try {
       final uri = Uri.parse('$base/pantry/items/recipe');
-      final res = await http.post(
+      final res = await PantryHttp.post(
         uri,
         headers: {
           'Authorization': 'Bearer $token',

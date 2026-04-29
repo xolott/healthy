@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
 import '../../shared/widgets/shell_scaffold.dart';
+import 'pantry_http.dart';
 
 /// Food detail: macros per base amount and optional serving options (GET `/pantry/items/:id`).
 class MealsPantryFoodDetailScreen extends StatefulWidget {
@@ -70,7 +70,7 @@ class _MealsPantryFoodDetailScreenState extends State<MealsPantryFoodDetailScree
     try {
       _unitDisplayNames.clear();
       final refUri = Uri.parse('$base/pantry/reference');
-      final refRes = await http.get(
+      final refRes = await PantryHttp.get(
         refUri,
         headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
       );
@@ -93,7 +93,7 @@ class _MealsPantryFoodDetailScreenState extends State<MealsPantryFoodDetailScree
       }
 
       final uri = Uri.parse('$base/pantry/items/${widget.itemId}');
-      final res = await http.get(
+      final res = await PantryHttp.get(
         uri,
         headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
       );

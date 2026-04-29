@@ -96,4 +96,24 @@ describe('nested recipe ingredient graph', () => {
       canReachRecipeThroughNestedIngredients(harness.db, owner.id, rc.id, ra.id),
     ).resolves.toBe(false);
   });
+
+  it('canReachRecipeThroughNestedIngredients detects self-reference (cycle guard primitive)', async () => {
+    const owner = await insertPersistedUser(harness.db, {
+      email: 'cycle-self@example.com',
+      passwordHash: await hashPasswordArgon2id('goodpassword12'),
+      displayName: 'Owner',
+      role: 'owner',
+      status: 'active',
+    });
+    const ra = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: owner.id,
+      itemType: 'recipe',
+      name: 'Solo',
+      iconKey: 'recipe_pot',
+      metadata: minimalRecipeMeta as unknown as Record<string, unknown>,
+    });
+    await expect(
+      canReachRecipeThroughNestedIngredients(harness.db, owner.id, ra.id, ra.id),
+    ).resolves.toBe(true);
+  });
 });

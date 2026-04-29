@@ -2,11 +2,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
 import '../../shared/widgets/shell_scaffold.dart';
 import 'pantry_catalog_helpers.dart';
+import 'pantry_http.dart';
 
 enum _PantryTab { food, recipe }
 
@@ -75,7 +75,7 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
 
     try {
       final refUri = Uri.parse('$base/pantry/reference');
-      final refRes = await http.get(
+      final refRes = await PantryHttp.get(
         refUri,
         headers: {
           'Authorization': 'Bearer $token',
@@ -102,7 +102,7 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
       final itemsUri = Uri.parse(
         '$base/pantry/items?itemType=${_tab == _PantryTab.food ? 'food' : 'recipe'}',
       );
-      final itemsRes = await http.get(
+      final itemsRes = await PantryHttp.get(
         itemsUri,
         headers: {
           'Authorization': 'Bearer $token',
@@ -165,7 +165,7 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
       final itemsUri = Uri.parse(
         '$base/pantry/items?itemType=${_tab == _PantryTab.food ? 'food' : 'recipe'}',
       );
-      final itemsRes = await http.get(
+      final itemsRes = await PantryHttp.get(
         itemsUri,
         headers: {
           'Authorization': 'Bearer $token',

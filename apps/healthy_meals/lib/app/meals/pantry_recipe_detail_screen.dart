@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
 import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
 import '../../shared/widgets/shell_scaffold.dart';
+import 'pantry_http.dart';
 
 /// Recipe detail: computed totals and ingredients (GET `/pantry/items/:id`).
 class MealsPantryRecipeDetailScreen extends StatefulWidget {
@@ -103,7 +103,7 @@ class _MealsPantryRecipeDetailScreenState extends State<MealsPantryRecipeDetailS
 
     try {
       final uri = Uri.parse('$base/pantry/items/${widget.itemId}');
-      final res = await http.get(
+      final res = await PantryHttp.get(
         uri,
         headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
       );

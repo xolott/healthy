@@ -1,11 +1,45 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:healthy_meals/app/meals/meals_main_shell.dart';
 import 'package:healthy_meals/app/meals/meals_placeholder_screens.dart';
+import 'package:healthy_meals/app/meals/pantry_catalog_screen.dart';
+import 'package:healthy_meals/app/meals/pantry_http.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 void main() {
-  testWidgets('bottom nav switches primary destinations', (WidgetTester tester) async {
+  testWidgets('bottom nav reaches real Pantry catalog tab', (WidgetTester tester) async {
+    FlutterSecureStorage.setMockInitialValues({
+      'healthy_session_token': 'nav-test-session',
+      'healthy_api_base_url': 'https://nav-shell.test',
+    });
+    addTearDown(() {
+      PantryHttp.client = http.Client();
+    });
+
+    PantryHttp.client = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/pantry/reference')) {
+        return http.Response(
+          jsonEncode({
+            'nutrients': [
+              {'key': 'calories', 'displayName': 'Calories'},
+            ],
+            'iconKeys': ['food_bowl'],
+          }),
+          200,
+        );
+      }
+      if (path.endsWith('/pantry/items')) {
+        return http.Response(jsonEncode({'items': <dynamic>[]}), 200);
+      }
+      return http.Response('not found', 404);
+    });
+
     final router = GoRouter(
       initialLocation: '/home',
       routes: [
@@ -34,7 +68,7 @@ void main() {
               routes: [
                 GoRoute(
                   path: '/pantry',
-                  builder: (context, state) => const MealsPantryPlaceholder(),
+                  builder: (context, state) => const MealsPantryCatalogScreen(),
                 ),
               ],
             ),
@@ -58,12 +92,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Pantry catalog functionality will arrive'), findsNothing);
-
     await tester.tap(find.byKey(const Key('meals-nav-pantry')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Pantry catalog functionality will arrive'), findsOneWidget);
+    expect(find.byKey(const Key('pantry-catalog-health')), findsOneWidget);
+    expect(find.byKey(const Key('pantry-empty')), findsOneWidget);
   });
 
   testWidgets('center plus selects Food Log branch', (WidgetTester tester) async {
