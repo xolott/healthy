@@ -23,6 +23,24 @@ const meResponse = {
   },
 } as const;
 
+const authMeErrorResponse = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['error'],
+  properties: {
+    error: { type: 'string', enum: ['unauthorized'] },
+  },
+} as const;
+
+const authMeServiceUnavailableResponse = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['error'],
+  properties: {
+    error: { type: 'string', enum: ['service_unavailable'] },
+  },
+} as const;
+
 function sendAuthMeOutcome(reply: FastifyReply, outcome: AuthMeFromAppRequestOutcome) {
   switch (outcome.kind) {
     case 'service_unavailable':
@@ -57,7 +75,11 @@ export async function registerAuthMeRoute(app: FastifyInstance, options?: AuthMe
       schema: {
         summary: 'Current session user',
         description: 'Resolves the active user from the Bearer token or the HttpOnly session cookie.',
-        response: { 200: meResponse, 401: { type: 'object' }, 503: { type: 'object' } },
+        response: {
+          200: meResponse,
+          401: authMeErrorResponse,
+          503: authMeServiceUnavailableResponse,
+        },
       },
     },
     async (request, reply) => {

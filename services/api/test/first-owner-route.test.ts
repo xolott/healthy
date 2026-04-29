@@ -53,6 +53,7 @@ describe('GET /auth/me', () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     if (app !== undefined) {
       await app.close();
       app = undefined;
@@ -63,6 +64,18 @@ describe('GET /auth/me', () => {
     app = await buildApp();
     const res = await app.inject({ method: 'GET', url: '/auth/me' });
     expect(res.statusCode).toBe(401);
+  });
+
+  it('returns 503 when DATABASE_URL is not configured and a Bearer token is present', async () => {
+    vi.stubEnv('DATABASE_URL', '');
+    app = await buildApp();
+    const res = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { authorization: 'Bearer sometoken' },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
   });
 });
 
