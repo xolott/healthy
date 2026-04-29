@@ -123,7 +123,7 @@ const createFoodCarbs = ref('');
 const createFoodError = ref<string | null>(null);
 const createFoodSubmitting = ref(false);
 
-const foodCatalogForRecipes = ref<PantryWireItem[]>([]);
+const recipeIngredientCatalog = ref<PantryWireItem[]>([]);
 const createRecipeName = ref('');
 const createRecipeIconKey = ref('');
 const createRecipeServings = ref('');
@@ -133,7 +133,7 @@ const createRecipeSubmitting = ref(false);
 
 type RecipeIngredientDraft = {
   id: number;
-  foodId: string;
+  pantryItemId: string;
   quantity: string;
   servingMode: 'base' | 'unit' | 'custom';
   unitKey: string;
@@ -145,12 +145,12 @@ let nextRecipeIngId = 0;
 function makeRecipeIngredientRow(): RecipeIngredientDraft {
   const id = nextRecipeIngId;
   nextRecipeIngId += 1;
-  const foods = foodCatalogForRecipes.value;
-  const firstId = foods[0]?.id ?? '';
+  const catalog = recipeIngredientCatalog.value;
+  const firstId = catalog[0]?.id ?? '';
   const unitFallback = servingUnitsCatalog.value[0]?.key ?? 'slice';
   return {
     id,
-    foodId: firstId,
+    pantryItemId: firstId,
     quantity: '1',
     servingMode: 'base',
     unitKey: unitFallback,
@@ -176,12 +176,25 @@ function foodHasServingOptions(it: PantryWireItem | undefined): boolean {
   return Array.isArray(so) && so.length > 0;
 }
 
-function selectedFood(row: RecipeIngredientDraft): PantryWireItem | undefined {
-  return foodCatalogForRecipes.value.find((f) => f.id === row.foodId);
+function selectedIngredient(row: RecipeIngredientDraft): PantryWireItem | undefined {
+  return recipeIngredientCatalog.value.find((f) => f.id === row.pantryItemId);
 }
 
 function syncRecipeRowServingMode(row: RecipeIngredientDraft) {
-  const food = selectedFood(row);
+  const item = selectedIngredient(row);
+  if (item === undefined) {
+    return;
+  }
+  if (item.itemType === 'recipe') {
+    if (row.servingMode !== 'base' && row.servingMode !== 'unit') {
+      row.servingMode = 'base';
+    }
+    if (row.servingMode === 'unit') {
+      row.unitKey = 'serving';
+    }
+    return;
+  }
+  const food = item;
   if (!foodHasServingOptions(food)) {
     row.servingMode = 'base';
     return;
@@ -205,8 +218,33 @@ function syncRecipeRowServingMode(row: RecipeIngredientDraft) {
   }
 }
 
-function onRecipeIngredientFoodChange(row: RecipeIngredientDraft) {
+function onRecipeIngredientPantryChange(row: RecipeIngredientDraft) {
   syncRecipeRowServingMode(row);
+}
+
+function onRecipeServingBasisChange(row: RecipeIngredientDraft, v: string) {
+  if (v === 'batch') {
+    row.servingMode = 'base';
+  } else {
+    row.servingMode = 'unit';
+    row.unitKey = 'serving';
+  }
+}
+
+function onRecipeServingBasisSelectChange(row: RecipeIngredientDraft, ev: Event) {
+  const t = ev.target as HTMLSelectElement | null;
+  if (t === null) {
+    return;
+  }
+  onRecipeServingBasisChange(row, t.value);
+}
+
+function recipeServingBasisSelect(row: RecipeIngredientDraft): string {
+  const item = selectedIngredient(row);
+  if (item?.itemType !== 'recipe') {
+    return 'batch';
+  }
+  return row.servingMode === 'base' ? 'batch' : 'perServing';
 }
 
 type FoodNutrients = {
@@ -303,9 +341,69 @@ function customServingLabelsForFood(food: PantryWireItem | undefined): string[] 
   return p.servings.filter((s) => s.kind === 'custom').map((s) => s.label);
 }
 
-function gramsForRecipeDraftRow(row: RecipeIngredientDraft): number | null {
-  const food = selectedFood(row);
-  if (food === undefined) {
+function parseRecipeListMeta(recipe: PantryWireItem): {
+  servings: number;
+  servingLabel: string;
+  nutrients: FoodNutrients;
+  nutrientsPerServing: FoodNutrients;
+} | null {
+  if (recipe.itemType !== 'recipe') {
+    return null;
+  }
+  const meta = recipe.metadata;
+  if (meta === null || typeof meta !== 'object' || Array.isArray(meta)) {
+    return null;
+  }
+  if (meta['kind'] !== 'recipe') {
+    return null;
+  }
+  const servings = meta['servings'];
+  const nutrientsRaw = meta['nutrients'];
+  const npsRaw = meta['nutrientsPerServing'];
+  const slRaw = meta['servingLabel'];
+  if (
+    typeof servings !== 'number' ||
+    servings <= 0 ||
+    nutrientsRaw === null ||
+    typeof nutrientsRaw !== 'object' ||
+    npsRaw === null ||
+    typeof npsRaw !== 'object'
+  ) {
+    return null;
+  }
+  const nr = nutrientsRaw as Record<string, unknown>;
+  const npsr = npsRaw as Record<string, unknown>;
+  if (
+    typeof nr['calories'] !== 'number' ||
+    typeof nr['protein'] !== 'number' ||
+    typeof nr['fat'] !== 'number' ||
+    typeof nr['carbohydrates'] !== 'number' ||
+    typeof npsr['calories'] !== 'number' ||
+    typeof npsr['protein'] !== 'number' ||
+    typeof npsr['fat'] !== 'number' ||
+    typeof npsr['carbohydrates'] !== 'number'
+  ) {
+    return null;
+  }
+  const nutrients: FoodNutrients = {
+    calories: nr['calories'],
+    protein: nr['protein'],
+    fat: nr['fat'],
+    carbohydrates: nr['carbohydrates'],
+  };
+  const nutrientsPerServing: FoodNutrients = {
+    calories: npsr['calories'],
+    protein: npsr['protein'],
+    fat: npsr['fat'],
+    carbohydrates: npsr['carbohydrates'],
+  };
+  const servingLabel = typeof slRaw === 'string' && slRaw.trim() !== '' ? slRaw.trim() : 'serving';
+  return { servings, servingLabel, nutrients, nutrientsPerServing };
+}
+
+function gramsForRecipeDraftRowFood(row: RecipeIngredientDraft): number | null {
+  const food = selectedIngredient(row);
+  if (food === undefined || food.itemType !== 'food') {
     return null;
   }
   const parsed = parseFoodListMeta(food);
@@ -341,19 +439,56 @@ function gramsForRecipeDraftRow(row: RecipeIngredientDraft): number | null {
   return opt.grams * q;
 }
 
+function nutrientsPartFromIngredientDraft(row: RecipeIngredientDraft): FoodNutrients | null {
+  const item = selectedIngredient(row);
+  if (item === undefined || row.pantryItemId === '') {
+    return null;
+  }
+  const q = Number(row.quantity.trim());
+  if (!Number.isFinite(q) || q <= 0) {
+    return null;
+  }
+  if (item.itemType === 'food') {
+    const parsed = parseFoodListMeta(item);
+    if (parsed === null) {
+      return null;
+    }
+    const grams = gramsForRecipeDraftRowFood(row);
+    if (grams === null) {
+      return null;
+    }
+    return scaleNutrients(parsed.nutrients, parsed.baseG, grams);
+  }
+  const rp = parseRecipeListMeta(item);
+  if (rp === null) {
+    return null;
+  }
+  if (row.servingMode === 'base') {
+    return {
+      calories: rp.nutrients.calories * q,
+      protein: rp.nutrients.protein * q,
+      fat: rp.nutrients.fat * q,
+      carbohydrates: rp.nutrients.carbohydrates * q,
+    };
+  }
+  if (row.servingMode === 'unit' && row.unitKey === 'serving') {
+    return {
+      calories: rp.nutrientsPerServing.calories * q,
+      protein: rp.nutrientsPerServing.protein * q,
+      fat: rp.nutrientsPerServing.fat * q,
+      carbohydrates: rp.nutrientsPerServing.carbohydrates * q,
+    };
+  }
+  return null;
+}
+
 const recipeDraftPreviewTotals = computed(() => {
   let total: FoodNutrients = { calories: 0, protein: 0, fat: 0, carbohydrates: 0 };
   for (const row of recipeIngredientRows.value) {
-    const food = selectedFood(row);
-    if (food === undefined) {
+    const part = nutrientsPartFromIngredientDraft(row);
+    if (part === null) {
       continue;
     }
-    const parsed = parseFoodListMeta(food);
-    const grams = gramsForRecipeDraftRow(row);
-    if (parsed === null || grams === null) {
-      continue;
-    }
-    const part = scaleNutrients(parsed.nutrients, parsed.baseG, grams);
     total = {
       calories: total.calories + part.calories,
       protein: total.protein + part.protein,
@@ -378,24 +513,38 @@ function parseRecipeIngredientWire(
   row: RecipeIngredientDraft,
   idx: number,
 ):
-  | { ok: true; value: { foodId: string; quantity: number; servingOption: Record<string, unknown> } }
+  | {
+      ok: true;
+      value:
+        | { foodId: string; quantity: number; servingOption: Record<string, unknown> }
+        | { recipeId: string; quantity: number; servingOption: Record<string, unknown> };
+    }
   | { ok: false; message: string } {
-  const food = selectedFood(row);
-  if (food === undefined || row.foodId === '') {
-    return { ok: false, message: 'Each ingredient needs a food.' };
+  const item = selectedIngredient(row);
+  if (item === undefined || row.pantryItemId === '') {
+    return { ok: false, message: 'Each ingredient needs a pantry item.' };
   }
   const q = Number(row.quantity.trim());
   if (!Number.isFinite(q) || q <= 0) {
     return { ok: false, message: 'Each ingredient needs a positive quantity.' };
   }
-  const grams = gramsForRecipeDraftRow(row);
-  if (grams === null) {
+  const part = nutrientsPartFromIngredientDraft(row);
+  if (part === null) {
+    const label = item.itemType === 'recipe' ? 'recipe' : 'food';
     return {
       ok: false,
-      message: `Ingredient ${idx + 1}: serving choice does not match that food (line up base vs. serving options).`,
+      message: `Ingredient ${idx + 1}: serving choice does not match that ${label}.`,
     };
   }
   let servingOption: Record<string, unknown>;
+  if (item.itemType === 'recipe') {
+    if (row.servingMode === 'base') {
+      servingOption = { kind: 'base' };
+    } else {
+      servingOption = { kind: 'unit', unit: 'serving' };
+    }
+    return { ok: true, value: { recipeId: row.pantryItemId, quantity: q, servingOption } };
+  }
   if (row.servingMode === 'base') {
     servingOption = { kind: 'base' };
   } else if (row.servingMode === 'unit') {
@@ -403,17 +552,23 @@ function parseRecipeIngredientWire(
   } else {
     servingOption = { kind: 'custom', label: row.customLabel.trim() };
   }
-  return { ok: true, value: { foodId: row.foodId, quantity: q, servingOption } };
+  return { ok: true, value: { foodId: row.pantryItemId, quantity: q, servingOption } };
 }
 
-async function loadFoodCatalogForRecipes(base: string): Promise<void> {
+async function loadRecipeIngredientCatalog(base: string): Promise<void> {
   try {
-    const res = await $fetch<{ items: PantryWireItem[] }>(
-      `${normalizeHealthyApiBaseUrl(base)}/pantry/items?itemType=food`,
-      { credentials: 'include' },
-    );
-    foodCatalogForRecipes.value = res.items;
-    if (recipeIngredientRows.value.length === 0 && res.items.length > 0) {
+    const [foodRes, recipeRes] = await Promise.all([
+      $fetch<{ items: PantryWireItem[] }>(
+        `${normalizeHealthyApiBaseUrl(base)}/pantry/items?itemType=food`,
+        { credentials: 'include' },
+      ),
+      $fetch<{ items: PantryWireItem[] }>(
+        `${normalizeHealthyApiBaseUrl(base)}/pantry/items?itemType=recipe`,
+        { credentials: 'include' },
+      ),
+    ]);
+    recipeIngredientCatalog.value = [...foodRes.items, ...recipeRes.items];
+    if (recipeIngredientRows.value.length === 0 && recipeIngredientCatalog.value.length > 0) {
       recipeIngredientRows.value = [makeRecipeIngredientRow()];
     } else {
       for (const row of recipeIngredientRows.value) {
@@ -421,7 +576,7 @@ async function loadFoodCatalogForRecipes(base: string): Promise<void> {
       }
     }
   } catch {
-    foodCatalogForRecipes.value = [];
+    recipeIngredientCatalog.value = [];
   }
 }
 
@@ -451,8 +606,10 @@ async function submitCreateRecipe() {
     createRecipeError.value = 'Add at least one ingredient.';
     return;
   }
-  const ingredients: { foodId: string; quantity: number; servingOption: Record<string, unknown> }[] =
-    [];
+  const ingredients: (
+    | { foodId: string; quantity: number; servingOption: Record<string, unknown> }
+    | { recipeId: string; quantity: number; servingOption: Record<string, unknown> }
+  )[] = [];
   for (let i = 0; i < recipeIngredientRows.value.length; i++) {
     const w = parseRecipeIngredientWire(recipeIngredientRows.value[i]!, i);
     if (!w.ok) {
@@ -478,9 +635,10 @@ async function submitCreateRecipe() {
     createRecipeName.value = '';
     createRecipeServings.value = '';
     createRecipeServingLabel.value = '';
-    recipeIngredientRows.value = foodCatalogForRecipes.value.length > 0 ? [makeRecipeIngredientRow()] : [];
+    recipeIngredientRows.value =
+      recipeIngredientCatalog.value.length > 0 ? [makeRecipeIngredientRow()] : [];
     await fetchItemsPayload(base);
-    await loadFoodCatalogForRecipes(base);
+    await loadRecipeIngredientCatalog(base);
     itemsError.value = null;
   } catch (err: unknown) {
     const data =
@@ -718,7 +876,7 @@ watch(tab, async () => {
   }
   await reloadItems(base);
   if (tab.value === 'recipe') {
-    await loadFoodCatalogForRecipes(base);
+    await loadRecipeIngredientCatalog(base);
   }
 });
 </script>
@@ -1027,8 +1185,7 @@ watch(tab, async () => {
       <CardHeader class="px-0 pt-0">
         <CardTitle class="text-base">Add a recipe</CardTitle>
         <CardDescription>
-          Name, icon, yield, and food ingredients. Calories and macros are computed from your foods
-          and serving choices—nothing typed by hand.
+          Name, icon, yield, and ingredients (foods or nested recipes). Calories and macros are computed from saved pantry items—nothing typed by hand.
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-3 px-0 pb-0">
@@ -1041,11 +1198,11 @@ watch(tab, async () => {
           {{ createRecipeError }}
         </div>
         <p
-          v-if="foodCatalogForRecipes.length === 0"
+          v-if="recipeIngredientCatalog.length === 0"
           class="text-muted-foreground text-sm"
           data-testid="pantry-create-recipe-no-foods"
         >
-          Save at least one food first, then you can combine foods into a recipe here.
+          Save at least one food or recipe first, then you can combine pantry items into a recipe here.
         </p>
         <form v-else class="space-y-3" @submit.prevent="submitCreateRecipe">
           <div class="grid gap-3 sm:grid-cols-2">
@@ -1107,15 +1264,15 @@ watch(tab, async () => {
             >
               <div class="grid gap-2 sm:grid-cols-2">
                 <div class="space-y-1.5 sm:col-span-2">
-                  <Label :for="`recipe-ing-food-${row.id}`">Food</Label>
+                  <Label :for="`recipe-ing-item-${row.id}`">Ingredient</Label>
                   <select
-                    :id="`recipe-ing-food-${row.id}`"
-                    v-model="row.foodId"
+                    :id="`recipe-ing-item-${row.id}`"
+                    v-model="row.pantryItemId"
                     class="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
-                    @change="onRecipeIngredientFoodChange(row)"
+                    @change="onRecipeIngredientPantryChange(row)"
                   >
-                    <option v-for="f in foodCatalogForRecipes" :key="f.id" :value="f.id">
-                      {{ f.name }}
+                    <option v-for="it in recipeIngredientCatalog" :key="it.id" :value="it.id">
+                      {{ it.name }}{{ it.itemType === 'recipe' ? ' (recipe)' : '' }}
                     </option>
                   </select>
                 </div>
@@ -1128,54 +1285,70 @@ watch(tab, async () => {
                     inputmode="decimal"
                   />
                 </div>
-                <div v-if="!foodHasServingOptions(selectedFood(row))" class="space-y-1.5">
-                  <Label>Serving</Label>
-                  <p class="text-muted-foreground text-xs">Uses this food’s base amount.</p>
-                </div>
-                <template v-else>
-                  <div class="space-y-1.5">
-                    <Label :for="`recipe-ing-serv-mode-${row.id}`">Serving type</Label>
+                <template v-if="selectedIngredient(row)?.itemType === 'recipe'">
+                  <div class="space-y-1.5 sm:col-span-2">
+                    <Label :for="`recipe-ing-rbasis-${row.id}`">Recipe amount</Label>
                     <select
-                      :id="`recipe-ing-serv-mode-${row.id}`"
-                      v-model="row.servingMode"
+                      :id="`recipe-ing-rbasis-${row.id}`"
                       class="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
+                      :value="recipeServingBasisSelect(row)"
+                      @change="onRecipeServingBasisSelectChange(row, $event)"
                     >
-                      <option value="unit">Predefined unit</option>
-                      <option value="custom">Custom label</option>
+                      <option value="batch">Full recipe yield (total batch nutrients)</option>
+                      <option value="perServing">Per labeled serving</option>
                     </select>
                   </div>
-                  <div v-if="row.servingMode === 'unit'" class="space-y-1.5">
-                    <Label :for="`recipe-ing-unit-${row.id}`">Unit</Label>
-                    <select
-                      :id="`recipe-ing-unit-${row.id}`"
-                      v-model="row.unitKey"
-                      class="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
-                    >
-                      <option
-                        v-for="u in servingUnitKeysForFood(selectedFood(row))"
-                        :key="u"
-                        :value="u"
+                </template>
+                <template v-else-if="selectedIngredient(row)?.itemType === 'food'">
+                  <div v-if="!foodHasServingOptions(selectedIngredient(row))" class="space-y-1.5">
+                    <Label>Serving</Label>
+                    <p class="text-muted-foreground text-xs">Uses this food’s base amount.</p>
+                  </div>
+                  <template v-else>
+                    <div class="space-y-1.5">
+                      <Label :for="`recipe-ing-serv-mode-${row.id}`">Serving type</Label>
+                      <select
+                        :id="`recipe-ing-serv-mode-${row.id}`"
+                        v-model="row.servingMode"
+                        class="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
                       >
-                        {{ u }}
-                      </option>
-                    </select>
-                  </div>
-                  <div v-else class="space-y-1.5 sm:col-span-2">
-                    <Label :for="`recipe-ing-custom-${row.id}`">Custom label</Label>
-                    <select
-                      :id="`recipe-ing-custom-${row.id}`"
-                      v-model="row.customLabel"
-                      class="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
-                    >
-                      <option
-                        v-for="l in customServingLabelsForFood(selectedFood(row))"
-                        :key="l"
-                        :value="l"
+                        <option value="unit">Predefined unit</option>
+                        <option value="custom">Custom label</option>
+                      </select>
+                    </div>
+                    <div v-if="row.servingMode === 'unit'" class="space-y-1.5">
+                      <Label :for="`recipe-ing-unit-${row.id}`">Unit</Label>
+                      <select
+                        :id="`recipe-ing-unit-${row.id}`"
+                        v-model="row.unitKey"
+                        class="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
                       >
-                        {{ l }}
-                      </option>
-                    </select>
-                  </div>
+                        <option
+                          v-for="u in servingUnitKeysForFood(selectedIngredient(row))"
+                          :key="u"
+                          :value="u"
+                        >
+                          {{ u }}
+                        </option>
+                      </select>
+                    </div>
+                    <div v-else class="space-y-1.5 sm:col-span-2">
+                      <Label :for="`recipe-ing-custom-${row.id}`">Custom label</Label>
+                      <select
+                        :id="`recipe-ing-custom-${row.id}`"
+                        v-model="row.customLabel"
+                        class="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
+                      >
+                        <option
+                          v-for="l in customServingLabelsForFood(selectedIngredient(row))"
+                          :key="l"
+                          :value="l"
+                        >
+                          {{ l }}
+                        </option>
+                      </select>
+                    </div>
+                  </template>
                 </template>
               </div>
               <Button type="button" variant="outline" @click="removeRecipeIngredientRow(row.id)">

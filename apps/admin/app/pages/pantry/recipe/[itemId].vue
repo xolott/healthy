@@ -24,7 +24,8 @@ type FoodNutrients = {
 };
 
 type IngredientRow = {
-  foodName: string;
+  ingredientKind: string;
+  displayName: string;
   quantity: number;
   servingOption: Record<string, unknown>;
 };
@@ -88,7 +89,9 @@ async function load() {
         iconKey: string;
         metadata: Record<string, unknown>;
         ingredients?: {
-          foodName: string;
+          ingredientKind: string;
+          pantryItemId: string;
+          displayName: string;
           quantity: number;
           servingOption: Record<string, unknown>;
         }[];
@@ -138,7 +141,14 @@ async function load() {
 
     const rawIng = res.item.ingredients ?? [];
     const ingredients: IngredientRow[] = rawIng.map((r) => ({
-      foodName: r.foodName,
+      ingredientKind:
+        typeof r.ingredientKind === "string" ? r.ingredientKind : "food",
+      displayName:
+        typeof r.displayName === "string"
+          ? r.displayName
+          : typeof (r as { foodName?: string }).foodName === "string"
+            ? (r as { foodName: string }).foodName
+            : "",
       quantity: r.quantity,
       servingOption:
         r.servingOption !== null && typeof r.servingOption === "object"
@@ -259,7 +269,13 @@ watch(
               :key="i"
               class="flex flex-wrap justify-between gap-2 py-2"
             >
-              <span class="font-medium">{{ ing.foodName }}</span>
+              <span class="flex flex-wrap items-baseline gap-2 font-medium">
+                {{ ing.displayName }}
+                <span
+                  v-if="ing.ingredientKind === 'recipe'"
+                  class="bg-muted text-muted-foreground rounded px-1.5 py-0.5 text-xs font-normal"
+                  >Nested recipe</span>
+              </span>
               <span class="text-muted-foreground tabular-nums">
                 × {{ ing.quantity }}
                 <span class="text-xs">({{ servingOptionLabel(ing.servingOption) }})</span>

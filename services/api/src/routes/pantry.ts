@@ -61,10 +61,11 @@ const recipeServingOptionBodySchema = {
 const recipeIngredientResponseSchema = {
   type: 'object',
   additionalProperties: false,
-  required: ['foodId', 'foodName', 'quantity', 'servingOption'],
+  required: ['ingredientKind', 'pantryItemId', 'displayName', 'quantity', 'servingOption'],
   properties: {
-    foodId: { type: 'string' },
-    foodName: { type: 'string' },
+    ingredientKind: { type: 'string', enum: ['food', 'recipe'] },
+    pantryItemId: { type: 'string' },
+    displayName: { type: 'string' },
     quantity: { type: 'number' },
     servingOption: recipeServingOptionBodySchema,
   },
@@ -86,9 +87,10 @@ const createRecipeBodySchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['foodId', 'quantity', 'servingOption'],
+        required: ['quantity', 'servingOption'],
         properties: {
           foodId: { type: 'string', format: 'uuid' },
+          recipeId: { type: 'string', format: 'uuid' },
           quantity: { type: 'number' },
           servingOption: recipeServingOptionBodySchema,
         },

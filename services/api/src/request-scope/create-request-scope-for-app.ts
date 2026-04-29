@@ -6,12 +6,13 @@ import { validateFirstOwnerSetupPayload } from '../auth/auth-use-cases.js';
 import { createAuthUseCasesForDatabase } from '../auth/auth-use-case-scope.js';
 import { PANTRY_ICON_KEYS } from '../pantry/pantry-icon-keys.js';
 import {
-  extractUniqueFoodIdsFromRecipeBody,
+  extractIngredientPantryIdsFromRecipeBody,
   planCreateRecipe,
 } from '../pantry/create-recipe-payload.js';
 import { parseCreateFoodPayload } from '../pantry/create-food-payload.js';
 import {
-  findFoodPantryItemsForOwner,
+  RecipeIngredientCycleError,
+  findPantryItemsForOwnerByIds,
   findPantryItemForOwner,
   insertOwnedPantryItem,
   insertRecipeWithIngredients,
@@ -61,18 +62,23 @@ async function loadRecipeIngredientsWire(
   if (ingRows.length === 0) {
     return [];
   }
-  const foodIds = [...new Set(ingRows.map((r) => r.ingredientFoodPantryItemId))];
-  const foodRows = await db
-    .select({ id: pantryItems.id, name: pantryItems.name })
+  const pantryIds = [...new Set(ingRows.map((r) => r.ingredientFoodPantryItemId))];
+  const pantryRows = await db
+    .select({ id: pantryItems.id, name: pantryItems.name, itemType: pantryItems.itemType })
     .from(pantryItems)
-    .where(inArray(pantryItems.id, foodIds));
-  const nameById = new Map(foodRows.map((f) => [f.id, f.name]));
-  return ingRows.map((r) => ({
-    foodId: r.ingredientFoodPantryItemId,
-    foodName: nameById.get(r.ingredientFoodPantryItemId) ?? 'Food',
-    quantity: r.quantity,
-    servingOption: servingOptionFromPersistedRow(r),
-  }));
+    .where(inArray(pantryItems.id, pantryIds));
+  const metaById = new Map(pantryRows.map((p) => [p.id, p]));
+  return ingRows.map((r) => {
+    const p = metaById.get(r.ingredientFoodPantryItemId);
+    const ingredientKind = p?.itemType === 'recipe' ? 'recipe' : 'food';
+    return {
+      ingredientKind,
+      pantryItemId: r.ingredientFoodPantryItemId,
+      displayName: p?.name ?? 'Ingredient',
+      quantity: r.quantity,
+      servingOption: servingOptionFromPersistedRow(r),
+    };
+  });
 }
 
 /**
@@ -262,8 +268,8 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
         if (adapter === null) {
           return { kind: 'persistence_not_configured' };
         }
-        const foodIds = extractUniqueFoodIdsFromRecipeBody(rawBody);
-        if (foodIds === null) {
+        const pantryIds = extractIngredientPantryIdsFromRecipeBody(rawBody);
+        if (pantryIds === null) {
           return {
             kind: 'invalid_input',
             field: 'ingredients',
@@ -271,7 +277,7 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
           };
         }
         try {
-          const rows = await findFoodPantryItemsForOwner(adapter.db, ownerUserId, foodIds);
+          const rows = await findPantryItemsForOwnerByIds(adapter.db, ownerUserId, pantryIds);
           const map = new Map(rows.map((r) => [r.id, r]));
           const planned = planCreateRecipe(rawBody, map);
           if (planned.kind === 'invalid_input') {
@@ -288,6 +294,13 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
           const ingredients = await loadRecipeIngredientsWire(adapter.db, row.id);
           return { kind: 'ok', item: { ...base, ingredients } };
         } catch (err) {
+          if (err instanceof RecipeIngredientCycleError) {
+            return {
+              kind: 'invalid_input',
+              field: 'ingredients',
+              message: err.message,
+            };
+          }
           app.log.warn({ err }, 'pantry create recipe failed');
           return { kind: 'persistence_unavailable' };
         }

@@ -650,7 +650,12 @@ describe('Pantry routes (integration)', () => {
         item: {
           id: string;
           metadata: Record<string, unknown>;
-          ingredients?: { foodId: string; foodName: string; quantity: number }[];
+          ingredients?: {
+            ingredientKind: string;
+            pantryItemId: string;
+            displayName: string;
+            quantity: number;
+          }[];
         };
       };
       expect(created.item.metadata['kind']).toBe('recipe');
@@ -678,11 +683,103 @@ describe('Pantry routes (integration)', () => {
       });
       expect(detail.statusCode).toBe(200);
       const detailBody = JSON.parse(detail.payload) as {
-        item: { ingredients?: { foodName: string }[] };
+        item: { ingredients?: { displayName: string }[] };
       };
-      expect(detailBody.item.ingredients?.map((i) => i.foodName).sort()).toEqual(
+      expect(detailBody.item.ingredients?.map((i) => i.displayName).sort()).toEqual(
         ['Egg', 'Rice'].sort(),
       );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('POST /pantry/items/recipe aggregates nutrients from nested recipe ingredients', async () => {
+    const owner = await insertPersistedUser(harness.db, {
+      email: 'nested-recipe@example.com',
+      passwordHash: await hashPasswordArgon2id(goodPassword),
+      displayName: 'Nested',
+      role: 'owner',
+      status: 'active',
+    });
+    const { rawToken, tokenHash } = generateSessionToken();
+    await insertPersistedSession(harness.db, {
+      userId: owner.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    const app = await buildApp();
+    try {
+      let res = await app.inject({
+        method: 'POST',
+        url: '/pantry/items/food',
+        headers: {
+          authorization: `Bearer ${rawToken}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        payload: {
+          name: 'Oats',
+          iconKey: 'food_bowl',
+          baseAmount: { value: 40, unit: 'g' },
+          nutrients: { calories: 150, protein: 5, fat: 3, carbohydrates: 27 },
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const oatsId = (JSON.parse(res.payload) as { item: { id: string } }).item.id;
+
+      res = await app.inject({
+        method: 'POST',
+        url: '/pantry/items/recipe',
+        headers: {
+          authorization: `Bearer ${rawToken}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        payload: {
+          name: 'Oat bowl',
+          iconKey: 'recipe_pot',
+          servings: 1,
+          ingredients: [{ foodId: oatsId, quantity: 1, servingOption: { kind: 'base' } }],
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const inner = JSON.parse(res.payload) as {
+        item: { id: string; metadata: Record<string, unknown> };
+      };
+      const innerCal = (inner.item.metadata['nutrients'] as Record<string, unknown>)['calories'];
+      expect(typeof innerCal).toBe('number');
+
+      res = await app.inject({
+        method: 'POST',
+        url: '/pantry/items/recipe',
+        headers: {
+          authorization: `Bearer ${rawToken}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        payload: {
+          name: 'Wrapped oat bowl',
+          iconKey: 'recipe_pot',
+          servings: 1,
+          ingredients: [
+            {
+              recipeId: inner.item.id,
+              quantity: 1,
+              servingOption: { kind: 'base' },
+            },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const outer = JSON.parse(res.payload) as {
+        item: {
+          metadata: Record<string, unknown>;
+          ingredients?: { ingredientKind: string }[];
+        };
+      };
+      expect(outer.item.ingredients?.[0]?.ingredientKind).toBe('recipe');
+      expect((outer.item.metadata['nutrients'] as Record<string, unknown>)['calories']).toEqual(innerCal);
     } finally {
       await app.close();
     }

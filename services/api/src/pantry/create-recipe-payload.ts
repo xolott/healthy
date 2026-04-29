@@ -26,6 +26,7 @@ export type RecipeItemMetadataWire = {
 
 export type CreateRecipeIngredientForRow = {
   ingredientFoodPantryItemId: string;
+  ingredientKind: 'food' | 'recipe';
   sortOrder: number;
   servingKind: 'base' | 'unit' | 'custom';
   servingUnitKey: string | null;
@@ -141,6 +142,60 @@ function parseIngredientServingOption(
     return { kind: 'custom', label: label.trim() };
   }
   return { field: `${fieldPrefix}.servingOption.kind`, message: 'Must be base, unit, or custom.' };
+}
+
+function asRecipeMetadata(row: PantryItemRow): RecipeItemMetadataWire | null {
+  if (row.itemType !== 'recipe') {
+    return null;
+  }
+  const meta = row.metadata;
+  if (meta === null || typeof meta !== 'object' || Array.isArray(meta)) {
+    return null;
+  }
+  const m = meta as Record<string, unknown>;
+  if (m['kind'] !== 'recipe') {
+    return null;
+  }
+  const servings = m['servings'];
+  const nutrients = m['nutrients'];
+  const nutrientsPerServing = m['nutrientsPerServing'];
+  if (
+    typeof servings !== 'number' ||
+    servings <= 0 ||
+    nutrients === null ||
+    typeof nutrients !== 'object' ||
+    nutrientsPerServing === null ||
+    typeof nutrientsPerServing !== 'object'
+  ) {
+    return null;
+  }
+  const n = nutrients as Record<string, unknown>;
+  const nps = nutrientsPerServing as Record<string, unknown>;
+  for (const nk of [n, nps]) {
+    for (const k of ['calories', 'protein', 'fat', 'carbohydrates'] as const) {
+      if (typeof nk[k] !== 'number') {
+        return null;
+      }
+    }
+  }
+  const labelRes = typeof m['servingLabel'] === 'string' ? (m['servingLabel'] as string) : 'serving';
+  return {
+    kind: 'recipe',
+    servings,
+    servingLabel: labelRes,
+    nutrients: {
+      calories: n['calories'] as number,
+      protein: n['protein'] as number,
+      fat: n['fat'] as number,
+      carbohydrates: n['carbohydrates'] as number,
+    },
+    nutrientsPerServing: {
+      calories: nps['calories'] as number,
+      protein: nps['protein'] as number,
+      fat: nps['fat'] as number,
+      carbohydrates: nps['carbohydrates'] as number,
+    },
+  };
 }
 
 function asFoodMetadata(row: PantryItemRow): FoodItemMetadataWire | null {
@@ -286,13 +341,38 @@ function scaleNutrientsScalar(n: FoodNutrientsWire, factor: number): FoodNutrien
   };
 }
 
+/** Uses persisted recipe totals (nested contributions already aggregated). */
+export function nutrientsForRecipeIngredientServing(
+  recipe: RecipeItemMetadataWire,
+  quantity: number,
+  serving: RecipeIngredientServingWire,
+  fieldPrefix: string,
+): FoodNutrientsWire | { field: string; message: string } {
+  if (serving.kind === 'custom') {
+    return {
+      field: `${fieldPrefix}.servingOption`,
+      message: 'Recipe ingredients support base (full yield) or unit serving only.',
+    };
+  }
+  if (serving.kind === 'base') {
+    return scaleNutrientsScalar(recipe.nutrients, quantity);
+  }
+  if (serving.unit !== 'serving') {
+    return {
+      field: `${fieldPrefix}.servingOption`,
+      message: 'Recipe ingredients only support unit “serving” (per labeled serving).',
+    };
+  }
+  return scaleNutrientsScalar(recipe.nutrientsPerServing, quantity);
+}
+
 export type ParseCreateRecipePayloadResult =
   | { kind: 'ok'; value: CreateRecipePlan }
   | { kind: 'invalid_input'; field: string; message: string };
 
 export function planCreateRecipe(
   rawBody: unknown,
-  foodRowsById: Map<string, PantryItemRow>,
+  pantryRowsById: Map<string, PantryItemRow>,
 ): ParseCreateRecipePayloadResult {
   if (rawBody === null || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
     return { kind: 'invalid_input', field: 'body', message: 'Expected a JSON object.' };
@@ -335,9 +415,11 @@ export function planCreateRecipe(
     };
   }
 
-  type ParsedIng = { foodId: string; quantity: number; serving: RecipeIngredientServingWire };
+  type ParsedIng =
+    | { kind: 'food'; pantryItemId: string; quantity: number; serving: RecipeIngredientServingWire }
+    | { kind: 'recipe'; pantryItemId: string; quantity: number; serving: RecipeIngredientServingWire };
   const parsedLines: ParsedIng[] = [];
-  const uniqueFoodIds = new Set<string>();
+  const uniquePantryIds = new Set<string>();
 
   for (let i = 0; i < ingRaw.length; i++) {
     const entry = ingRaw[i];
@@ -346,9 +428,22 @@ export function planCreateRecipe(
       return { kind: 'invalid_input', field: fp, message: 'Must be an object.' };
     }
     const o = entry as Record<string, unknown>;
-    const foodIdRes = parseUuid(o['foodId'], `${fp}.foodId`);
-    if (typeof foodIdRes !== 'string') {
-      return { kind: 'invalid_input', field: `${fp}.foodId`, message: foodIdRes.message };
+    const rawFoodId = o['foodId'];
+    const rawRecipeId = o['recipeId'];
+    const hasFood = typeof rawFoodId === 'string';
+    const hasRecipe = typeof rawRecipeId === 'string';
+    if (hasFood === hasRecipe) {
+      return {
+        kind: 'invalid_input',
+        field: fp,
+        message: 'Exactly one of foodId or recipeId is required per ingredient.',
+      };
+    }
+    const idField = hasFood ? `${fp}.foodId` : `${fp}.recipeId`;
+    const idRaw = hasFood ? rawFoodId : rawRecipeId;
+    const idRes = parseUuid(idRaw, idField);
+    if (typeof idRes !== 'string') {
+      return { kind: 'invalid_input', field: idField, message: idRes.message };
     }
     const qRes = parseQuantity(o['quantity'], `${fp}.quantity`);
     if (typeof qRes !== 'number') {
@@ -358,16 +453,21 @@ export function planCreateRecipe(
     if ('field' in servingRes) {
       return { kind: 'invalid_input', field: servingRes.field, message: servingRes.message };
     }
-    uniqueFoodIds.add(foodIdRes);
-    parsedLines.push({ foodId: foodIdRes, quantity: qRes, serving: servingRes });
+    uniquePantryIds.add(idRes);
+    parsedLines.push({
+      kind: hasFood ? 'food' : 'recipe',
+      pantryItemId: idRes,
+      quantity: qRes,
+      serving: servingRes,
+    });
   }
 
-  for (const id of uniqueFoodIds) {
-    if (!foodRowsById.has(id)) {
+  for (const id of uniquePantryIds) {
+    if (!pantryRowsById.has(id)) {
       return {
         kind: 'invalid_input',
         field: 'ingredients',
-        message: 'Each ingredient must reference an existing food you own.',
+        message: 'Each ingredient must reference an existing pantry food or recipe you own.',
       };
     }
   }
@@ -378,33 +478,66 @@ export function planCreateRecipe(
   for (let i = 0; i < parsedLines.length; i++) {
     const line = parsedLines[i]!;
     const fp = `ingredients[${i}]`;
-    const row = foodRowsById.get(line.foodId);
+    const row = pantryRowsById.get(line.pantryItemId);
     if (row === undefined) {
-      return { kind: 'invalid_input', field: `${fp}.foodId`, message: 'Unknown food.' };
-    }
-    const foodMeta = asFoodMetadata(row);
-    if (foodMeta === null) {
-      return { kind: 'invalid_input', field: `${fp}.foodId`, message: 'Item is not a food.' };
+      const idField = line.kind === 'food' ? `${fp}.foodId` : `${fp}.recipeId`;
+      return { kind: 'invalid_input', field: idField, message: 'Unknown pantry item.' };
     }
 
-    const gramsRes = gramsForIngredientServing(foodMeta, line.quantity, line.serving, fp);
-    if (typeof gramsRes === 'object') {
-      return { kind: 'invalid_input', field: gramsRes.field, message: gramsRes.message };
-    }
-
-    const scaled = scaleNutrientsToGrams(foodMeta.nutrients, foodMeta.baseAmountGrams, gramsRes);
-    if (scaled === null) {
-      return {
-        kind: 'invalid_input',
-        field: `${fp}.quantity`,
-        message: 'Could not scale nutrients for this ingredient amount.',
-      };
-    }
-
-    totals = sumNutrients(totals, scaled);
     const sf = servingToRowFields(line.serving);
+
+    if (line.kind === 'food') {
+      const foodMeta = asFoodMetadata(row);
+      if (foodMeta === null) {
+        return { kind: 'invalid_input', field: `${fp}.foodId`, message: 'Item is not a food.' };
+      }
+
+      const gramsRes = gramsForIngredientServing(foodMeta, line.quantity, line.serving, fp);
+      if (typeof gramsRes === 'object') {
+        return { kind: 'invalid_input', field: gramsRes.field, message: gramsRes.message };
+      }
+
+      const scaled = scaleNutrientsToGrams(foodMeta.nutrients, foodMeta.baseAmountGrams, gramsRes);
+      if (scaled === null) {
+        return {
+          kind: 'invalid_input',
+          field: `${fp}.quantity`,
+          message: 'Could not scale nutrients for this ingredient amount.',
+        };
+      }
+
+      totals = sumNutrients(totals, scaled);
+      ingredientRows.push({
+        ingredientFoodPantryItemId: line.pantryItemId,
+        ingredientKind: 'food',
+        sortOrder: i,
+        servingKind: sf.servingKind,
+        servingUnitKey: sf.servingUnitKey,
+        servingCustomLabel: sf.servingCustomLabel,
+        quantity: line.quantity,
+      });
+      continue;
+    }
+
+    const recipeMeta = asRecipeMetadata(row);
+    if (recipeMeta === null) {
+      return { kind: 'invalid_input', field: `${fp}.recipeId`, message: 'Item is not a recipe.' };
+    }
+
+    const scaledRecipe = nutrientsForRecipeIngredientServing(
+      recipeMeta,
+      line.quantity,
+      line.serving,
+      fp,
+    );
+    if ('field' in scaledRecipe) {
+      return { kind: 'invalid_input', field: scaledRecipe.field, message: scaledRecipe.message };
+    }
+
+    totals = sumNutrients(totals, scaledRecipe);
     ingredientRows.push({
-      ingredientFoodPantryItemId: line.foodId,
+      ingredientFoodPantryItemId: line.pantryItemId,
+      ingredientKind: 'recipe',
       sortOrder: i,
       servingKind: sf.servingKind,
       servingUnitKey: sf.servingUnitKey,
@@ -434,8 +567,8 @@ export function planCreateRecipe(
   };
 }
 
-/** Collects valid food UUIDs from `ingredients` for preloading Food rows (deduped). */
-export function extractUniqueFoodIdsFromRecipeBody(raw: unknown): string[] | null {
+/** Collects pantry UUIDs from each ingredient (`foodId` or `recipeId`) for preloading rows (deduped). */
+export function extractIngredientPantryIdsFromRecipeBody(raw: unknown): string[] | null {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     return null;
   }
@@ -448,11 +581,17 @@ export function extractUniqueFoodIdsFromRecipeBody(raw: unknown): string[] | nul
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
       return null;
     }
-    const idRaw = (entry as Record<string, unknown>)['foodId'];
-    if (typeof idRaw !== 'string') {
+    const o = entry as Record<string, unknown>;
+    const rawFoodId = o['foodId'];
+    const rawRecipeId = o['recipeId'];
+    const hasFood = typeof rawFoodId === 'string';
+    const hasRecipe = typeof rawRecipeId === 'string';
+    if (hasFood === hasRecipe) {
       return null;
     }
-    const idRes = parseUuid(idRaw, 'foodId');
+    const idRaw = hasFood ? rawFoodId : rawRecipeId;
+    const idField = hasFood ? 'foodId' : 'recipeId';
+    const idRes = parseUuid(idRaw, idField);
     if (typeof idRes !== 'string') {
       return null;
     }

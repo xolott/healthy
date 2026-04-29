@@ -93,8 +93,9 @@ export type PantryItemWire = {
 };
 
 export type RecipeIngredientWire = {
-  foodId: string;
-  foodName: string;
+  ingredientKind: 'food' | 'recipe';
+  pantryItemId: string;
+  displayName: string;
   quantity: number;
   servingOption:
     | { kind: 'base' }

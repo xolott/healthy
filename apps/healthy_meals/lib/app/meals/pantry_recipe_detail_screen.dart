@@ -233,7 +233,7 @@ class _MealsPantryRecipeDetailScreenState extends State<MealsPantryRecipeDetailS
                 const SizedBox(height: 16),
                 const Text('Ingredients', style: TextStyle(fontWeight: FontWeight.w600)),
                 ..._ingredients.map((ing) {
-                  final name = ing['foodName'] as String? ?? '';
+                  final name = ing['displayName'] as String? ?? ing['foodName'] as String? ?? '';
                   final q = ing['quantity'];
                   final so = ing['servingOption'];
                   final qStr = q is num ? q.toString() : '?';

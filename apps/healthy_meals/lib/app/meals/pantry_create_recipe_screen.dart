@@ -7,33 +7,41 @@ import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
 import '../../shared/widgets/shell_scaffold.dart';
 
-class _FoodOption {
-  const _FoodOption({required this.id, required this.name, required this.metadata});
+class _PantryOption {
+  const _PantryOption({
+    required this.id,
+    required this.name,
+    required this.itemType,
+    required this.metadata,
+  });
 
   final String id;
   final String name;
+  final String itemType;
   final Map<String, dynamic> metadata;
 }
 
 class _IngRow {
-  _IngRow({required this.foodId, required String qty})
+  _IngRow({required this.pantryItemId, required String qty})
       : qtyCtrl = TextEditingController(text: qty),
         mode = 'base',
         unitKey = '',
-        customLabel = '';
+        customLabel = '',
+        recipeUsesBatchYield = true;
 
-  String foodId;
+  String pantryItemId;
   final TextEditingController qtyCtrl;
   String mode;
   String unitKey;
   String customLabel;
+  bool recipeUsesBatchYield;
 
   void dispose() {
     qtyCtrl.dispose();
   }
 }
 
-/// Create recipe from saved foods (POST `/pantry/items/recipe`).
+/// Create recipe from saved foods and/or nested recipes (POST `/pantry/items/recipe`).
 class MealsPantryCreateRecipeScreen extends StatefulWidget {
   const MealsPantryCreateRecipeScreen({super.key});
 
@@ -53,7 +61,7 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
   final List<String> _iconKeys = [];
   String _iconKey = '';
 
-  final List<_FoodOption> _foods = [];
+  final List<_PantryOption> _pantryCatalog = [];
   final List<_IngRow> _rows = [];
 
   @override
@@ -106,17 +114,22 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
   }
 
   Map<String, dynamic>? _metaForId(String id) {
-    for (final f in _foods) {
-      if (f.id == id) {
-        return f.metadata;
+    for (final p in _pantryCatalog) {
+      if (p.id == id) {
+        return p.metadata;
       }
     }
     return null;
   }
 
   void _syncRowMode(_IngRow row) {
-    final meta = _metaForId(row.foodId);
+    final meta = _metaForId(row.pantryItemId);
     if (meta == null) {
+      return;
+    }
+    if (meta['kind'] == 'recipe') {
+      row.mode = row.recipeUsesBatchYield ? 'base' : 'unit';
+      row.unitKey = 'serving';
       return;
     }
     if (!_foodHasOptions(meta)) {
@@ -189,34 +202,77 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
         }
       }
 
-      final foodUri = Uri.parse('$base/pantry/items?itemType=food');
-      final foodRes = await http.get(
-        foodUri,
-        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-      );
-      if (foodRes.statusCode != 200) {
-        setState(() {
-          _loading = false;
-          _refError = 'Unable to load foods.';
-        });
-        return;
+      Future<Map<String, dynamic>> fetchItems(String itemType) async {
+        final uri = Uri.parse('$base/pantry/items').replace(queryParameters: {'itemType': itemType});
+        final res = await http.get(
+          uri,
+          headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+        );
+        if (res.statusCode != 200) {
+          throw FormatException(itemType);
+        }
+        final body = jsonDecode(res.body);
+        if (body is! Map<String, dynamic>) {
+          throw const FormatException('items');
+        }
+        return body;
       }
-      final foodBody = jsonDecode(foodRes.body);
-      if (foodBody is! Map<String, dynamic>) {
-        throw const FormatException('foods');
-      }
-      final items = foodBody['items'];
-      _foods.clear();
-      if (items is List<dynamic>) {
-        for (final e in items) {
+
+      final foodBody = await fetchItems('food');
+      final recipeBody = await fetchItems('recipe');
+
+      _pantryCatalog.clear();
+
+      final foodItems = foodBody['items'];
+      if (foodItems is List<dynamic>) {
+        for (final e in foodItems) {
           if (e is! Map<String, dynamic>) {
             continue;
           }
           final id = e['id'];
           final name = e['name'];
           final meta = e['metadata'];
-          if (id is String && name is String && meta is Map<String, dynamic> && meta['kind'] == 'food') {
-            _foods.add(_FoodOption(id: id, name: name, metadata: Map<String, dynamic>.from(meta)));
+          final itemType = e['itemType'];
+          if (id is String &&
+              name is String &&
+              meta is Map<String, dynamic> &&
+              meta['kind'] == 'food' &&
+              itemType == 'food') {
+            _pantryCatalog.add(
+              _PantryOption(
+                id: id,
+                name: name,
+                itemType: 'food',
+                metadata: Map<String, dynamic>.from(meta),
+              ),
+            );
+          }
+        }
+      }
+
+      final recipeItems = recipeBody['items'];
+      if (recipeItems is List<dynamic>) {
+        for (final e in recipeItems) {
+          if (e is! Map<String, dynamic>) {
+            continue;
+          }
+          final id = e['id'];
+          final name = e['name'];
+          final meta = e['metadata'];
+          final itemType = e['itemType'];
+          if (id is String &&
+              name is String &&
+              meta is Map<String, dynamic> &&
+              meta['kind'] == 'recipe' &&
+              itemType == 'recipe') {
+            _pantryCatalog.add(
+              _PantryOption(
+                id: id,
+                name: name,
+                itemType: 'recipe',
+                metadata: Map<String, dynamic>.from(meta),
+              ),
+            );
           }
         }
       }
@@ -225,8 +281,8 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
         r.dispose();
       }
       _rows.clear();
-      if (_foods.isNotEmpty) {
-        final r = _IngRow(foodId: _foods.first.id, qty: '1');
+      if (_pantryCatalog.isNotEmpty) {
+        final r = _IngRow(pantryItemId: _pantryCatalog.first.id, qty: '1');
         _syncRowMode(r);
         _rows.add(r);
       }
@@ -243,11 +299,11 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
   }
 
   void _addRow() {
-    if (_foods.isEmpty) {
+    if (_pantryCatalog.isEmpty) {
       return;
     }
     setState(() {
-      final r = _IngRow(foodId: _foods.first.id, qty: '1');
+      final r = _IngRow(pantryItemId: _pantryCatalog.first.id, qty: '1');
       _syncRowMode(r);
       _rows.add(r);
     });
@@ -286,9 +342,9 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
     final ingredients = <Map<String, dynamic>>[];
     for (var i = 0; i < _rows.length; i++) {
       final row = _rows[i];
-      final meta = _metaForId(row.foodId);
+      final meta = _metaForId(row.pantryItemId);
       if (meta == null) {
-        setState(() => _formError = 'Each ingredient needs a food.');
+        setState(() => _formError = 'Each ingredient needs a pantry item.');
         return;
       }
       final q = num.tryParse(row.qtyCtrl.text.trim());
@@ -296,19 +352,30 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
         setState(() => _formError = 'Each ingredient needs a positive quantity.');
         return;
       }
-      Map<String, dynamic> servingOption;
-      if (!_foodHasOptions(meta)) {
-        servingOption = {'kind': 'base'};
-      } else if (row.mode == 'unit') {
-        servingOption = {'kind': 'unit', 'unit': row.unitKey};
+
+      if (meta['kind'] == 'recipe') {
+        final servingOption =
+            row.recipeUsesBatchYield ? <String, dynamic>{'kind': 'base'} : <String, dynamic>{'kind': 'unit', 'unit': 'serving'};
+        ingredients.add({
+          'recipeId': row.pantryItemId,
+          'quantity': q,
+          'servingOption': servingOption,
+        });
       } else {
-        servingOption = {'kind': 'custom', 'label': row.customLabel};
+        Map<String, dynamic> servingOption;
+        if (!_foodHasOptions(meta)) {
+          servingOption = {'kind': 'base'};
+        } else if (row.mode == 'unit') {
+          servingOption = {'kind': 'unit', 'unit': row.unitKey};
+        } else {
+          servingOption = {'kind': 'custom', 'label': row.customLabel};
+        }
+        ingredients.add({
+          'foodId': row.pantryItemId,
+          'quantity': q,
+          'servingOption': servingOption,
+        });
       }
-      ingredients.add({
-        'foodId': row.foodId,
-        'quantity': q,
-        'servingOption': servingOption,
-      });
     }
 
     final base = await _resolveBaseUrl();
@@ -392,8 +459,8 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                           style: const TextStyle(color: Colors.red),
                         ),
                       ),
-                    if (_foods.isEmpty)
-                      const Text('Save at least one food in your pantry first.')
+                    if (_pantryCatalog.isEmpty)
+                      const Text('Save at least one food or recipe in your pantry first.')
                     else ...[
                       TextField(
                         controller: _nameCtrl,
@@ -442,8 +509,9 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                       const Text('Ingredients', style: TextStyle(fontWeight: FontWeight.w600)),
                       ...List.generate(_rows.length, (i) {
                         final row = _rows[i];
-                        final meta = _metaForId(row.foodId) ?? {};
-                        final hasOpt = _foodHasOptions(meta);
+                        final meta = _metaForId(row.pantryItemId) ?? {};
+                        final isRecipe = meta['kind'] == 'recipe';
+                        final hasOpt = !isRecipe && _foodHasOptions(meta);
                         return Card(
                           margin: const EdgeInsets.symmetric(vertical: 6),
                           child: Padding(
@@ -452,17 +520,26 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 DropdownButton<String>(
-                                  value: row.foodId.isEmpty ? null : row.foodId,
+                                  value: row.pantryItemId.isEmpty ? null : row.pantryItemId,
                                   isExpanded: true,
-                                  items: _foods
-                                      .map((f) => DropdownMenuItem(value: f.id, child: Text(f.name)))
+                                  items: _pantryCatalog
+                                      .map(
+                                        (p) => DropdownMenuItem(
+                                          value: p.id,
+                                          child: Text(
+                                            p.itemType == 'recipe' ? '${p.name} (recipe)' : p.name,
+                                            style: const TextStyle(fontSize: 13),
+                                          ),
+                                        ),
+                                      )
                                       .toList(),
                                   onChanged: (v) {
                                     if (v == null) {
                                       return;
                                     }
                                     setState(() {
-                                      row.foodId = v;
+                                      row.pantryItemId = v;
+                                      row.recipeUsesBatchYield = true;
                                       _syncRowMode(row);
                                     });
                                   },
@@ -472,7 +549,33 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                                   decoration: const InputDecoration(labelText: 'Quantity'),
                                   keyboardType: TextInputType.number,
                                 ),
-                                if (hasOpt) ...[
+                                if (isRecipe)
+                                  DropdownButton<bool>(
+                                    value: row.recipeUsesBatchYield,
+                                    isExpanded: true,
+                                    items: const [
+                                      DropdownMenuItem(value: true, child: Text('Full recipe yield')),
+                                      DropdownMenuItem(value: false, child: Text('Per labeled serving')),
+                                    ],
+                                    onChanged: (v) {
+                                      if (v == null) {
+                                        return;
+                                      }
+                                      setState(() {
+                                        row.recipeUsesBatchYield = v;
+                                        _syncRowMode(row);
+                                      });
+                                    },
+                                  ),
+                                if (!isRecipe && !hasOpt)
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 4),
+                                    child: Text(
+                                      'Uses this food’s base amount.',
+                                      style: TextStyle(color: Colors.black54, fontSize: 12),
+                                    ),
+                                  ),
+                                if (!isRecipe && hasOpt) ...[
                                   DropdownButton<String>(
                                     value: row.mode,
                                     isExpanded: true,
