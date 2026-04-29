@@ -53,9 +53,9 @@ deterministic hashing and session collaborators. Implemented as
 `createAuthUseCasesForDatabase`; `AuthMeUser` is re-exported for consumers that anchor
 on this module.
 
-`createRequestScopeForApp` invokes that factory with `app.databaseAdapter.db`
-when persistence is configured. Routes consume Request Scope capabilities
-only—they do not import this factory.
+`createRequestScopeForApp` invokes that factory with the configured **Database Adapter**'s
+Drizzle client (`app.databaseAdapter.db`) when persistence is configured. Routes
+consume Request Scope capabilities only—they do not import this factory.
 
 Policy tests construct `createAuthUseCases` with the Auth Test Adapter directly.
 Repository shape in `@healthy/db` is unchanged in this seam.
@@ -68,21 +68,26 @@ and status work, and construction of capabilities that return closed outcome
 unions—not HTTP responses.
 
 Routes own HTTP translation (schemas, status codes, headers) and cookie
-mutation; they depend on Request Scope only for capabilities and outcomes.
-They do not import auth use-case factories or open persistence handles.
+mutation. They depend on Request Scope only for capabilities and **closed
+outcomes**—including persistence gates such as `persistence_not_configured` or
+`persistence_unavailable`—and translate those outcomes to HTTP. They do not
+import auth use-case factories, open persistence handles, or participate in
+Database Adapter construction or teardown.
 
-Request Scope hides process-owned database lifecycle from callers; pooling or
-shutdown-oriented refinements belong inside `@healthy/db` / the adapter seam, not
-in routes. Decision record: `docs/adr/0001-request-scope-boundary.md`.
+Request Scope obtains persistence through the Database Adapter but hides its
+lifecycle from routes; pooling or shutdown-oriented refinements belong inside the
+Database Adapter and Request Scope implementation, not in routes. Decision
+record: `docs/adr/0001-request-scope-boundary.md`.
 
 ### Database Adapter
 
-The process-owned persistence lifecycle object for a Healthy API app. It pairs a
-typed Drizzle database with shutdown behavior for the underlying PostgreSQL
-client.
+**Canonical term** for the API's app-owned persistence lifecycle: the
+process-owned object (Fastify `databaseAdapter` when `DATABASE_URL` is set) that
+pairs a typed Drizzle database with shutdown behavior for the underlying
+PostgreSQL client.
 
-Request Scope depends on Database Adapter-backed capabilities; routes depend on
-Request Scope and do not own database construction, pooling, or teardown.
+Request Scope is built on Database Adapter-backed capabilities. Routes depend on
+Request Scope outcomes, not on database construction, pooling, or teardown.
 
 ### Active Owner
 

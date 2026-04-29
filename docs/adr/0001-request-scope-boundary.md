@@ -10,7 +10,7 @@ The API needs a single, request-scoped seam between HTTP routes and persistence-
 
 ## Decision
 
-**Routes own HTTP concerns:** JSON request/response schemas, status codes, headers, and cookie mutation (for example session cookies). They translate between wire shapes and domain outcomes; they do not own how persistence is obtained for a request.
+**Routes own HTTP concerns:** JSON request/response schemas, status codes, headers, and cookie mutation (for example session cookies). They translate between wire shapes and closed outcomes from Request Scope. They do not own how persistence is obtained for a request, participate in the **Database Adapter** lifecycle, or depend on database construction or teardown—only on Request Scope capabilities and outcomes.
 
 **Request Scope owns:**
 
@@ -18,11 +18,11 @@ The API needs a single, request-scoped seam between HTTP routes and persistence-
 - Request-derived inputs needed by capabilities (for example raw tokens, IP, user agent) and passes them into auth/status work without shaping HTTP.
 - Construction of **capabilities** that return closed outcome unions (`Public*Outcome` types)—**not** Fastify replies, status codes, or “route-ready” HTTP objects.
 
-When configured persistence is missing or unusable, Request Scope surfaces `persistence_not_configured` or `persistence_unavailable`-style outcomes; routes map those consistently to HTTP (including logging posture owned at the adapter).
+When configured persistence is missing or unusable, Request Scope surfaces `persistence_not_configured` or `persistence_unavailable`-style outcomes; routes map those consistently to HTTP (including logging posture owned at the Database Adapter).
 
 ### Implementation detail (lifecycle)
 
-Request Scope obtains persistence via the Fastify **`databaseAdapter`** decorated at startup when `DATABASE_URL` is configured (process-owned Drizzle database plus teardown on app close). Per-request operations reuse that adapter rather than opening a new connection scope; callers never receive a raw handle or participate in connect/disconnect; that lifecycle remains hidden behind Request Scope.
+Request Scope obtains persistence via the **Database Adapter**: the Fastify **`databaseAdapter`** decoration set at startup when `DATABASE_URL` is configured (process-owned Drizzle client plus teardown on app close). Per-request operations reuse that adapter rather than opening a new connection scope; callers never receive a raw handle or participate in connect/disconnect; that lifecycle remains hidden behind Request Scope.
 
 ### Future replacement point
 
