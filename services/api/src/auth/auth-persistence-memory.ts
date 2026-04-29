@@ -1,10 +1,11 @@
-import { normalizeEmail } from '@healthy/db';
+import { FirstOwnerAlreadyExistsError, normalizeEmail } from '@healthy/db';
 
 import type {
   AuthPersistence,
   AuthSessionFacts,
   AuthUserFacts,
   AuthUserForOwnerLogin,
+  CreateFirstOwnerUserInput,
   OwnerLoginSessionInsert,
 } from './auth-persistence.js';
 
@@ -33,6 +34,15 @@ export function createMemoryAuthPersistenceStore(): MemoryAuthPersistenceStore {
 /**
  * In-memory Auth Persistence for fast deterministic policy tests.
  */
+function memoryHasActiveOwner(store: MemoryAuthPersistenceStore): boolean {
+  for (const u of store.usersById.values()) {
+    if (u.role === 'owner' && u.status === 'active' && u.deletedAt === null) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function createMemoryAuthPersistence(store: MemoryAuthPersistenceStore): AuthPersistence {
   const self: AuthPersistence = {
     async findSessionByTokenHash(tokenHash) {
@@ -69,6 +79,30 @@ export function createMemoryAuthPersistence(store: MemoryAuthPersistenceStore): 
 
     async setOwnerLastLoginAt(userId, at) {
       store.lastLoginAtByUserId.set(userId, at);
+    },
+
+    async hasActiveOwner() {
+      return memoryHasActiveOwner(store);
+    },
+
+    async createFirstOwnerUser(input: CreateFirstOwnerUserInput) {
+      if (memoryHasActiveOwner(store)) {
+        throw new FirstOwnerAlreadyExistsError();
+      }
+      const id = `user-${store.usersById.size + 1}`;
+      const email = normalizeEmail(input.email);
+      const row: AuthUserFacts = {
+        id,
+        email,
+        displayName: input.displayName,
+        role: 'owner',
+        status: 'active',
+        deletedAt: null,
+      };
+      store.usersById.set(id, { ...row });
+      const forLogin: AuthUserForOwnerLogin = { ...row, passwordHash: input.passwordHash };
+      store.usersByEmailForLogin.set(email, { ...forLogin });
+      return { ...row };
     },
 
     async withTransaction(fn) {

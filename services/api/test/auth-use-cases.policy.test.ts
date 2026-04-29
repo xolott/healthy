@@ -32,6 +32,7 @@ function useCases(store = createMemoryAuthPersistenceStore()) {
       clock: () => fixedNow,
       verifyPassword: async () => false,
       generateSessionToken: () => ({ rawToken: 'unused', tokenHash: 'unused' }),
+      hashPassword: async (plain) => `hashed:${plain}`,
     }),
     store,
   };
@@ -157,6 +158,7 @@ function ownerLoginUseCases(
     clock: () => fixedNow,
     verifyPassword,
     generateSessionToken: () => ({ rawToken: loginRawToken, tokenHash: loginTokenHash }),
+    hashPassword: async (plain) => `hashed:${plain}`,
   });
 }
 
@@ -265,5 +267,115 @@ describe('Auth Use Cases — ownerLogin (policy, in-memory persistence)', () => 
       lastUsedAt: fixedNow,
     });
     expect(store.lastLoginAtByUserId.get(userId)?.getTime()).toBe(fixedNow.getTime());
+  });
+});
+
+const setupRawToken = 'policy-first-owner-token____________';
+const setupTokenHash = hashSessionTokenForLookup(setupRawToken);
+const goodSetupPassword = 'goodpassword12';
+const sessionExpiresAfterSetup = new Date(fixedNow.getTime() + 30 * 24 * 60 * 60 * 1000);
+const setupCtx = { setCookie: true, ip: '127.0.0.1', userAgent: 'vitest-setup' };
+
+function firstOwnerPolicyUseCases(store: ReturnType<typeof createMemoryAuthPersistenceStore>) {
+  const persistence = createMemoryAuthPersistence(store);
+  return createAuthUseCases({
+    persistence,
+    clock: () => fixedNow,
+    verifyPassword: async () => false,
+    generateSessionToken: () => ({ rawToken: setupRawToken, tokenHash: setupTokenHash }),
+    hashPassword: async (plain) => `argon:${plain}`,
+  });
+}
+
+describe('Auth Use Cases — firstOwnerSetup (policy, in-memory persistence)', () => {
+  it('returns invalid_input for empty display name after trim', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    const uc = firstOwnerPolicyUseCases(store);
+    expect(await uc.firstOwnerSetup('  ', 'a@b.co', goodSetupPassword, setupCtx)).toEqual({
+      kind: 'invalid_input',
+      field: 'displayName',
+      message: 'Display name is required',
+    });
+  });
+
+  it('returns invalid_input when display name exceeds max length', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    const uc = firstOwnerPolicyUseCases(store);
+    const longName = 'x'.repeat(201);
+    expect(await uc.firstOwnerSetup(longName, 'a@b.co', goodSetupPassword, setupCtx)).toEqual({
+      kind: 'invalid_input',
+      field: 'displayName',
+      message: 'Display name is too long',
+    });
+  });
+
+  it('returns invalid_input for email after trim', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    const uc = firstOwnerPolicyUseCases(store);
+    expect(await uc.firstOwnerSetup('N', '  ', goodSetupPassword, setupCtx)).toEqual({
+      kind: 'invalid_input',
+      field: 'email',
+      message: 'Email is required',
+    });
+    expect(await uc.firstOwnerSetup('N', 'x', goodSetupPassword, setupCtx)).toEqual({
+      kind: 'invalid_input',
+      field: 'email',
+      message: 'Email is invalid',
+    });
+  });
+
+  it('returns password_policy for short password', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    const uc = firstOwnerPolicyUseCases(store);
+    const short = 'x'.repeat(MIN_PASSWORD_LENGTH - 1);
+    const r = await uc.firstOwnerSetup('Owner', 'o@example.com', short, setupCtx);
+    expect(r.kind).toBe('password_policy');
+    if (r.kind !== 'password_policy') {
+      return;
+    }
+    expect(r.minLength).toBe(MIN_PASSWORD_LENGTH);
+    expect(r.message).toContain(String(MIN_PASSWORD_LENGTH));
+  });
+
+  it('returns setup_unavailable when an active owner already exists', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    seedActiveOwnerForLogin(store);
+    store.usersById.set(userId, {
+      id: userId,
+      email: 'owner@example.com',
+      displayName: 'Owner',
+      role: 'owner',
+      status: 'active',
+      deletedAt: null,
+    });
+    const uc = firstOwnerPolicyUseCases(store);
+    expect(await uc.firstOwnerSetup('N', 'other@example.com', goodSetupPassword, setupCtx)).toEqual({
+      kind: 'setup_unavailable',
+    });
+  });
+
+  it('creates owner, session, and last-login with deterministic token and clock on success', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    const uc = firstOwnerPolicyUseCases(store);
+    const r = await uc.firstOwnerSetup('First', 'first@example.com', goodSetupPassword, setupCtx);
+    expect(r).toEqual({
+      kind: 'success',
+      user: {
+        id: 'user-1',
+        email: 'first@example.com',
+        displayName: 'First',
+        role: 'owner',
+      },
+      rawSessionToken: setupRawToken,
+      sessionExpiresAt: sessionExpiresAfterSetup,
+      setCookie: true,
+    });
+    expect(store.sessionsByTokenHash.get(setupTokenHash)).toEqual({
+      userId: 'user-1',
+      revokedAt: null,
+      expiresAt: sessionExpiresAfterSetup,
+      lastUsedAt: fixedNow,
+    });
+    expect(store.lastLoginAtByUserId.get('user-1')?.getTime()).toBe(fixedNow.getTime());
   });
 });

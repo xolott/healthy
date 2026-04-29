@@ -1,4 +1,8 @@
-import { createSessionRepository, createUserRepository, type Database } from '@healthy/db';
+import {
+  createSessionRepository,
+  createUserRepository,
+  type Database,
+} from '@healthy/db';
 import type { UserRow } from '@healthy/db/schema';
 
 /**
@@ -43,6 +47,12 @@ export type OwnerLoginSessionInsert = {
  * Auth-intent persistence seam for the auth slice. Methods are single actions;
  * policy ordering lives in Auth Use Cases.
  */
+export type CreateFirstOwnerUserInput = {
+  email: string;
+  displayName: string;
+  passwordHash: string;
+};
+
 export type AuthPersistence = {
   findSessionByTokenHash(tokenHash: string): Promise<AuthSessionFacts | undefined>;
   findUserById(userId: string): Promise<AuthUserFacts | undefined>;
@@ -50,6 +60,8 @@ export type AuthPersistence = {
   findUserForOwnerLoginByEmail(email: string): Promise<AuthUserForOwnerLogin | undefined>;
   createOwnerLoginSession(input: OwnerLoginSessionInsert): Promise<void>;
   setOwnerLastLoginAt(userId: string, at: Date): Promise<void>;
+  hasActiveOwner(): Promise<boolean>;
+  createFirstOwnerUser(input: CreateFirstOwnerUserInput): Promise<AuthUserFacts>;
   withTransaction<T>(fn: (p: AuthPersistence) => Promise<T>): Promise<T>;
 };
 
@@ -141,6 +153,19 @@ export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
 
     async setOwnerLastLoginAt(userId, at) {
       await users.setLastLoginAt(userId, at);
+    },
+
+    async hasActiveOwner() {
+      return users.hasActiveOwner();
+    },
+
+    async createFirstOwnerUser(input) {
+      const row = await users.createFirstOwner({
+        email: input.email,
+        passwordHash: input.passwordHash,
+        displayName: input.displayName,
+      });
+      return toUserFacts(row);
     },
 
     async withTransaction(fn) {

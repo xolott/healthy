@@ -1,10 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { withDisposableDatabase } from '@healthy/db';
-
 import { appendSessionCookie, getRequestIp } from '../auth/http-session.js';
-import { runFirstOwnerSetupInDb, SetupInputError } from '../auth/first-owner-setup.js';
-import { assertPasswordMeetsPolicy, PasswordPolicyError } from '../auth/password-policy.js';
+import { firstOwnerSetupFromAppRequest } from '../auth/auth-me-from-request.js';
 
 const postBodySchema = {
   type: 'object',
@@ -74,24 +71,6 @@ export async function registerFirstOwnerSetupRoute(
     },
     async (request, reply) => {
       const body = request.body;
-      try {
-        assertPasswordMeetsPolicy(body.password);
-      } catch (err) {
-        if (err instanceof PasswordPolicyError) {
-          return reply.status(400).send({
-            error: 'password_policy',
-            minLength: err.minLength,
-            message: err.message,
-          });
-        }
-        throw err;
-      }
-
-      const url = app.config.DATABASE_URL?.trim();
-      if (url === undefined || url === '') {
-        return reply.status(503).send({ error: 'service_unavailable' });
-      }
-
       const secure = request.protocol === 'https';
       const ctx = {
         setCookie: true,
@@ -99,24 +78,24 @@ export async function registerFirstOwnerSetupRoute(
         userAgent: (request.headers['user-agent'] ?? null) as string | null,
       };
 
-      let result: Awaited<ReturnType<typeof runFirstOwnerSetupInDb>>;
-      try {
-        result = await withDisposableDatabase(url, (db) =>
-          db.transaction(async (tx) => {
-            return runFirstOwnerSetupInDb(tx, body, ctx);
-          }),
-        );
-      } catch (err) {
-        if (err instanceof SetupInputError) {
-          return reply.status(400).send({
-            error: 'invalid_input',
-            field: err.field,
-            message: err.message,
-          });
-        }
-        throw err;
-      }
+      const result = await firstOwnerSetupFromAppRequest(
+        app,
+        body.displayName,
+        body.email,
+        body.password,
+        ctx,
+      );
 
+      if (result.kind === 'service_unavailable') {
+        return reply.status(503).send({ error: 'service_unavailable' });
+      }
+      if (result.kind === 'invalid_input') {
+        return reply.status(400).send({
+          error: 'invalid_input',
+          field: result.field,
+          message: result.message,
+        });
+      }
       if (result.kind === 'password_policy') {
         return reply.status(400).send({
           error: 'password_policy',
@@ -124,7 +103,7 @@ export async function registerFirstOwnerSetupRoute(
           message: result.message,
         });
       }
-      if (result.kind === 'not_available') {
+      if (result.kind === 'setup_unavailable') {
         return reply.status(404).send({ error: 'not_found' });
       }
 

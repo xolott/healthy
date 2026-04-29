@@ -1,8 +1,69 @@
+import { FirstOwnerAlreadyExistsError } from '@healthy/db';
+
 import type { AuthPersistence, AuthUserForOwnerLogin } from './auth-persistence.js';
 import { assertPasswordMeetsPolicy, PasswordPolicyError } from './password-policy.js';
 import { hashSessionTokenForLookup } from './session-token.js';
 
 const SESSION_DAYS = 30;
+const DISPLAY_NAME_MAX = 200;
+
+export type FirstOwnerSetupInvalidField = 'displayName' | 'email' | 'password';
+
+/**
+ * Payload after trim + shape/policy checks; used before persistence (e.g. missing DATABASE_URL).
+ */
+export type FirstOwnerSetupValidated =
+  | { kind: 'invalid_input'; field: FirstOwnerSetupInvalidField; message: string }
+  | { kind: 'password_policy'; message: string; minLength: number }
+  | { kind: 'ok'; displayName: string; email: string; password: string };
+
+export function validateFirstOwnerSetupPayload(
+  rawDisplayName: string,
+  rawEmail: string,
+  rawPassword: string,
+): FirstOwnerSetupValidated {
+  const displayName = rawDisplayName.trim();
+  if (displayName.length === 0) {
+    return { kind: 'invalid_input', field: 'displayName', message: 'Display name is required' };
+  }
+  if (displayName.length > DISPLAY_NAME_MAX) {
+    return { kind: 'invalid_input', field: 'displayName', message: 'Display name is too long' };
+  }
+
+  const email = rawEmail.trim();
+  if (email.length === 0) {
+    return { kind: 'invalid_input', field: 'email', message: 'Email is required' };
+  }
+  if (!email.includes('@')) {
+    return { kind: 'invalid_input', field: 'email', message: 'Email is invalid' };
+  }
+
+  try {
+    assertPasswordMeetsPolicy(rawPassword);
+  } catch (e) {
+    if (e instanceof PasswordPolicyError) {
+      return { kind: 'password_policy', message: e.message, minLength: e.minLength };
+    }
+    throw e;
+  }
+
+  return { kind: 'ok', displayName, email, password: rawPassword };
+}
+
+/**
+ * Closed result union for first-owner bootstrap setup.
+ */
+export type FirstOwnerSetupResult =
+  | { kind: 'invalid_input'; field: FirstOwnerSetupInvalidField; message: string }
+  | { kind: 'password_policy'; message: string; minLength: number }
+  | { kind: 'setup_unavailable' }
+  | {
+      kind: 'success';
+      user: AuthMeUser;
+      rawSessionToken: string;
+      sessionExpiresAt: Date;
+      setCookie: boolean;
+    };
 
 export type AuthMeUser = {
   id: string;
@@ -47,6 +108,12 @@ export type AuthUseCases = {
     rawPassword: string,
     ctx: { ip: string | null; userAgent: string | null },
   ): Promise<OwnerLoginResult>;
+  firstOwnerSetup(
+    rawDisplayName: string,
+    rawEmail: string,
+    rawPassword: string,
+    ctx: { setCookie: boolean; ip: string | null; userAgent: string | null },
+  ): Promise<FirstOwnerSetupResult>;
 };
 
 export type CreateAuthUseCasesInput = {
@@ -54,6 +121,7 @@ export type CreateAuthUseCasesInput = {
   clock: () => Date;
   verifyPassword: (plain: string, storedHash: string) => Promise<boolean>;
   generateSessionToken: () => { rawToken: string; tokenHash: string };
+  hashPassword: (plain: string) => Promise<string>;
 };
 
 export function createAuthUseCases(deps: CreateAuthUseCasesInput): AuthUseCases {
@@ -154,6 +222,73 @@ export function createAuthUseCases(deps: CreateAuthUseCasesInput): AuthUseCases 
           },
           rawSessionToken: rawToken,
           sessionExpiresAt,
+        };
+      });
+    },
+
+    async firstOwnerSetup(
+      rawDisplayName: string,
+      rawEmail: string,
+      rawPassword: string,
+      ctx: { setCookie: boolean; ip: string | null; userAgent: string | null },
+    ): Promise<FirstOwnerSetupResult> {
+      const validated = validateFirstOwnerSetupPayload(rawDisplayName, rawEmail, rawPassword);
+      if (validated.kind === 'invalid_input') {
+        return validated;
+      }
+      if (validated.kind === 'password_policy') {
+        return validated;
+      }
+
+      return deps.persistence.withTransaction(async (p) => {
+        if (await p.hasActiveOwner()) {
+          return { kind: 'setup_unavailable' };
+        }
+
+        const passwordHash = await deps.hashPassword(validated.password);
+
+        let user;
+        try {
+          user = await p.createFirstOwnerUser({
+            email: validated.email,
+            displayName: validated.displayName,
+            passwordHash,
+          });
+        } catch (e) {
+          if (e instanceof FirstOwnerAlreadyExistsError) {
+            return { kind: 'setup_unavailable' };
+          }
+          throw e;
+        }
+
+        const { rawToken, tokenHash } = deps.generateSessionToken();
+        const now = deps.clock();
+        const sessionExpiresAt = new Date(
+          now.getTime() + SESSION_DAYS * 24 * 60 * 60 * 1000,
+        );
+
+        await p.createOwnerLoginSession({
+          userId: user.id,
+          tokenHash,
+          expiresAt: sessionExpiresAt,
+          lastUsedAt: now,
+          ipAddress: ctx.ip,
+          userAgent: ctx.userAgent,
+        });
+
+        await p.setOwnerLastLoginAt(user.id, now);
+
+        return {
+          kind: 'success',
+          user: {
+            id: user.id,
+            email: user.email,
+            displayName: user.displayName,
+            role: user.role,
+          },
+          rawSessionToken: rawToken,
+          sessionExpiresAt,
+          setCookie: ctx.setCookie,
         };
       });
     },
