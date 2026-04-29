@@ -36,6 +36,7 @@ describe('Auth lifecycle (integration contract)', () => {
   it('fresh server: status → first-owner → status → me → logout → me unauthorized', async () => {
     const app = await buildApp();
     try {
+      expect(app.databaseAdapter).not.toBeNull();
       const statusBefore = await app.inject({
         method: 'GET',
         url: '/status',
@@ -104,6 +105,7 @@ describe('Auth lifecycle (integration contract)', () => {
 
     const app = await buildApp();
     try {
+      expect(app.databaseAdapter).not.toBeNull();
       const status = await app.inject({
         method: 'GET',
         url: '/status',
