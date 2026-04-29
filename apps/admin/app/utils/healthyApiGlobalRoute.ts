@@ -3,7 +3,20 @@
  * and session restoration outcomes stay testable without Nuxt runtime.
  */
 
+import { isHealthyApiClientError } from "./healthyApiClient";
+
 export type ConfigurationErrorReason = "missing" | "invalid_url" | "unreachable";
+
+/**
+ * Maps `getCurrentUser` failures into global navigation `{ authMe }` inputs.
+ * Mirrors `middleware/healthy-api.global.ts`.
+ */
+export function authMeProbeNavigationFromClientError(error: unknown): "unauthorized" | "error" {
+  if (isHealthyApiClientError(error) && error.kind === "unauthenticated") {
+    return "unauthorized";
+  }
+  return "error";
+}
 
 export type HealthyGlobalRedirect =
   | { path: "/configuration-error"; query: { reason: ConfigurationErrorReason } }

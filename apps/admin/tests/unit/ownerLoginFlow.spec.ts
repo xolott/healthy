@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 
 import { useHealthyApiStore } from "../../app/stores/healthyApi";
-import { AuthMeUnauthorizedError, fetchAuthMe, postAuthLogout, postOwnerLogin } from "../../app/utils/healthyApiAuth";
+import { createHealthyApiClient } from "../../app/utils/healthyApiClient";
 
 describe("owner login and logout flow (session + client state)", () => {
   afterEach(() => {
@@ -10,8 +10,8 @@ describe("owner login and logout flow (session + client state)", () => {
     setActivePinia(undefined);
   });
 
-  it("postOwnerLogin followed by fetchAuthMe reflects a restored cookie session", async () => {
-    const user = { id: "u1", email: "a@b.com", displayName: "Owner", role: "owner" };
+  it("ownerLogin followed by getCurrentUser reflects a restored cookie session", async () => {
+    const user = { id: "u1", email: "a@b.com", displayName: "Owner", role: "owner" as const };
     vi.stubGlobal(
       "fetch",
       vi.fn(async (url: string) => {
@@ -31,8 +31,9 @@ describe("owner login and logout flow (session + client state)", () => {
         throw new Error(`unexpected ${url}`);
       }) as unknown as typeof fetch,
     );
-    await postOwnerLogin("http://api.example", { email: "a@b.com", password: "x".repeat(12) });
-    const me = await fetchAuthMe("http://api.example");
+    const client = createHealthyApiClient({ baseUrl: "http://api.example" });
+    await client.ownerLogin({ email: "a@b.com", password: "x".repeat(12) });
+    const me = await client.getCurrentUser();
     expect(me).toEqual(user);
   });
 
@@ -54,12 +55,12 @@ describe("owner login and logout flow (session + client state)", () => {
         throw new Error(`unexpected ${url}`);
       }) as unknown as typeof fetch,
     );
-    await postAuthLogout("http://api.example");
+    await createHealthyApiClient({ baseUrl: "http://api.example" }).logout();
     store.clearAuthenticatedState();
     expect(store.currentUser).toBeNull();
   });
 
-  it("fetchAuthMe unauthorized matches startup gate unauthenticated branch", async () => {
+  it("getCurrentUser unauthorized matches startup gate unauthenticated branch", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -68,6 +69,9 @@ describe("owner login and logout flow (session + client state)", () => {
         json: async () => ({ error: "unauthorized" }),
       })) as unknown as typeof fetch,
     );
-    await expect(fetchAuthMe("http://api.example")).rejects.toBeInstanceOf(AuthMeUnauthorizedError);
+    await expect(createHealthyApiClient({ baseUrl: "http://api.example" }).getCurrentUser()).rejects.toMatchObject({
+      kind: "unauthenticated",
+      httpStatus: 401,
+    });
   });
 });

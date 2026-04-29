@@ -1,4 +1,3 @@
-import { ApiServiceUnavailableError } from "./healthyApiAuth";
 import { isHealthyApiClientError } from "./healthyApiClient";
 
 /** Thrown when submitting setup without a usable configured API origin. */
@@ -35,10 +34,6 @@ export function formatFirstOwnerOnboardingError(error: unknown): string {
       default:
         break;
     }
-  }
-
-  if (error instanceof ApiServiceUnavailableError) {
-    return "The API is temporarily unavailable. Try again in a moment.";
   }
 
   if (error instanceof MissingAdminApiBaseUrlError) {

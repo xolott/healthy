@@ -40,7 +40,7 @@ import { Button } from "@/components/ui/button";
 import { useHealthyApiStore } from "@/stores/healthyApi";
 import { MissingAdminApiBaseUrlError } from "@/utils/firstOwnerOnboardingErrors";
 import { healthyAuthMeQueryKey, healthyPublicStatusQueryKey } from "@/utils/healthyApiQueryKeys";
-import { fetchAuthMe, postAuthLogout } from "@/utils/healthyApiAuth";
+import { createHealthyApiClient } from "@/utils/healthyApiClient";
 
 const api = useHealthyApiBaseUrl();
 const queryCache = useQueryCache();
@@ -57,7 +57,7 @@ const { mutateAsync, isLoading } = useMutation({
     }
     const base = resolved.baseUrl;
     try {
-      await postAuthLogout(base);
+      await createHealthyApiClient({ baseUrl: base }).logout();
     } catch {
       // Still clear local shell state if the API is unreachable.
     }
@@ -86,7 +86,7 @@ onMounted(async () => {
   const resolved = api.value;
   if (!resolved.ok) return;
   try {
-    apiStore.setCurrentUser(await fetchAuthMe(resolved.baseUrl));
+    apiStore.setCurrentUser(await createHealthyApiClient({ baseUrl: resolved.baseUrl }).getCurrentUser());
   } catch {
     // Middleware should keep unauthenticated users off /home; ignore probe failures here.
   }

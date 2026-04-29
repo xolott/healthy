@@ -4,8 +4,8 @@ import {
   HEALTHY_API_AUTH_ME_ENDPOINT,
   HealthyApiClientError,
 } from "../../app/utils/healthyApiClient";
-import { authMeProbeNavigationFromClientError } from "../../app/utils/healthyApiAuthMe";
 import {
+  authMeProbeNavigationFromClientError,
   isConfigurationErrorPath,
   isInternalHealthyAdminPath,
   resolveHealthyApiGlobalNavigation,

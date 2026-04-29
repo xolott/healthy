@@ -103,7 +103,8 @@ import {
   MissingAdminApiBaseUrlError,
 } from "@/utils/firstOwnerOnboardingErrors";
 import { healthyPublicStatusQueryKey } from "@/utils/healthyApiQueryKeys";
-import { PASSWORD_MIN_LENGTH, postAuthLogout, postFirstOwnerSetup } from "@/utils/healthyApiAuth";
+import { PASSWORD_MIN_LENGTH } from "@/utils/healthyApiAuth";
+import { createHealthyApiClient } from "@/utils/healthyApiClient";
 
 const displayName = ref("");
 const email = ref("");
@@ -122,7 +123,7 @@ const { mutateAsync, isLoading } = useMutation({
     if (!resolved.ok) {
       throw new MissingAdminApiBaseUrlError();
     }
-    return postFirstOwnerSetup(resolved.baseUrl, input);
+    return createHealthyApiClient({ baseUrl: resolved.baseUrl }).firstOwnerSetup(input);
   },
   async onSuccess() {
     const resolved = api.value;
@@ -155,7 +156,7 @@ async function onSubmit() {
       email: email.value.trim(),
       password: password.value,
     });
-    await postAuthLogout(base);
+    await createHealthyApiClient({ baseUrl: base }).logout();
     await navigateTo("/login");
   } catch (e) {
     formError.value = formatFirstOwnerOnboardingError(e);

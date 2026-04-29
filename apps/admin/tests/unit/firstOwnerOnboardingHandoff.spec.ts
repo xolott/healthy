@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { postAuthLogout, postFirstOwnerSetup } from "../../app/utils/healthyApiAuth";
+import { createHealthyApiClient } from "../../app/utils/healthyApiClient";
 
 describe("first owner onboarding API handoff", () => {
   afterEach(() => {
@@ -35,12 +35,13 @@ describe("first owner onboarding API handoff", () => {
         throw new Error(`unexpected ${url}`);
       }) as unknown as typeof fetch,
     );
-    await postFirstOwnerSetup("http://api.example", {
+    const client = createHealthyApiClient({ baseUrl: "http://api.example" });
+    await client.firstOwnerSetup({
       displayName: "A",
       email: "a@b.com",
       password: "x".repeat(12),
     });
-    await postAuthLogout("http://api.example");
+    await client.logout();
     expect(calls).toEqual(["setup", "logout"]);
   });
 });

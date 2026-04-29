@@ -1,13 +1,12 @@
 import { resolveConfiguredApiBaseUrlForAdminRequest } from "../utils/healthyApiConfig";
-import { authMeProbeNavigationFromClientError } from "../utils/healthyApiAuthMe";
 import { createHealthyApiClient } from "../utils/healthyApiClient";
 import {
+  authMeProbeNavigationFromClientError,
   isConfigurationErrorPath,
   isInternalHealthyAdminPath,
   resolveHealthyApiGlobalNavigation,
   type HealthyGlobalRedirect,
 } from "../utils/healthyApiGlobalRoute";
-import { fetchHealthyPublicStatus } from "../utils/healthyApiStatus";
 
 function toNavigateArg(target: HealthyGlobalRedirect) {
   if ("query" in target) {
@@ -44,7 +43,7 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   let publicStatus: { ok: true; setupRequired: boolean } | { ok: false };
   try {
-    const status = await fetchHealthyPublicStatus(baseUrl);
+    const status = await createHealthyApiClient({ baseUrl }).getPublicStatus();
     publicStatus = { ok: true, setupRequired: status.setupRequired };
   } catch {
     publicStatus = { ok: false };

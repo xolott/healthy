@@ -43,8 +43,8 @@ import { useQuery } from "@pinia/colada";
 import { runConfigurationRetry } from "@/utils/healthyApiConfigurationRetry";
 import type { ConfigurationErrorReason } from "@/utils/healthyApiGlobalRoute";
 import { resolveConfiguredApiBaseUrlForAdminRequest } from "@/utils/healthyApiConfig";
+import { createHealthyApiClient } from "@/utils/healthyApiClient";
 import { healthyPublicStatusQueryKey } from "@/utils/healthyApiQueryKeys";
-import { fetchHealthyPublicStatus } from "@/utils/healthyApiStatus";
 import { useHealthyApiStore } from "@/stores/healthyApi";
 
 definePageMeta({
@@ -75,7 +75,7 @@ const baseUrlForProbe = computed(() => (resolved.value.ok ? resolved.value.baseU
 
 const { refetch, isLoading } = useQuery({
   key: () => [...healthyPublicStatusQueryKey(baseUrlForProbe.value)],
-  query: () => fetchHealthyPublicStatus(baseUrlForProbe.value),
+  query: () => createHealthyApiClient({ baseUrl: baseUrlForProbe.value }).getPublicStatus(),
   enabled: false,
 });
 

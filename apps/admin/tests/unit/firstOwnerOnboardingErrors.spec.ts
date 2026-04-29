@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 
-import { ApiServiceUnavailableError } from "../../app/utils/healthyApiAuth";
 import { HealthyApiClientError, HEALTHY_API_FIRST_OWNER_SETUP_ENDPOINT } from "../../app/utils/healthyApiClient";
 import {
   clientPasswordTooShortMessage,
@@ -68,12 +67,6 @@ describe("firstOwnerOnboardingErrors", () => {
       httpStatus: 201,
     });
     expect(formatFirstOwnerOnboardingError(err)).toContain("unexpected way");
-  });
-
-  it("formats API service unavailable from logout wrapper", () => {
-    expect(formatFirstOwnerOnboardingError(new ApiServiceUnavailableError())).toContain(
-      "temporarily unavailable",
-    );
   });
 
   it("formats missing deployment API base URL", () => {

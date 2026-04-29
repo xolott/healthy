@@ -86,7 +86,8 @@ import { useHealthyApiStore } from "@/stores/healthyApi";
 import { MissingAdminApiBaseUrlError, clientPasswordTooShortMessage } from "@/utils/firstOwnerOnboardingErrors";
 import { healthyAuthMeQueryKey, healthyPublicStatusQueryKey } from "@/utils/healthyApiQueryKeys";
 import { formatOwnerLoginError } from "@/utils/ownerLoginErrors";
-import { PASSWORD_MIN_LENGTH, postOwnerLogin } from "@/utils/healthyApiAuth";
+import { PASSWORD_MIN_LENGTH } from "@/utils/healthyApiAuth";
+import { createHealthyApiClient } from "@/utils/healthyApiClient";
 
 const email = ref("");
 const password = ref("");
@@ -104,7 +105,7 @@ const { mutateAsync, isLoading } = useMutation({
     if (!resolved.ok) {
       throw new MissingAdminApiBaseUrlError();
     }
-    return postOwnerLogin(resolved.baseUrl, input);
+    return createHealthyApiClient({ baseUrl: resolved.baseUrl }).ownerLogin(input);
   },
   async onSuccess(user) {
     apiStore.setCurrentUser(user);
