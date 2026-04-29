@@ -1,4 +1,10 @@
-export { createDb, withDisposableDatabase, type Database } from './client.js';
+export {
+  createDatabaseAdapter,
+  createDb,
+  withDisposableDatabase,
+  type Database,
+  type DatabaseAdapter,
+} from './client.js';
 export {
   createUserRepository,
   FirstOwnerAlreadyExistsError,
