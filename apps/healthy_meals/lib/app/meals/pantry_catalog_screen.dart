@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
 import '../../shared/widgets/shell_scaffold.dart';
+import 'pantry_catalog_helpers.dart';
 
 enum _PantryTab { food, recipe }
 
@@ -14,7 +15,8 @@ class MealsPantryCatalogScreen extends StatefulWidget {
   const MealsPantryCatalogScreen({super.key});
 
   @override
-  State<MealsPantryCatalogScreen> createState() => _MealsPantryCatalogScreenState();
+  State<MealsPantryCatalogScreen> createState() =>
+      _MealsPantryCatalogScreenState();
 }
 
 class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
@@ -26,11 +28,19 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
   int? _nutrientsCount;
   int? _iconKeysCount;
   List<_PantryItemWire> _items = [];
+  late final TextEditingController _searchController;
 
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
     _hydrate();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   Future<String> _resolveBaseUrl() async {
@@ -67,7 +77,10 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
       final refUri = Uri.parse('$base/pantry/reference');
       final refRes = await http.get(
         refUri,
-        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
       );
       if (refRes.statusCode != 200) {
         setState(() {
@@ -91,7 +104,10 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
       );
       final itemsRes = await http.get(
         itemsUri,
-        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
       );
       if (itemsRes.statusCode != 200) {
         setState(() {
@@ -112,22 +128,7 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
         throw const FormatException('items list');
       }
       final parsed = rawItems
-          .map((e) {
-            if (e is! Map<String, dynamic>) {
-              return null;
-            }
-            final id = e['id'];
-            final name = e['name'];
-            final iconKey = e['iconKey'];
-            final itemType = e['itemType'];
-            if (id is! String ||
-                name is! String ||
-                iconKey is! String ||
-                itemType is! String) {
-              return null;
-            }
-            return _PantryItemWire(id: id, name: name, iconKey: iconKey, itemType: itemType);
-          })
+          .map(_parsePantryListItem)
           .whereType<_PantryItemWire>()
           .toList();
 
@@ -166,7 +167,10 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
       );
       final itemsRes = await http.get(
         itemsUri,
-        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
       );
       if (itemsRes.statusCode != 200) {
         setState(() {
@@ -184,22 +188,7 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
         throw const FormatException('items list');
       }
       final parsed = rawItems
-          .map((e) {
-            if (e is! Map<String, dynamic>) {
-              return null;
-            }
-            final id = e['id'];
-            final name = e['name'];
-            final iconKey = e['iconKey'];
-            final itemType = e['itemType'];
-            if (id is! String ||
-                name is! String ||
-                iconKey is! String ||
-                itemType is! String) {
-              return null;
-            }
-            return _PantryItemWire(id: id, name: name, iconKey: iconKey, itemType: itemType);
-          })
+          .map(_parsePantryListItem)
           .whereType<_PantryItemWire>()
           .toList();
 
@@ -224,12 +213,28 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
     if (_tab == t) {
       return;
     }
-    setState(() => _tab = t);
+    setState(() {
+      _tab = t;
+      _searchController.clear();
+    });
     _reloadItemsOnly();
+  }
+
+  List<_PantryItemWire> _visibleItems() {
+    return _items
+        .where(
+          (it) => pantrySearchMatches(
+            _searchController.text,
+            name: it.name,
+            brand: it.brand,
+          ),
+        )
+        .toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    final visibleItems = _visibleItems();
     return ShellScaffold(
       title: 'Pantry',
       child: Padding(
@@ -258,7 +263,9 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
                   TextButton(
                     key: const Key('pantry-add-food'),
                     onPressed: () async {
-                      final created = await context.push<bool>('/pantry/create-food');
+                      final created = await context.push<bool>(
+                        '/pantry/create-food',
+                      );
                       if (created == true && mounted) {
                         await _reloadItemsOnly();
                       }
@@ -276,6 +283,24 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
                 key: const Key('pantry-catalog-health'),
                 style: const TextStyle(fontSize: 12, color: Colors.black45),
               ),
+            if (!_initialLoading &&
+                !_itemsRefreshing &&
+                _itemsError == null &&
+                _referenceError == null) ...[
+              const SizedBox(height: 8),
+              TextField(
+                key: const Key('pantry-items-search'),
+                controller: _searchController,
+                onChanged: (_) => setState(() {}),
+                decoration: InputDecoration(
+                  hintText: _tab == _PantryTab.food
+                      ? 'Search foods by name or brand…'
+                      : 'Search recipes by name…',
+                  isDense: true,
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ],
             const SizedBox(height: 12),
             if (_initialLoading || _itemsRefreshing)
               const Text('Loading…')
@@ -288,16 +313,35 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
                     : 'No recipes yet. Saved items appear here once you add them.',
                 key: const Key('pantry-empty'),
               )
+            else if (visibleItems.isEmpty)
+              Text(
+                _tab == _PantryTab.food
+                    ? 'No foods match your search.'
+                    : 'No recipes match your search.',
+                key: const Key('pantry-search-no-matches'),
+              )
             else
               Expanded(
                 child: ListView.builder(
-                  itemCount: _items.length,
+                  itemCount: visibleItems.length,
                   itemBuilder: (context, i) {
-                    final it = _items[i];
+                    final it = visibleItems[i];
+                    final subParts = <String>[it.iconKey];
+                    if (_tab == _PantryTab.food && it.caloriesPerBase != null) {
+                      subParts.add(
+                        '${it.caloriesPerBase!.toStringAsFixed(0)} kcal',
+                      );
+                    }
                     return ListTile(
                       dense: true,
                       title: Text(it.name),
-                      subtitle: Text(it.iconKey, style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+                      subtitle: Text(
+                        subParts.join(' · '),
+                        style: const TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 11,
+                        ),
+                      ),
                       onTap: _tab == _PantryTab.food && it.itemType == 'food'
                           ? () {
                               context.push('/pantry/food/${it.id}');
@@ -314,16 +358,51 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
   }
 }
 
+_PantryItemWire? _parsePantryListItem(dynamic e) {
+  if (e is! Map<String, dynamic>) {
+    return null;
+  }
+  final id = e['id'];
+  final name = e['name'];
+  final iconKey = e['iconKey'];
+  final itemType = e['itemType'];
+  final rawMeta = e['metadata'];
+  Map<String, dynamic>? metaMap;
+  if (rawMeta is Map<String, dynamic>) {
+    metaMap = rawMeta;
+  } else if (rawMeta is Map) {
+    metaMap = Map<String, dynamic>.from(rawMeta);
+  }
+  if (id is! String ||
+      name is! String ||
+      iconKey is! String ||
+      itemType is! String) {
+    return null;
+  }
+  return _PantryItemWire(
+    id: id,
+    name: name,
+    iconKey: iconKey,
+    itemType: itemType,
+    brand: pantryBrandFromMetadata(metaMap),
+    caloriesPerBase: foodListCaloriesFromMetadata(metaMap),
+  );
+}
+
 class _PantryItemWire {
   const _PantryItemWire({
     required this.id,
     required this.name,
     required this.iconKey,
     required this.itemType,
+    this.brand,
+    this.caloriesPerBase,
   });
 
   final String id;
   final String name;
   final String iconKey;
   final String itemType;
+  final String? brand;
+  final double? caloriesPerBase;
 }

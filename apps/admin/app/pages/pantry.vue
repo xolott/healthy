@@ -1,26 +1,62 @@
 <script setup lang="ts">
-import { normalizeHealthyApiBaseUrl } from "@/utils/healthyApiClient";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
+import { normalizeHealthyApiBaseUrl } from '@/utils/healthyApiClient';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 const apiBase = useHealthyApiBaseUrl();
 
-const tab = ref<"food" | "recipe">("food");
+const tab = ref<'food' | 'recipe'>('food');
 
 type PantryWireItem = {
   id: string;
   name: string;
   iconKey: string;
   itemType: string;
+  metadata?: Record<string, unknown>;
 };
+
+function pantryFoodCaloriesFromList(it: PantryWireItem): number | undefined {
+  if (it.itemType !== 'food') {
+    return undefined;
+  }
+  const meta = it.metadata;
+  if (meta === null || typeof meta !== 'object' || Array.isArray(meta)) {
+    return undefined;
+  }
+  const nutrients = meta['nutrients'];
+  if (nutrients === null || typeof nutrients !== 'object' || Array.isArray(nutrients)) {
+    return undefined;
+  }
+  const n = nutrients as Record<string, unknown>;
+  const raw = n['calories'];
+  return typeof raw === 'number' ? raw : undefined;
+}
+
+function pantryItemMatchesActiveTabSearch(
+  it: PantryWireItem,
+  qTrim: string,
+  activeTab: 'food' | 'recipe',
+): boolean {
+  if (qTrim === '') {
+    return true;
+  }
+  const lower = qTrim.toLowerCase();
+  if (it.name.toLowerCase().includes(lower)) {
+    return true;
+  }
+  if (activeTab === 'food') {
+    const meta = it.metadata;
+    if (meta !== null && typeof meta === 'object' && !Array.isArray(meta)) {
+      const b = meta['brand'];
+      if (typeof b === 'string' && b.trim() !== '' && b.toLowerCase().includes(lower)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
 
 const referenceError = ref<string | null>(null);
 const nutrientsCount = ref<number | null>(null);
@@ -30,7 +66,7 @@ const servingUnitsCatalog = ref<{ key: string; displayName: string }[]>([]);
 /** Optional extra rows for POST `servingOptions` when creating a food */
 type ServingDraft = {
   id: number;
-  mode: "unit" | "custom";
+  mode: 'unit' | 'custom';
   unitKey: string;
   customLabel: string;
   grams: string;
@@ -43,10 +79,10 @@ function makeEmptyServingDraft(unitFallback: string): ServingDraft {
   nextServingDraftId += 1;
   return {
     id,
-    mode: "unit",
+    mode: 'unit',
     unitKey: unitFallback,
-    customLabel: "",
-    grams: "",
+    customLabel: '',
+    grams: '',
   };
 }
 
@@ -58,10 +94,10 @@ function addServingOptionRow() {
     nextServingDraftId += 1;
     createFoodServings.value.push({
       id,
-      mode: "custom",
-      unitKey: "slice",
-      customLabel: "",
-      grams: "",
+      mode: 'custom',
+      unitKey: 'slice',
+      customLabel: '',
+      grams: '',
     });
     return;
   }
@@ -74,35 +110,34 @@ function removeServingOptionRow(id: number) {
 }
 
 type ServingOptionWire =
-  | { kind: "unit"; unit: string; grams: number }
-  | { kind: "custom"; label: string; grams: number };
+  | { kind: 'unit'; unit: string; grams: number }
+  | { kind: 'custom'; label: string; grams: number };
 
-function parseServingDraftsIntoPayload(): { ok: true; value: ServingOptionWire[] } | { ok: false; message: string } {
+function parseServingDraftsIntoPayload():
+  | { ok: true; value: ServingOptionWire[] }
+  | { ok: false; message: string } {
   const out: ServingOptionWire[] = [];
   for (const d of createFoodServings.value) {
     const gRaw = d.grams.trim();
     const labelTrim = d.customLabel.trim();
-    const isBlankRow =
-      d.mode === "unit"
-        ? gRaw === ""
-        : gRaw === "" && labelTrim === "";
+    const isBlankRow = d.mode === 'unit' ? gRaw === '' : gRaw === '' && labelTrim === '';
     if (isBlankRow) {
       continue;
     }
     const gNum = Number(gRaw);
     if (!Number.isFinite(gNum) || gNum <= 0) {
-      return { ok: false, message: "Each serving option needs a positive mass in grams." };
+      return { ok: false, message: 'Each serving option needs a positive mass in grams.' };
     }
-    if (d.mode === "custom") {
-      if (labelTrim === "") {
-        return { ok: false, message: "Custom servings need a label." };
+    if (d.mode === 'custom') {
+      if (labelTrim === '') {
+        return { ok: false, message: 'Custom servings need a label.' };
       }
-      out.push({ kind: "custom", label: labelTrim, grams: gNum });
+      out.push({ kind: 'custom', label: labelTrim, grams: gNum });
     } else {
       if (!servingUnitsCatalog.value.some((u) => u.key === d.unitKey)) {
-        return { ok: false, message: "Choose a predefined serving unit for each serving row." };
+        return { ok: false, message: 'Choose a predefined serving unit for each serving row.' };
       }
-      out.push({ kind: "unit", unit: d.unitKey, grams: gNum });
+      out.push({ kind: 'unit', unit: d.unitKey, grams: gNum });
     }
   }
   return { ok: true, value: out };
@@ -112,16 +147,22 @@ const items = ref<PantryWireItem[]>([]);
 const itemsError = ref<string | null>(null);
 const referenceLoading = ref(true);
 const itemsLoading = ref(false);
+const itemSearchQuery = ref('');
 
-const createFoodName = ref("");
-const createFoodBrand = ref("");
-const createFoodIconKey = ref("");
-const createFoodBaseValue = ref("");
-const createFoodBaseUnit = ref<"g" | "oz">("g");
-const createFoodCalories = ref("");
-const createFoodProtein = ref("");
-const createFoodFat = ref("");
-const createFoodCarbs = ref("");
+const displayedItems = computed(() => {
+  const q = itemSearchQuery.value.trim();
+  return items.value.filter((it) => pantryItemMatchesActiveTabSearch(it, q, tab.value));
+});
+
+const createFoodName = ref('');
+const createFoodBrand = ref('');
+const createFoodIconKey = ref('');
+const createFoodBaseValue = ref('');
+const createFoodBaseUnit = ref<'g' | 'oz'>('g');
+const createFoodCalories = ref('');
+const createFoodProtein = ref('');
+const createFoodFat = ref('');
+const createFoodCarbs = ref('');
 const createFoodError = ref<string | null>(null);
 const createFoodSubmitting = ref(false);
 
@@ -132,11 +173,11 @@ async function loadReference(base: string): Promise<boolean> {
       nutrients: { key: string }[];
       iconKeys: string[];
       servingUnits?: { key: string; displayName: string }[];
-    }>(`${normalizeHealthyApiBaseUrl(base)}/pantry/reference`, { credentials: "include" });
+    }>(`${normalizeHealthyApiBaseUrl(base)}/pantry/reference`, { credentials: 'include' });
     nutrientsCount.value = res.nutrients.length;
     iconKeysList.value = res.iconKeys;
     servingUnitsCatalog.value = res.servingUnits ?? [];
-    if (createFoodIconKey.value === "" && res.iconKeys.length > 0) {
+    if (createFoodIconKey.value === '' && res.iconKeys.length > 0) {
       const first = res.iconKeys[0];
       if (first) {
         createFoodIconKey.value = first;
@@ -144,7 +185,7 @@ async function loadReference(base: string): Promise<boolean> {
     }
     return true;
   } catch {
-    referenceError.value = "Unable to load nutrient catalog.";
+    referenceError.value = 'Unable to load nutrient catalog.';
     nutrientsCount.value = null;
     iconKeysList.value = [];
     servingUnitsCatalog.value = [];
@@ -154,10 +195,10 @@ async function loadReference(base: string): Promise<boolean> {
 }
 
 async function fetchItemsPayload(base: string): Promise<void> {
-  const q = tab.value === "food" ? "food" : "recipe";
+  const q = tab.value === 'food' ? 'food' : 'recipe';
   const res = await $fetch<{ items: PantryWireItem[] }>(
     `${normalizeHealthyApiBaseUrl(base)}/pantry/items?itemType=${encodeURIComponent(q)}`,
-    { credentials: "include" },
+    { credentials: 'include' },
   );
   items.value = res.items;
 }
@@ -168,7 +209,7 @@ async function reloadItems(base: string) {
   try {
     await fetchItemsPayload(base);
   } catch {
-    itemsError.value = "Unable to load your Pantry.";
+    itemsError.value = 'Unable to load your Pantry.';
     items.value = [];
   } finally {
     itemsLoading.value = false;
@@ -180,7 +221,7 @@ async function hydrate() {
   const base = resolved.ok ? resolved.baseUrl : null;
   if (!base) {
     referenceLoading.value = false;
-    referenceError.value = "API base URL is not configured.";
+    referenceError.value = 'API base URL is not configured.';
     return;
   }
 
@@ -195,7 +236,7 @@ async function hydrate() {
     await fetchItemsPayload(base);
     itemsError.value = null;
   } catch {
-    itemsError.value = "Unable to load your Pantry.";
+    itemsError.value = 'Unable to load your Pantry.';
     items.value = [];
   } finally {
     referenceLoading.value = false;
@@ -204,7 +245,7 @@ async function hydrate() {
 
 function parseNonNegNumber(raw: string, label: string): number | null {
   const t = raw.trim();
-  if (t === "") {
+  if (t === '') {
     createFoodError.value = `${label} is required.`;
     return null;
   }
@@ -225,45 +266,45 @@ async function submitCreateFood() {
   const resolved = apiBase.value;
   const base = resolved.ok ? resolved.baseUrl : null;
   if (!base) {
-    createFoodError.value = "API base URL is not configured.";
+    createFoodError.value = 'API base URL is not configured.';
     return;
   }
 
   const name = createFoodName.value.trim();
-  if (name === "") {
-    createFoodError.value = "Name is required.";
+  if (name === '') {
+    createFoodError.value = 'Name is required.';
     return;
   }
   const baseValRaw = createFoodBaseValue.value.trim();
-  if (baseValRaw === "") {
-    createFoodError.value = "Base amount is required.";
+  if (baseValRaw === '') {
+    createFoodError.value = 'Base amount is required.';
     return;
   }
   const baseVal = Number(baseValRaw);
   if (!Number.isFinite(baseVal) || baseVal <= 0) {
-    createFoodError.value = "Base amount must be a positive number.";
+    createFoodError.value = 'Base amount must be a positive number.';
     return;
   }
 
-  const cal = parseNonNegNumber(createFoodCalories.value, "Calories");
+  const cal = parseNonNegNumber(createFoodCalories.value, 'Calories');
   if (cal === null) {
     return;
   }
-  const protein = parseNonNegNumber(createFoodProtein.value, "Protein");
+  const protein = parseNonNegNumber(createFoodProtein.value, 'Protein');
   if (protein === null) {
     return;
   }
-  const fat = parseNonNegNumber(createFoodFat.value, "Fat");
+  const fat = parseNonNegNumber(createFoodFat.value, 'Fat');
   if (fat === null) {
     return;
   }
-  const carbs = parseNonNegNumber(createFoodCarbs.value, "Carbohydrates");
+  const carbs = parseNonNegNumber(createFoodCarbs.value, 'Carbohydrates');
   if (carbs === null) {
     return;
   }
 
-  if (createFoodIconKey.value === "") {
-    createFoodError.value = "Choose an icon.";
+  if (createFoodIconKey.value === '') {
+    createFoodError.value = 'Choose an icon.';
     return;
   }
 
@@ -278,11 +319,11 @@ async function submitCreateFood() {
   createFoodSubmitting.value = true;
   try {
     await $fetch(`${normalizeHealthyApiBaseUrl(base)}/pantry/items/food`, {
-      method: "POST",
-      credentials: "include",
+      method: 'POST',
+      credentials: 'include',
       body: {
         name,
-        ...(brandTrim === "" ? {} : { brand: brandTrim }),
+        ...(brandTrim === '' ? {} : { brand: brandTrim }),
         iconKey: createFoodIconKey.value,
         baseAmount: { value: baseVal, unit: createFoodBaseUnit.value },
         nutrients: {
@@ -291,38 +332,32 @@ async function submitCreateFood() {
           fat,
           carbohydrates: carbs,
         },
-        ...(servingsParsed.value.length > 0
-          ? { servingOptions: servingsParsed.value }
-          : {}),
+        ...(servingsParsed.value.length > 0 ? { servingOptions: servingsParsed.value } : {}),
       },
     });
-    createFoodName.value = "";
-    createFoodBrand.value = "";
-    createFoodBaseValue.value = "";
-    createFoodCalories.value = "";
-    createFoodProtein.value = "";
-    createFoodFat.value = "";
-    createFoodCarbs.value = "";
+    createFoodName.value = '';
+    createFoodBrand.value = '';
+    createFoodBaseValue.value = '';
+    createFoodCalories.value = '';
+    createFoodProtein.value = '';
+    createFoodFat.value = '';
+    createFoodCarbs.value = '';
     createFoodServings.value = [];
     await fetchItemsPayload(base);
     itemsError.value = null;
   } catch (err: unknown) {
     const data =
       err !== null &&
-      typeof err === "object" &&
-      "data" in err &&
+      typeof err === 'object' &&
+      'data' in err &&
       err.data !== null &&
-      typeof err.data === "object"
+      typeof err.data === 'object'
         ? (err.data as Record<string, unknown>)
         : undefined;
-    if (
-      data &&
-      data["error"] === "invalid_input" &&
-      typeof data["message"] === "string"
-    ) {
-      createFoodError.value = data["message"] as string;
+    if (data && data['error'] === 'invalid_input' && typeof data['message'] === 'string') {
+      createFoodError.value = data['message'] as string;
     } else {
-      createFoodError.value = "Unable to save food.";
+      createFoodError.value = 'Unable to save food.';
     }
   } finally {
     createFoodSubmitting.value = false;
@@ -334,6 +369,7 @@ onMounted(async () => {
 });
 
 watch(tab, async () => {
+  itemSearchQuery.value = '';
   const resolved = apiBase.value;
   const base = resolved.ok ? resolved.baseUrl : null;
   if (!base || referenceError.value !== null || referenceLoading.value) {
@@ -345,9 +381,7 @@ watch(tab, async () => {
 
 <template>
   <section aria-labelledby="pantry-title" class="max-w-3xl space-y-6">
-    <h1 id="pantry-title" class="text-2xl font-semibold tracking-tight">
-      Pantry
-    </h1>
+    <h1 id="pantry-title" class="text-2xl font-semibold tracking-tight">Pantry</h1>
 
     <p class="text-muted-foreground max-w-prose text-sm">
       Browse foods and recipes you save for logging. Tabs load from your server-backed catalog.
@@ -410,6 +444,20 @@ watch(tab, async () => {
       {{ iconKeysList.length }}
     </div>
 
+    <div v-if="!referenceLoading && referenceError === null && !itemsLoading" class="space-y-1.5">
+      <Label for="pantry-items-search" class="sr-only">{{
+        tab === 'food' ? 'Search foods' : 'Search recipes'
+      }}</Label>
+      <Input
+        id="pantry-items-search"
+        v-model="itemSearchQuery"
+        type="search"
+        autocomplete="off"
+        :placeholder="tab === 'food' ? 'Search foods by name or brand…' : 'Search recipes by name…'"
+        data-testid="pantry-items-search"
+      />
+    </div>
+
     <Card
       v-if="tab === 'food' && !referenceLoading && referenceError === null"
       class="px-4"
@@ -418,7 +466,8 @@ watch(tab, async () => {
       <CardHeader class="px-0 pt-0">
         <CardTitle class="text-base">Add a food</CardTitle>
         <CardDescription>
-          Name, base amount (grams or ounces), icon, and required macros are saved to your private catalog.
+          Name, base amount (grams or ounces), icon, and required macros are saved to your private
+          catalog.
         </CardDescription>
       </CardHeader>
       <CardContent class="space-y-3 px-0 pb-0">
@@ -444,7 +493,9 @@ watch(tab, async () => {
               />
             </div>
             <div class="space-y-1.5 sm:col-span-2">
-              <Label for="pantry-food-brand">Brand <span class="text-muted-foreground">(optional)</span></Label>
+              <Label for="pantry-food-brand"
+                >Brand <span class="text-muted-foreground">(optional)</span></Label
+              >
               <Input
                 id="pantry-food-brand"
                 v-model="createFoodBrand"
@@ -534,9 +585,12 @@ watch(tab, async () => {
 
           <div class="border-border space-y-3 border-t pt-3">
             <div>
-              <p class="text-sm font-medium">Serving options <span class="text-muted-foreground font-normal">(optional)</span></p>
+              <p class="text-sm font-medium">
+                Serving options <span class="text-muted-foreground font-normal">(optional)</span>
+              </p>
               <p class="text-muted-foreground mt-0.5 text-xs">
-                Add practical portions (predefined units or a custom label). Each row is a mass in grams for one serving; nutrients scale from your base amount above.
+                Add practical portions (predefined units or a custom label). Each row is a mass in
+                grams for one serving; nutrients scale from your base amount above.
               </p>
             </div>
             <div
@@ -555,9 +609,7 @@ watch(tab, async () => {
                     <option value="unit" :disabled="servingUnitsCatalog.length === 0">
                       Predefined unit
                     </option>
-                    <option value="custom">
-                      Custom label
-                    </option>
+                    <option value="custom">Custom label</option>
                   </select>
                 </div>
                 <div v-if="row.mode === 'unit'" class="space-y-1.5">
@@ -568,11 +620,7 @@ watch(tab, async () => {
                     class="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
                     :disabled="servingUnitsCatalog.length === 0"
                   >
-                    <option
-                      v-for="u in servingUnitsCatalog"
-                      :key="u.key"
-                      :value="u.key"
-                    >
+                    <option v-for="u in servingUnitsCatalog" :key="u.key" :value="u.key">
                       {{ u.displayName }}
                     </option>
                   </select>
@@ -644,7 +692,15 @@ watch(tab, async () => {
       class="text-muted-foreground text-sm"
       data-testid="pantry-empty"
     >
-      No {{ tab === "food" ? "foods" : "recipes" }} yet. Saved items appear here once you add them.
+      No {{ tab === 'food' ? 'foods' : 'recipes' }} yet. Saved items appear here once you add them.
+    </div>
+
+    <div
+      v-else-if="displayedItems.length === 0"
+      class="text-muted-foreground text-sm"
+      data-testid="pantry-search-no-matches"
+    >
+      No {{ tab === 'food' ? 'foods' : 'recipes' }} match your search.
     </div>
 
     <ul
@@ -653,20 +709,29 @@ watch(tab, async () => {
       :aria-label="tab === 'food' ? 'Foods in your pantry' : 'Recipes in your pantry'"
     >
       <li
-        v-for="it in items"
+        v-for="it in displayedItems"
         :key="it.id"
-        class="flex items-center gap-3 px-3 py-2 text-sm"
+        class="flex flex-wrap items-start justify-between gap-2 px-3 py-2 text-sm"
       >
-        <span class="text-muted-foreground font-mono text-xs">{{ it.iconKey }}</span>
-        <NuxtLink
-          v-if="tab === 'food'"
-          class="font-medium text-foreground hover:underline"
-          :to="`/pantry/food/${it.id}`"
-          data-testid="pantry-food-item-link"
+        <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+          <span class="text-muted-foreground shrink-0 font-mono text-xs">{{ it.iconKey }}</span>
+          <NuxtLink
+            v-if="tab === 'food'"
+            class="font-medium text-foreground hover:underline"
+            :to="`/pantry/food/${it.id}`"
+            data-testid="pantry-food-item-link"
+          >
+            {{ it.name }}
+          </NuxtLink>
+          <span v-else class="font-medium">{{ it.name }}</span>
+        </div>
+        <span
+          v-if="tab === 'food' && pantryFoodCaloriesFromList(it) != null"
+          class="text-muted-foreground shrink-0 whitespace-nowrap text-xs tabular-nums"
+          data-testid="pantry-food-item-cal"
         >
-          {{ it.name }}
-        </NuxtLink>
-        <span v-else class="font-medium">{{ it.name }}</span>
+          {{ pantryFoodCaloriesFromList(it) }} kcal
+        </span>
       </li>
     </ul>
   </section>

@@ -361,8 +361,14 @@ describe('Pantry routes (integration)', () => {
         headers: { authorization: `Bearer ${rawToken}`, accept: 'application/json' },
       });
       expect(listRes.statusCode).toBe(200);
-      const listBody = JSON.parse(listRes.payload) as { items: { id: string }[] };
-      expect(listBody.items.some((i) => i.id === body.item.id)).toBe(true);
+      const listBody = JSON.parse(listRes.payload) as {
+        items: { id: string; metadata?: Record<string, unknown> }[];
+      };
+      const listed = listBody.items.find((i) => i.id === body.item.id);
+      expect(listed).toBeDefined();
+      expect(listed?.metadata?.kind).toBe('food');
+      const ln = listed?.metadata?.nutrients as Record<string, unknown> | undefined;
+      expect(ln?.calories).toBe(190);
     } finally {
       await app.close();
     }
