@@ -4,14 +4,14 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createAuditLogRepository } from '../src/audit-logs/repository.js';
 import { auditLogs } from '../src/schema/index.js';
-import { startPostgresIntegration, type IntegrationHarness } from './helpers/integration-db.js';
+import { startPostgresTestDatabase, type PostgresTestDatabase } from '@healthy/db/test';
 import { insertPersistedAuditLog, insertPersistedUser } from './helpers/persisted-builders.js';
 
 describe('audit log repository (integration)', () => {
-  let harness: IntegrationHarness;
+  let harness: PostgresTestDatabase;
 
   beforeAll(async () => {
-    harness = await startPostgresIntegration();
+    harness = await startPostgresTestDatabase();
   });
 
   afterAll(async () => {

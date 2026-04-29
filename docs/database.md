@@ -86,7 +86,7 @@ Optional: open Drizzle Studio against the same URL:
 pnpm --filter @healthy/db db:studio
 ```
 
-Integration tests apply the same migration folder programmatically (`drizzle-orm/postgres-js/migrator` in `packages/db/test/helpers/integration-db.ts`).
+Integration tests apply the same migration folder programmatically via **`startPostgresTestDatabase`** from **`@healthy/db/test`** (`drizzle-orm/postgres-js/migrator`; canonical Postgres Testcontainers harness).
 
 ## Initial schema boundaries
 

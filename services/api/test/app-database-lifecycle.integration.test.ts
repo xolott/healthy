@@ -1,7 +1,7 @@
 /**
  * Issue #45: route integration proofs for production `buildApp()`, Request Scope backing
  * from `app.databaseAdapter`, observable cleanup via `app.close()`, and a clear boundary:
- * migration/seed helpers use harness `postgres` directly; HTTP paths use only the app's adapter.
+ * migration/seed helpers use harness `db` directly; HTTP paths use only the app's adapter.
  */
 
 import {
@@ -21,16 +21,16 @@ import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { generateSessionToken } from '../src/auth/session-token.js';
 import { buildApp } from '../src/app.js';
 import { insertPersistedSession, insertPersistedUser } from './helpers/persisted-builders.js';
-import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
+import { startPostgresTestDatabase, type PostgresTestDatabase } from '@healthy/db/test';
 
 const goodPassword = 'goodpassword12';
 
 describe('Production database lifecycle — route integration', () => {
   describe('Testcontainers Postgres: harness migrations and seed apart from app adapter', () => {
-    let harness: ApiIntegrationHarness;
+    let harness: PostgresTestDatabase;
 
     beforeAll(async () => {
-      harness = await startApiPostgresIntegration();
+      harness = await startPostgresTestDatabase();
     });
 
     afterAll(async () => {

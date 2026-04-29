@@ -36,4 +36,8 @@ describe('@healthy/db exports', () => {
     expect(packageJson.exports).not.toHaveProperty('./sessions');
     expect(packageJson.exports).not.toHaveProperty('./audit-logs');
   });
+
+  it('exposes ./test for Postgres integration harness types and runtime', () => {
+    expect(packageJson.exports).toHaveProperty('./test');
+  });
 });

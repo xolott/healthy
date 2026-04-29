@@ -5,7 +5,7 @@ import { users } from '@healthy/db/schema';
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { buildApp } from '../src/app.js';
 import { insertPersistedUser } from './helpers/persisted-builders.js';
-import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
+import { startPostgresTestDatabase, type PostgresTestDatabase } from '@healthy/db/test';
 
 const goodPassword = 'goodpassword12';
 
@@ -14,10 +14,10 @@ const goodPassword = 'goodpassword12';
  * plus a second trace for an already-initialized server (login-only path).
  */
 describe('Auth lifecycle (integration contract)', () => {
-  let harness: ApiIntegrationHarness;
+  let harness: PostgresTestDatabase;
 
   beforeAll(async () => {
-    harness = await startApiPostgresIntegration();
+    harness = await startPostgresTestDatabase();
   });
 
   afterAll(async () => {

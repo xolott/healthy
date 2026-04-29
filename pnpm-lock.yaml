@@ -162,8 +162,8 @@ importers:
         specifier: workspace:*
         version: link:../config/typescript
       '@testcontainers/postgresql':
-        specifier: 10.16.0
-        version: 10.16.0
+        specifier: 11.14.0
+        version: 11.14.0
       '@types/node':
         specifier: 25.6.0
         version: 25.6.0
@@ -222,9 +222,6 @@ importers:
       '@healthy/typescript-config':
         specifier: workspace:*
         version: link:../../packages/config/typescript
-      '@testcontainers/postgresql':
-        specifier: 11.14.0
-        version: 11.14.0
       '@types/node':
         specifier: 25.6.0
         version: 25.6.0

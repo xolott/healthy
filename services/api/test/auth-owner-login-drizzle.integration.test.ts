@@ -11,15 +11,15 @@ import {
   persistedFindUserByEmail,
   persistedFindUserById,
 } from './helpers/persisted-builders.js';
-import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
+import { startPostgresTestDatabase, type PostgresTestDatabase } from '@healthy/db/test';
 
 const goodPassword = 'goodpassword12';
 
 describe('Drizzle Auth Persistence — ownerLogin (integration)', () => {
-  let harness: ApiIntegrationHarness;
+  let harness: PostgresTestDatabase;
 
   beforeAll(async () => {
-    harness = await startApiPostgresIntegration();
+    harness = await startPostgresTestDatabase();
   });
 
   afterAll(async () => {

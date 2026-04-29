@@ -2,13 +2,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createDatabaseAdapter } from '../src/index.js';
 import { users } from '../src/schema/index.js';
-import { startPostgresIntegration, type IntegrationHarness } from './helpers/integration-db.js';
+import { startPostgresTestDatabase, type PostgresTestDatabase } from '@healthy/db/test';
 
 describe('createDatabaseAdapter (integration)', () => {
-  let harness: IntegrationHarness;
+  let harness: PostgresTestDatabase;
 
   beforeAll(async () => {
-    harness = await startPostgresIntegration();
+    harness = await startPostgresTestDatabase();
   });
 
   afterAll(async () => {

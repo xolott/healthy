@@ -5,14 +5,14 @@ import postgres from 'postgres';
 import { createSetupStatusPersistence } from '../src/setup-status/index.js';
 import { createUserRepository } from '../src/users/repository.js';
 import { users } from '../src/schema/index.js';
-import { startPostgresIntegration, type IntegrationHarness } from './helpers/integration-db.js';
+import { startPostgresTestDatabase, type PostgresTestDatabase } from '@healthy/db/test';
 import { insertPersistedUser } from './helpers/persisted-builders.js';
 
 describe('user repository (integration)', () => {
-  let harness: IntegrationHarness;
+  let harness: PostgresTestDatabase;
 
   beforeAll(async () => {
-    harness = await startPostgresIntegration();
+    harness = await startPostgresTestDatabase();
   });
 
   afterAll(async () => {
@@ -89,10 +89,10 @@ describe('user repository (integration)', () => {
   });
 
   describe('owner setup', () => {
-    let ownerHarness: IntegrationHarness;
+    let ownerHarness: PostgresTestDatabase;
 
     beforeAll(async () => {
-      ownerHarness = await startPostgresIntegration();
+      ownerHarness = await startPostgresTestDatabase();
     });
 
     beforeEach(async () => {

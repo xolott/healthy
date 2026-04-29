@@ -5,14 +5,14 @@ import postgres from 'postgres';
 
 import { createSessionRepository } from '../src/sessions/repository.js';
 import { sessions, users } from '../src/schema/index.js';
-import { startPostgresIntegration, type IntegrationHarness } from './helpers/integration-db.js';
+import { startPostgresTestDatabase, type PostgresTestDatabase } from '@healthy/db/test';
 import { insertPersistedUser } from './helpers/persisted-builders.js';
 
 describe('session repository (integration)', () => {
-  let harness: IntegrationHarness;
+  let harness: PostgresTestDatabase;
 
   beforeAll(async () => {
-    harness = await startPostgresIntegration();
+    harness = await startPostgresTestDatabase();
   });
 
   afterAll(async () => {

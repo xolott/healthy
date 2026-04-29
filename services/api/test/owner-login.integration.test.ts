@@ -6,15 +6,15 @@ import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { SESSION_COOKIE_NAME } from '../src/auth/session-token.js';
 import { buildApp } from '../src/app.js';
 import { insertPersistedUser } from './helpers/persisted-builders.js';
-import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpers/integration-db.js';
+import { startPostgresTestDatabase, type PostgresTestDatabase } from '@healthy/db/test';
 
 const goodPassword = 'goodpassword12';
 
 describe('POST /auth/login (integration)', () => {
-  let harness: ApiIntegrationHarness;
+  let harness: PostgresTestDatabase;
 
   beforeAll(async () => {
-    harness = await startApiPostgresIntegration();
+    harness = await startPostgresTestDatabase();
   });
 
   afterAll(async () => {
