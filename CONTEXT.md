@@ -20,9 +20,9 @@ Keep it deliberately narrow. Do **not** treat `CONTEXT.md` as:
 
 **Linking a domain term to an ADR.** Add a link under a glossary entry **only when** the [Architecture Decision Record](docs/adr/) **materially constrains** how that term is used: its **meaning**, **ownership**, or **boundary** in code and reviews. If an ADR merely mentions a term or walks past it without setting a durable rule for that vocabulary, leave the definition here self-contained—**do not** treat ADR links as exhaustive history trails or require a link every time a term appears in a decision record. Reviewers apply this rule pragmatically: one strong pointer beats a checklist of mentions.
 
-**Durable vocabulary and policy versus deepening notes.** This file and [docs/adr/](docs/adr/README.md) are the **canonical, durable** place for shared terms and load-bearing architectural decisions—what newcomers and auditors should rely on day to day. Exploratory or historical architecture review narratives live under **`docs/deepening/`**. Deepening notes may motivate ADRs or glossary updates, but they are **not** operating policy by themselves; when a review conclusion should bind the repo, lift it into `CONTEXT.md` or an ADR and link from here as appropriate.
+The **Request Scope** glossary entry below illustrates the linking rule: it includes **one** pointer to ADR 0001 where that decision constrains responsibility at the persistence seam (versus repeating the link wherever the vocabulary appears elsewhere).
 
-The **Request Scope** entry below illustrates the linking rule: the term is anchored to [`docs/adr/0001-request-scope-boundary.md`](docs/adr/0001-request-scope-boundary.md) because that ADR fixes the sanctioned boundary between routes and persistence-backed capabilities—not because Request Scope is incidentally discussed elsewhere.
+**Durable vocabulary and policy versus deepening notes.** This file and [docs/adr/](docs/adr/README.md) are the **canonical, durable** place for shared terms and load-bearing architectural decisions—what newcomers and auditors should rely on day to day. Exploratory or historical architecture review narratives live under **`docs/deepening/`**. Deepening notes may motivate ADRs or glossary updates, but they are **not** operating policy by themselves; when a review conclusion should bind the repo, lift it into `CONTEXT.md` or an ADR and link from here as appropriate.
 
 ## Domain Terms
 
@@ -78,18 +78,14 @@ Adapter code: `services/api/src/auth/auth-persistence-memory.ts`.
 
 ### Auth Use Case Scope
 
-Factory that builds Auth Use Cases from an existing Drizzle database handle plus
-deterministic hashing and session collaborators. Implemented as
-`services/api/src/auth/auth-use-case-scope.ts`:
-`createAuthUseCasesForDatabase`; `AuthMeUser` is re-exported for consumers that anchor
-on this module.
+Stable wiring that builds Auth Use Cases from an existing Drizzle handle plus hashing
+and session collaborators (`services/api/src/auth/auth-use-case-scope.ts`).
+`createRequestScopeForApp` invokes it with the configured **Database Adapter**'s Drizzle
+client when persistence is configured. Routes consume Request Scope capabilities only;
+they do not import this module.
 
-`createRequestScopeForApp` invokes that factory with the configured **Database Adapter**'s
-Drizzle client (`app.databaseAdapter.db`) when persistence is configured. Routes
-consume Request Scope capabilities only—they do not import this factory.
-
-Policy tests construct `createAuthUseCases` with the Auth Test Adapter directly.
-Repository shape in `@healthy/db` is unchanged in this seam.
+Policy tests construct Auth Use Cases with the Auth Test Adapter directly. Repository
+shape in `@healthy/db` at this seam is unchanged.
 
 ### Request Scope
 
@@ -107,8 +103,7 @@ Database Adapter construction or teardown.
 
 Request Scope obtains persistence through the Database Adapter but hides its
 lifecycle from routes; pooling or shutdown-oriented refinements belong inside the
-Database Adapter and Request Scope implementation, not in routes. Decision
-record: `docs/adr/0001-request-scope-boundary.md`.
+Database Adapter and Request Scope implementation, not in routes. [ADR 0001 — Request Scope boundary](docs/adr/0001-request-scope-boundary.md) constrains route versus persistence ownership for this vocabulary.
 
 ### Database Adapter
 

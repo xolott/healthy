@@ -34,7 +34,7 @@ describe('POST /auth/logout (unit)', () => {
     }
   });
 
-  it('returns 503 service_unavailable when request scope reports persistence_unavailable', async () => {
+  it('returns 503 service_unavailable when Request Scope reports persistence_unavailable', async () => {
     const app = await buildApp({
       requestScope: {
         status: {

@@ -119,6 +119,8 @@ The harness returns a **`PostgresTestDatabase`** value with:
 - **`connectionUri`** — JDBC-style URL string for code paths that configure Postgres via a URL (for example `createDatabaseAdapter(connectionUri)`)
 - **`dispose`** — async function to shut down the client and container; call it from `afterAll` (or equivalent) so resources are released reliably
 
+For **Request Scope** and the API **Database Adapter** vocabulary (canonical terms for how routes obtain persistence), see **[`CONTEXT.md`](../CONTEXT.md)**.
+
 Unit tests that do not touch Postgres do not need this helper.
 
 `**@healthy/db` tests:**

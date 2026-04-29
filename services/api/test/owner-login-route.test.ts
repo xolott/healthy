@@ -24,7 +24,7 @@ describe('POST /auth/login (unit)', () => {
     }
   });
 
-  it('invokes request scope ownerLogin and maps invalid_credentials to 401', async () => {
+  it('invokes Request Scope ownerLogin and maps invalid_credentials to 401', async () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/healthy_test');
     const app = await buildApp({
       requestScope: {
@@ -68,7 +68,7 @@ describe('POST /auth/login (unit)', () => {
     }
   });
 
-  it('returns 503 with service_unavailable when request scope reports persistence_unavailable', async () => {
+  it('returns 503 with service_unavailable when Request Scope reports persistence_unavailable', async () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/healthy_test');
     const app = await buildApp({
       requestScope: {

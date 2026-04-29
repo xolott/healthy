@@ -49,7 +49,7 @@ describe('POST /setup/first-owner', () => {
     expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
   });
 
-  it('returns 503 service_unavailable when request scope reports persistence_unavailable', async () => {
+  it('returns 503 service_unavailable when Request Scope reports persistence_unavailable', async () => {
     vi.stubEnv('DATABASE_URL', 'postgresql://localhost:5432/healthy_test');
     app = await buildApp({
       requestScope: {
@@ -124,7 +124,7 @@ describe('GET /auth/me', () => {
     expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
   });
 
-  it('returns 503 service_unavailable when request scope reports persistence_unavailable', async () => {
+  it('returns 503 service_unavailable when Request Scope reports persistence_unavailable', async () => {
     app = await buildApp({
       requestScope: {
         status: {
@@ -164,7 +164,7 @@ describe('GET /auth/me', () => {
   });
 });
 
-describe('GET /auth/me (request-scope stub)', () => {
+describe('GET /auth/me (Request Scope stub)', () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
   afterEach(async () => {
@@ -174,7 +174,7 @@ describe('GET /auth/me (request-scope stub)', () => {
     }
   });
 
-  it('returns 200 with user when request scope currentSession returns ok', async () => {
+  it('returns 200 with user when Request Scope currentSession returns ok', async () => {
     app = await buildApp({
       requestScope: {
         status: {

@@ -113,7 +113,7 @@ describe('GET /status', () => {
     expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
   });
 
-  it('returns 503 service_unavailable when request scope reports persistence_unavailable', async () => {
+  it('returns 503 service_unavailable when Request Scope reports persistence_unavailable', async () => {
     app = await buildApp({
       requestScope: {
         status: {
