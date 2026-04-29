@@ -83,7 +83,7 @@
 </template>
 
 <script setup lang="ts">
-import { useMutation, useQueryCache } from "@pinia/colada";
+import { useMutation } from "@pinia/colada";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -96,13 +96,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useHealthyApiStore } from "@/stores/healthyApi";
 import {
   clientPasswordTooShortMessage,
   formatFirstOwnerOnboardingError,
   MissingAdminApiBaseUrlError,
 } from "@/utils/firstOwnerOnboardingErrors";
-import { healthyPublicStatusQueryKey } from "@/utils/healthyApiQueryKeys";
 import { PASSWORD_MIN_LENGTH } from "@/utils/healthyApiAuth";
 import { createHealthyApiClient } from "@/utils/healthyApiClient";
 
@@ -114,8 +112,7 @@ const formError = ref<string | null>(null);
 const passwordMinLength = PASSWORD_MIN_LENGTH;
 
 const api = useHealthyApiBaseUrl();
-const queryCache = useQueryCache();
-const apiStore = useHealthyApiStore();
+const { afterFirstOwnerCreated } = useFirstOwnerCreatedChoreography();
 
 const { mutateAsync, isLoading } = useMutation({
   mutation: async (input: { displayName: string; email: string; password: string }) => {
@@ -126,14 +123,7 @@ const { mutateAsync, isLoading } = useMutation({
     return createHealthyApiClient({ baseUrl: resolved.baseUrl }).firstOwnerSetup(input);
   },
   async onSuccess() {
-    const resolved = api.value;
-    if (resolved.ok) {
-      await queryCache.invalidateQueries({
-        key: [...healthyPublicStatusQueryKey(resolved.baseUrl)],
-        exact: true,
-      });
-    }
-    apiStore.markProbe();
+    await afterFirstOwnerCreated();
   },
 });
 
@@ -145,7 +135,6 @@ async function onSubmit() {
     formError.value = formatFirstOwnerOnboardingError(new MissingAdminApiBaseUrlError());
     return;
   }
-  const base = api.value.baseUrl;
   if (password.value.length < passwordMinLength) {
     formError.value = clientPasswordTooShortMessage(passwordMinLength);
     return;
@@ -156,8 +145,6 @@ async function onSubmit() {
       email: email.value.trim(),
       password: password.value,
     });
-    await createHealthyApiClient({ baseUrl: base }).logout();
-    await navigateTo("/login");
   } catch (e) {
     formError.value = formatFirstOwnerOnboardingError(e);
   }
