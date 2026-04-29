@@ -24,5 +24,12 @@ export function unusedPantryCapability(): RequestScope['pantry'] {
         message: 'Pantry create food is not exercised in this test.',
       };
     },
+    async createRecipeForOwner() {
+      return {
+        kind: 'invalid_input',
+        field: 'body',
+        message: 'Pantry create recipe is not exercised in this test.',
+      };
+    },
   };
 }

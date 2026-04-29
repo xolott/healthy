@@ -100,6 +100,7 @@ export type PersistedPantryItemInsertInput = {
   itemType: 'food' | 'recipe';
   name: string;
   iconKey: string;
+  metadata?: Record<string, unknown>;
 };
 
 export async function insertPersistedPantryItem(db: Database, input: PersistedPantryItemInsertInput): Promise<PantryItemRow> {
@@ -111,7 +112,7 @@ export async function insertPersistedPantryItem(db: Database, input: PersistedPa
       itemType: input.itemType,
       name: input.name,
       iconKey: input.iconKey,
-      metadata: {},
+      metadata: input.metadata ?? {},
       updatedAt: now,
     })
     .returning();

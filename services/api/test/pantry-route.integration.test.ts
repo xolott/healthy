@@ -1,6 +1,8 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { users } from '@healthy/db/schema';
+import { eq } from 'drizzle-orm';
+
+import { users, recipeIngredients, pantryItems } from '@healthy/db/schema';
 
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { generateSessionToken } from '../src/auth/session-token.js';
@@ -30,6 +32,8 @@ describe('Pantry routes (integration)', () => {
   });
 
   beforeEach(async () => {
+    await harness.db.delete(recipeIngredients);
+    await harness.db.delete(pantryItems);
     await harness.db.delete(users);
     vi.stubEnv('DATABASE_URL', harness.connectionUri);
   });
@@ -563,6 +567,187 @@ describe('Pantry routes (integration)', () => {
       const err = JSON.parse(res.payload) as { field: string; message: string };
       expect(err.field).toContain('unit');
       expect(err.message).toContain('Duplicate');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('POST /pantry/items/recipe creates recipe, persists ingredients, and GET detail includes ingredients', async () => {
+    const owner = await insertPersistedUser(harness.db, {
+      email: 'recipe-create@example.com',
+      passwordHash: await hashPasswordArgon2id(goodPassword),
+      displayName: 'Recipe Creator',
+      role: 'owner',
+      status: 'active',
+    });
+    const { rawToken, tokenHash } = generateSessionToken();
+    await insertPersistedSession(harness.db, {
+      userId: owner.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    const app = await buildApp();
+    try {
+      let res = await app.inject({
+        method: 'POST',
+        url: '/pantry/items/food',
+        headers: {
+          authorization: `Bearer ${rawToken}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        payload: {
+          name: 'Rice',
+          iconKey: 'food_bowl',
+          baseAmount: { value: 100, unit: 'g' },
+          nutrients: { calories: 130, protein: 2.7, fat: 0.3, carbohydrates: 28 },
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const riceId = (JSON.parse(res.payload) as { item: { id: string } }).item.id;
+
+      res = await app.inject({
+        method: 'POST',
+        url: '/pantry/items/food',
+        headers: {
+          authorization: `Bearer ${rawToken}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        payload: {
+          name: 'Egg',
+          iconKey: 'food_egg',
+          baseAmount: { value: 50, unit: 'g' },
+          nutrients: { calories: 70, protein: 6, fat: 5, carbohydrates: 0.5 },
+          servingOptions: [{ kind: 'unit', unit: 'slice', grams: 50 }],
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const eggId = (JSON.parse(res.payload) as { item: { id: string } }).item.id;
+
+      res = await app.inject({
+        method: 'POST',
+        url: '/pantry/items/recipe',
+        headers: {
+          authorization: `Bearer ${rawToken}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        payload: {
+          name: 'Rice and egg',
+          iconKey: 'recipe_pot',
+          servings: 2,
+          servingLabel: 'portion',
+          ingredients: [
+            { foodId: riceId, quantity: 1, servingOption: { kind: 'base' } },
+            { foodId: eggId, quantity: 1, servingOption: { kind: 'unit', unit: 'slice' } },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const created = JSON.parse(res.payload) as {
+        item: {
+          id: string;
+          metadata: Record<string, unknown>;
+          ingredients?: { foodId: string; foodName: string; quantity: number }[];
+        };
+      };
+      expect(created.item.metadata['kind']).toBe('recipe');
+      expect(created.item.metadata['servings']).toBe(2);
+      expect(created.item.metadata['servingLabel']).toBe('portion');
+      const n = created.item.metadata['nutrients'] as Record<string, unknown>;
+      const nps = created.item.metadata['nutrientsPerServing'] as Record<string, unknown>;
+      expect(n['calories']).toBe(200);
+      expect(nps['calories']).toBe(100);
+      expect(created.item.ingredients).toHaveLength(2);
+
+      const ingRows = await harness.db
+        .select()
+        .from(recipeIngredients)
+        .where(eq(recipeIngredients.recipePantryItemId, created.item.id));
+      expect(ingRows).toHaveLength(2);
+      expect(ingRows.map((r) => r.ingredientFoodPantryItemId).sort()).toEqual(
+        [eggId, riceId].sort(),
+      );
+
+      const detail = await app.inject({
+        method: 'GET',
+        url: `/pantry/items/${created.item.id}`,
+        headers: { authorization: `Bearer ${rawToken}`, accept: 'application/json' },
+      });
+      expect(detail.statusCode).toBe(200);
+      const detailBody = JSON.parse(detail.payload) as {
+        item: { ingredients?: { foodName: string }[] };
+      };
+      expect(detailBody.item.ingredients?.map((i) => i.foodName).sort()).toEqual(
+        ['Egg', 'Rice'].sort(),
+      );
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('POST /pantry/items/recipe rejects a food id owned by another user', async () => {
+    const userA = await insertPersistedUser(harness.db, {
+      email: 'rec-a@example.com',
+      passwordHash: await hashPasswordArgon2id(goodPassword),
+      displayName: 'A',
+      role: 'owner',
+      status: 'active',
+    });
+    const userB = await insertPersistedUser(harness.db, {
+      email: 'rec-b@example.com',
+      passwordHash: await hashPasswordArgon2id(goodPassword),
+      displayName: 'B',
+      role: 'owner',
+      status: 'active',
+    });
+    const bFood = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: userB.id,
+      itemType: 'food',
+      name: 'Other Oats',
+      iconKey: 'food_bowl',
+      metadata: {
+        kind: 'food',
+        baseAmountGrams: 40,
+        nutrients: { calories: 150, protein: 5, fat: 2, carbohydrates: 27 },
+      },
+    });
+
+    const { rawToken, tokenHash } = generateSessionToken();
+    await insertPersistedSession(harness.db, {
+      userId: userA.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/pantry/items/recipe',
+        headers: {
+          authorization: `Bearer ${rawToken}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        payload: {
+          name: 'Steal',
+          iconKey: 'recipe_pot',
+          servings: 1,
+          ingredients: [
+            {
+              foodId: bFood.id,
+              quantity: 1,
+              servingOption: { kind: 'base' },
+            },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      const err = JSON.parse(res.payload) as { error: string };
+      expect(err.error).toBe('invalid_input');
     } finally {
       await app.close();
     }

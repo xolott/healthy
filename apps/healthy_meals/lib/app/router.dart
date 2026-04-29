@@ -8,7 +8,9 @@ import 'login_screen.dart';
 import 'meals/meals_main_shell.dart';
 import 'meals/pantry_catalog_screen.dart';
 import 'meals/pantry_create_food_screen.dart';
+import 'meals/pantry_create_recipe_screen.dart';
 import 'meals/pantry_food_detail_screen.dart';
+import 'meals/pantry_recipe_detail_screen.dart';
 import 'meals/meals_placeholder_screens.dart';
 import 'onboarding_screen.dart';
 import 'startup_gate.dart';
@@ -104,10 +106,21 @@ final mealsRouter = GoRouter(
                   builder: (context, state) => const MealsPantryCreateFoodScreen(),
                 ),
                 GoRoute(
+                  path: 'create-recipe',
+                  parentNavigatorKey: _mealsRootNavigatorKey,
+                  builder: (context, state) => const MealsPantryCreateRecipeScreen(),
+                ),
+                GoRoute(
                   path: 'food/:itemId',
                   parentNavigatorKey: _mealsRootNavigatorKey,
                   builder: (context, state) =>
                       MealsPantryFoodDetailScreen(itemId: state.pathParameters['itemId'] ?? ''),
+                ),
+                GoRoute(
+                  path: 'recipe/:itemId',
+                  parentNavigatorKey: _mealsRootNavigatorKey,
+                  builder: (context, state) =>
+                      MealsPantryRecipeDetailScreen(itemId: state.pathParameters['itemId'] ?? ''),
                 ),
               ],
             ),

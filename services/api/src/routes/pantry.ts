@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { getSessionTokenFromRequest } from '../auth/parse-bearer-cookie.js';
 import type {
   PublicCreateFoodOutcome,
+  PublicCreateRecipeOutcome,
   PublicPantryItemDetailOutcome,
   PublicPantryItemsListOutcome,
   PublicPantryReferenceOutcome,
@@ -39,6 +40,57 @@ const pantryReferenceResponse = {
         properties: {
           key: { type: 'string' },
           displayName: { type: 'string' },
+        },
+      },
+    },
+  },
+} as const;
+
+/** Flat shape; business rules enforced in `planCreateRecipe` (oneOf breaks when `unit` is a field name). */
+const recipeServingOptionBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['kind'],
+  properties: {
+    kind: { type: 'string', enum: ['base', 'unit', 'custom'] },
+    unit: { type: 'string' },
+    label: { type: 'string' },
+  },
+} as const;
+
+const recipeIngredientResponseSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['foodId', 'foodName', 'quantity', 'servingOption'],
+  properties: {
+    foodId: { type: 'string' },
+    foodName: { type: 'string' },
+    quantity: { type: 'number' },
+    servingOption: recipeServingOptionBodySchema,
+  },
+} as const;
+
+const createRecipeBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['name', 'iconKey', 'servings', 'ingredients'],
+  properties: {
+    name: { type: 'string' },
+    iconKey: { type: 'string' },
+    servings: { type: 'number' },
+    servingLabel: { type: 'string' },
+    ingredients: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 64,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['foodId', 'quantity', 'servingOption'],
+        properties: {
+          foodId: { type: 'string', format: 'uuid' },
+          quantity: { type: 'number' },
+          servingOption: recipeServingOptionBodySchema,
         },
       },
     },
@@ -90,6 +142,10 @@ const pantryItemDetailResponse = {
         metadata: { type: 'object', additionalProperties: true },
         createdAt: { type: 'string' },
         updatedAt: { type: 'string' },
+        ingredients: {
+          type: 'array',
+          items: recipeIngredientResponseSchema,
+        },
       },
     },
   },
@@ -284,6 +340,26 @@ function sendCreateFoodOutcome(reply: FastifyReply, outcome: PublicCreateFoodOut
   }
 }
 
+function sendCreateRecipeOutcome(reply: FastifyReply, outcome: PublicCreateRecipeOutcome) {
+  switch (outcome.kind) {
+    case 'persistence_not_configured':
+    case 'persistence_unavailable':
+      return sendSvc(reply);
+    case 'invalid_input':
+      return reply.status(400).send({
+        error: 'invalid_input',
+        field: outcome.field,
+        message: outcome.message,
+      });
+    case 'ok':
+      return reply.status(201).send({ item: outcome.item });
+    default: {
+      const _: never = outcome;
+      return _;
+    }
+  }
+}
+
 export async function registerPantryRoutes(app: FastifyInstance, requestScope?: RequestScope) {
   const scope = resolveRequestScope(app, requestScope);
 
@@ -400,6 +476,45 @@ export async function registerPantryRoutes(app: FastifyInstance, requestScope?: 
       }
       const createOutcome = await scope.pantry.createFoodForOwner(sessionOutcome.user.id, request.body);
       return sendCreateFoodOutcome(reply, createOutcome);
+    },
+  );
+
+  app.post(
+    '/pantry/items/recipe',
+    {
+      schema: {
+        summary: 'Create a Recipe from Foods in the Pantry',
+        description:
+          'Creates a user-owned Recipe from existing Foods. Macros are computed from ingredients and serving count.',
+        body: createRecipeBodySchema,
+        response: {
+          201: pantryItemDetailResponse,
+          400: {
+            type: 'object',
+            additionalProperties: true,
+          },
+          401: authErrorBody,
+          503: svcUnavailableBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const t = getSessionTokenFromRequest({
+        authorization: request.headers.authorization,
+        cookie: request.headers.cookie,
+      });
+      if (t.token === undefined) {
+        return reply.status(401).send({ error: 'unauthorized' });
+      }
+      const sessionOutcome = await scope.currentSession.resolveFromRawToken(t.token);
+      if (sessionOutcome.kind === 'persistence_not_configured' || sessionOutcome.kind === 'persistence_unavailable') {
+        return sendSvc(reply);
+      }
+      if (sessionOutcome.kind !== 'ok') {
+        return reply.status(401).send({ error: 'unauthorized' });
+      }
+      const createOutcome = await scope.pantry.createRecipeForOwner(sessionOutcome.user.id, request.body);
+      return sendCreateRecipeOutcome(reply, createOutcome);
     },
   );
 

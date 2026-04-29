@@ -29,6 +29,13 @@
       "when": 1777438745326,
       "tag": "0003_pantry_foundation",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777500000000,
+      "tag": "0004_recipe_ingredients",
+      "breakpoints": true
     }
   ]
 }

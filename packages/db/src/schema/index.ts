@@ -3,7 +3,17 @@
  * Kept in one module so Drizzle Kit can load it without pre-built `.js` peers.
  */
 import { isNull, sql } from 'drizzle-orm';
-import { index, jsonb, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  doublePrecision,
+  index,
+  integer,
+  jsonb,
+  pgEnum,
+  pgTable,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 
 /** Instance role; see PRD Implementation Decisions. */
 export const userRoleEnum = pgEnum('user_role', ['owner', 'admin', 'member']);
@@ -131,5 +141,28 @@ export const pantryItems = pgTable(
 export type PantryItemRow = typeof pantryItems.$inferSelect;
 export type NewPantryItemRow = typeof pantryItems.$inferInsert;
 
+/** One persisted row of a Food ingredient inside a Recipe (serving + quantity). */
+export const recipeIngredients = pgTable(
+  'recipe_ingredients',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    recipePantryItemId: uuid('recipe_pantry_item_id')
+      .notNull()
+      .references(() => pantryItems.id, { onDelete: 'cascade' }),
+    ingredientFoodPantryItemId: uuid('ingredient_food_pantry_item_id')
+      .notNull()
+      .references(() => pantryItems.id, { onDelete: 'restrict' }),
+    sortOrder: integer('sort_order').notNull().default(0),
+    servingKind: text('serving_kind').notNull(),
+    servingUnitKey: text('serving_unit_key'),
+    servingCustomLabel: text('serving_custom_label'),
+    quantity: doublePrecision('quantity').notNull(),
+  },
+  (t) => [index('recipe_ingredients_recipe_sort_idx').on(t.recipePantryItemId, t.sortOrder)],
+);
+
+export type RecipeIngredientRow = typeof recipeIngredients.$inferSelect;
+export type NewRecipeIngredientRow = typeof recipeIngredients.$inferInsert;
+
 /** Relational schema map passed to `drizzle({ schema })`. */
-export const schema = { users, sessions, auditLogs, nutrients, pantryItems };
+export const schema = { users, sessions, auditLogs, nutrients, pantryItems, recipeIngredients };

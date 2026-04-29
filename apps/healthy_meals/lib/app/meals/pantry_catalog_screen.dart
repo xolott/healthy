@@ -272,6 +272,19 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
                     },
                     child: const Text('Add food'),
                   ),
+                if (_tab == _PantryTab.recipe)
+                  TextButton(
+                    key: const Key('pantry-add-recipe'),
+                    onPressed: () async {
+                      final created = await context.push<bool>(
+                        '/pantry/create-recipe',
+                      );
+                      if (created == true && mounted) {
+                        await _reloadItemsOnly();
+                      }
+                    },
+                    child: const Text('Add recipe'),
+                  ),
               ],
             ),
             const SizedBox(height: 8),
@@ -332,6 +345,11 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
                         '${it.caloriesPerBase!.toStringAsFixed(0)} kcal',
                       );
                     }
+                    if (_tab == _PantryTab.recipe && it.caloriesPerBase != null) {
+                      subParts.add(
+                        '${it.caloriesPerBase!.toStringAsFixed(0)} kcal/serving',
+                      );
+                    }
                     return ListTile(
                       dense: true,
                       title: Text(it.name),
@@ -342,11 +360,15 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
                           fontSize: 11,
                         ),
                       ),
-                      onTap: _tab == _PantryTab.food && it.itemType == 'food'
+                      onTap: it.itemType == 'food' && _tab == _PantryTab.food
                           ? () {
                               context.push('/pantry/food/${it.id}');
                             }
-                          : null,
+                          : it.itemType == 'recipe' && _tab == _PantryTab.recipe
+                              ? () {
+                                  context.push('/pantry/recipe/${it.id}');
+                                }
+                              : null,
                     );
                   },
                 ),
@@ -379,13 +401,19 @@ _PantryItemWire? _parsePantryListItem(dynamic e) {
       itemType is! String) {
     return null;
   }
+  double? cal;
+  if (itemType == 'food') {
+    cal = foodListCaloriesFromMetadata(metaMap);
+  } else if (itemType == 'recipe') {
+    cal = recipeListCaloriesPerServingFromMetadata(metaMap);
+  }
   return _PantryItemWire(
     id: id,
     name: name,
     iconKey: iconKey,
     itemType: itemType,
     brand: pantryBrandFromMetadata(metaMap),
-    caloriesPerBase: foodListCaloriesFromMetadata(metaMap),
+    caloriesPerBase: cal,
   );
 }
 

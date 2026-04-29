@@ -1,7 +1,10 @@
 export type {
   NutrientCatalogEntry,
+  PantryItemDetailWire,
   PantryItemWire,
   PublicCreateFoodOutcome,
+  PublicCreateRecipeOutcome,
+  RecipeIngredientWire,
   PublicCurrentSessionOutcome,
   PublicFirstOwnerSetupOutcome,
   PublicLogoutOutcome,

@@ -92,6 +92,20 @@ export type PantryItemWire = {
   updatedAt: string;
 };
 
+export type RecipeIngredientWire = {
+  foodId: string;
+  foodName: string;
+  quantity: number;
+  servingOption:
+    | { kind: 'base' }
+    | { kind: 'unit'; unit: string }
+    | { kind: 'custom'; label: string };
+};
+
+export type PantryItemDetailWire = PantryItemWire & {
+  ingredients?: RecipeIngredientWire[];
+};
+
 export type NutrientCatalogEntry = {
   key: string;
   displayName: string;
@@ -107,7 +121,7 @@ export type PublicPantryItemDetailOutcome =
   | { kind: 'persistence_not_configured' }
   | { kind: 'persistence_unavailable' }
   | { kind: 'not_found' }
-  | { kind: 'ok'; item: PantryItemWire };
+  | { kind: 'ok'; item: PantryItemDetailWire };
 
 export type ServingUnitCatalogEntry = {
   key: string;
@@ -130,11 +144,18 @@ export type PublicCreateFoodOutcome =
   | { kind: 'invalid_input'; field: string; message: string }
   | { kind: 'ok'; item: PantryItemWire };
 
+export type PublicCreateRecipeOutcome =
+  | { kind: 'persistence_not_configured' }
+  | { kind: 'persistence_unavailable' }
+  | { kind: 'invalid_input'; field: string; message: string }
+  | { kind: 'ok'; item: PantryItemDetailWire };
+
 export type RequestScopePantryCapability = {
   listItemsForOwner(ownerUserId: string, itemType: 'food' | 'recipe'): Promise<PublicPantryItemsListOutcome>;
   getItemForOwner(ownerUserId: string, itemId: string): Promise<PublicPantryItemDetailOutcome>;
   getReferenceCatalog(): Promise<PublicPantryReferenceOutcome>;
   createFoodForOwner(ownerUserId: string, rawBody: unknown): Promise<PublicCreateFoodOutcome>;
+  createRecipeForOwner(ownerUserId: string, rawBody: unknown): Promise<PublicCreateRecipeOutcome>;
 };
 
 export type RequestScope = {

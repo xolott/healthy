@@ -42,3 +42,22 @@ double? foodListCaloriesFromMetadata(Map<String, dynamic>? metadata) {
   }
   return null;
 }
+
+/// Calories per recipe serving (list cards), from `nutrientsPerServing`.
+double? recipeListCaloriesPerServingFromMetadata(Map<String, dynamic>? metadata) {
+  if (metadata == null) {
+    return null;
+  }
+  if (metadata['kind'] != 'recipe') {
+    return null;
+  }
+  final nps = metadata['nutrientsPerServing'];
+  if (nps is! Map<String, dynamic>) {
+    return null;
+  }
+  final cal = nps['calories'];
+  if (cal is num) {
+    return cal.toDouble();
+  }
+  return null;
+}

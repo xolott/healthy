@@ -30,6 +30,21 @@ void main() {
     },
   );
 
+  test(
+    'recipeListCaloriesPerServingFromMetadata reads nutrientsPerServing.calories',
+    () {
+      expect(
+        recipeListCaloriesPerServingFromMetadata({
+          'kind': 'recipe',
+          'nutrientsPerServing': {'calories': 212},
+        }),
+        212,
+      );
+      expect(recipeListCaloriesPerServingFromMetadata(null), isNull);
+      expect(recipeListCaloriesPerServingFromMetadata({'kind': 'food'}), isNull);
+    },
+  );
+
   test('pantryBrandFromMetadata returns trimmed brand string', () {
     expect(pantryBrandFromMetadata({'brand': '  Acme  '}), 'Acme');
     expect(pantryBrandFromMetadata({}), isNull);
