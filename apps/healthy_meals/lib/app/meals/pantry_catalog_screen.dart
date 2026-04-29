@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
@@ -245,6 +246,17 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
                   onPressed: () => _setTab(_PantryTab.recipe),
                   child: const Text('Recipes'),
                 ),
+                if (_tab == _PantryTab.food)
+                  TextButton(
+                    key: const Key('pantry-add-food'),
+                    onPressed: () async {
+                      final created = await context.push<bool>('/pantry/create-food');
+                      if (created == true && mounted) {
+                        await _reloadItemsOnly();
+                      }
+                    },
+                    child: const Text('Add food'),
+                  ),
               ],
             ),
             const SizedBox(height: 8),

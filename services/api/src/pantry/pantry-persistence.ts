@@ -1,7 +1,7 @@
 import { and, asc, eq } from 'drizzle-orm';
 
 import type { Database } from '@healthy/db/client';
-import { nutrients, pantryItems } from '@healthy/db/schema';
+import { nutrients, pantryItems, type NewPantryItemRow, type PantryItemRow } from '@healthy/db/schema';
 
 export type PantryItemTypeWire = 'food' | 'recipe';
 
@@ -28,4 +28,22 @@ export async function findPantryItemForOwner(db: Database, ownerUserId: string, 
     .where(and(eq(pantryItems.id, itemId), eq(pantryItems.ownerUserId, ownerUserId)))
     .limit(1);
   return rows[0];
+}
+
+export async function insertOwnedPantryItem(
+  db: Database,
+  input: Pick<NewPantryItemRow, 'ownerUserId' | 'itemType' | 'name' | 'iconKey' | 'metadata'>,
+): Promise<PantryItemRow> {
+  const now = new Date();
+  const [row] = await db
+    .insert(pantryItems)
+    .values({
+      ...input,
+      updatedAt: now,
+    })
+    .returning();
+  if (row === undefined) {
+    throw new Error('insertOwnedPantryItem did not return a row');
+  }
+  return row;
 }

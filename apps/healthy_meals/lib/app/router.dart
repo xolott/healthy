@@ -7,6 +7,7 @@ import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 import 'login_screen.dart';
 import 'meals/meals_main_shell.dart';
 import 'meals/pantry_catalog_screen.dart';
+import 'meals/pantry_create_food_screen.dart';
 import 'meals/meals_placeholder_screens.dart';
 import 'onboarding_screen.dart';
 import 'startup_gate.dart';
@@ -32,7 +33,10 @@ FutureOr<String?> _mealsAuthRedirect(BuildContext context, GoRouterState state) 
   return null;
 }
 
+final GlobalKey<NavigatorState> _mealsRootNavigatorKey = GlobalKey<NavigatorState>();
+
 final mealsRouter = GoRouter(
+  navigatorKey: _mealsRootNavigatorKey,
   initialLocation: '/',
   redirect: _mealsAuthRedirect,
   routes: [
@@ -92,6 +96,13 @@ final mealsRouter = GoRouter(
               pageBuilder: (context, state) => const NoTransitionPage<void>(
                 child: MealsPantryCatalogScreen(),
               ),
+              routes: [
+                GoRoute(
+                  path: 'create-food',
+                  parentNavigatorKey: _mealsRootNavigatorKey,
+                  builder: (context, state) => const MealsPantryCreateFoodScreen(),
+                ),
+              ],
             ),
           ],
         ),

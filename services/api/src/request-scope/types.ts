@@ -118,10 +118,17 @@ export type PublicPantryReferenceOutcome =
       iconKeys: readonly string[];
     };
 
+export type PublicCreateFoodOutcome =
+  | { kind: 'persistence_not_configured' }
+  | { kind: 'persistence_unavailable' }
+  | { kind: 'invalid_input'; field: string; message: string }
+  | { kind: 'ok'; item: PantryItemWire };
+
 export type RequestScopePantryCapability = {
   listItemsForOwner(ownerUserId: string, itemType: 'food' | 'recipe'): Promise<PublicPantryItemsListOutcome>;
   getItemForOwner(ownerUserId: string, itemId: string): Promise<PublicPantryItemDetailOutcome>;
   getReferenceCatalog(): Promise<PublicPantryReferenceOutcome>;
+  createFoodForOwner(ownerUserId: string, rawBody: unknown): Promise<PublicCreateFoodOutcome>;
 };
 
 export type RequestScope = {

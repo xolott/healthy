@@ -16,5 +16,12 @@ export function unusedPantryCapability(): RequestScope['pantry'] {
         iconKeys: [],
       };
     },
+    async createFoodForOwner() {
+      return {
+        kind: 'invalid_input',
+        field: 'body',
+        message: 'Pantry create food is not exercised in this test.',
+      };
+    },
   };
 }

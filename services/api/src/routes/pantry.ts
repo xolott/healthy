@@ -2,6 +2,7 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { getSessionTokenFromRequest } from '../auth/parse-bearer-cookie.js';
 import type {
+  PublicCreateFoodOutcome,
   PublicPantryItemDetailOutcome,
   PublicPantryItemsListOutcome,
   PublicPantryReferenceOutcome,
@@ -98,6 +99,48 @@ const badRequestBody = {
   },
 } as const;
 
+const invalidInputBody = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['error', 'field', 'message'],
+  properties: {
+    error: { type: 'string', const: 'invalid_input' },
+    field: { type: 'string' },
+    message: { type: 'string' },
+  },
+} as const;
+
+const createFoodBodySchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['name', 'iconKey', 'baseAmount', 'nutrients'],
+  properties: {
+    name: { type: 'string' },
+    brand: { type: 'string' },
+    iconKey: { type: 'string' },
+    baseAmount: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['value', 'unit'],
+      properties: {
+        value: { type: 'number' },
+        unit: { type: 'string', enum: ['g', 'oz'] },
+      },
+    },
+    nutrients: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['calories', 'protein', 'fat', 'carbohydrates'],
+      properties: {
+        calories: { type: 'number' },
+        protein: { type: 'number' },
+        fat: { type: 'number' },
+        carbohydrates: { type: 'number' },
+      },
+    },
+  },
+} as const;
+
 const notFoundBody = {
   type: 'object',
   additionalProperties: false,
@@ -171,6 +214,26 @@ function sendReferenceOutcome(reply: FastifyReply, outcome: PublicPantryReferenc
         nutrients: outcome.nutrients,
         iconKeys: [...outcome.iconKeys],
       });
+    default: {
+      const _: never = outcome;
+      return _;
+    }
+  }
+}
+
+function sendCreateFoodOutcome(reply: FastifyReply, outcome: PublicCreateFoodOutcome) {
+  switch (outcome.kind) {
+    case 'persistence_not_configured':
+    case 'persistence_unavailable':
+      return sendSvc(reply);
+    case 'invalid_input':
+      return reply.status(400).send({
+        error: 'invalid_input',
+        field: outcome.field,
+        message: outcome.message,
+      });
+    case 'ok':
+      return reply.status(201).send({ item: outcome.item });
     default: {
       const _: never = outcome;
       return _;
@@ -258,6 +321,42 @@ export async function registerPantryRoutes(app: FastifyInstance, requestScope?: 
       }
       const listOutcome = await scope.pantry.listItemsForOwner(sessionOutcome.user.id, itemType);
       return sendListOutcome(reply, listOutcome);
+    },
+  );
+
+  app.post(
+    '/pantry/items/food',
+    {
+      schema: {
+        summary: 'Create a Food in the Pantry',
+        description:
+          'Creates a user-owned Food with required macros. Base mass may be submitted in grams or ounces and is stored in grams.',
+        body: createFoodBodySchema,
+        response: {
+          201: pantryItemDetailResponse,
+          400: invalidInputBody,
+          401: authErrorBody,
+          503: svcUnavailableBody,
+        },
+      },
+    },
+    async (request, reply) => {
+      const t = getSessionTokenFromRequest({
+        authorization: request.headers.authorization,
+        cookie: request.headers.cookie,
+      });
+      if (t.token === undefined) {
+        return reply.status(401).send({ error: 'unauthorized' });
+      }
+      const sessionOutcome = await scope.currentSession.resolveFromRawToken(t.token);
+      if (sessionOutcome.kind === 'persistence_not_configured' || sessionOutcome.kind === 'persistence_unavailable') {
+        return sendSvc(reply);
+      }
+      if (sessionOutcome.kind !== 'ok') {
+        return reply.status(401).send({ error: 'unauthorized' });
+      }
+      const createOutcome = await scope.pantry.createFoodForOwner(sessionOutcome.user.id, request.body);
+      return sendCreateFoodOutcome(reply, createOutcome);
     },
   );
 

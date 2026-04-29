@@ -5,9 +5,11 @@ import { createAuthUseCasesForDatabase } from '../auth/auth-use-case-scope.js';
 import { PANTRY_ICON_KEYS } from '../pantry/pantry-icon-keys.js';
 import {
   findPantryItemForOwner,
+  insertOwnedPantryItem,
   loadNutrientsCatalog,
   listPantryItemsForOwner,
 } from '../pantry/pantry-persistence.js';
+import { parseCreateFoodPayload } from '../pantry/create-food-payload.js';
 
 import type { PantryItemRow } from '@healthy/db/schema';
 
@@ -173,6 +175,30 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
           };
         } catch (err) {
           app.log.warn({ err }, 'pantry nutrient catalog lookup failed');
+          return { kind: 'persistence_unavailable' };
+        }
+      },
+
+      async createFoodForOwner(ownerUserId: string, rawBody: unknown) {
+        const adapter = app.databaseAdapter;
+        if (adapter === null) {
+          return { kind: 'persistence_not_configured' };
+        }
+        const parsed = parseCreateFoodPayload(rawBody);
+        if (parsed.kind === 'invalid_input') {
+          return parsed;
+        }
+        try {
+          const row = await insertOwnedPantryItem(adapter.db, {
+            ownerUserId,
+            itemType: 'food',
+            name: parsed.value.name,
+            iconKey: parsed.value.iconKey,
+            metadata: parsed.value.metadata as Record<string, unknown>,
+          });
+          return { kind: 'ok', item: mapPantryRowToWire(row) };
+        } catch (err) {
+          app.log.warn({ err }, 'pantry create food failed');
           return { kind: 'persistence_unavailable' };
         }
       },

@@ -128,15 +128,27 @@ function toUserForOwnerLogin(row: UserRow): AuthUserForOwnerLogin {
 /** Unique violation — e.g. concurrent first-owner setups racing on the same email. */
 function isPgUniqueViolation(e: unknown): boolean {
   let current: unknown = e;
-  for (let depth = 0; depth < 8 && current !== null && current !== undefined; depth += 1) {
-    if (typeof current === 'object' && 'code' in current && (current as { code: unknown }).code === '23505') {
-      return true;
+  for (let depth = 0; depth < 12 && current !== null && current !== undefined; depth += 1) {
+    if (typeof current === 'object') {
+      const o = current as Record<string, unknown>;
+      const code = o['code'];
+      if (code === '23505' || code === 23505) {
+        return true;
+      }
+      const msg = o['message'];
+      if (
+        typeof msg === 'string' &&
+        msg.includes('duplicate key') &&
+        (msg.includes('unique') || msg.includes('_unique'))
+      ) {
+        return true;
+      }
+      if ('cause' in o) {
+        current = o['cause'];
+        continue;
+      }
     }
-    if (typeof current === 'object' && current !== null && 'cause' in current) {
-      current = (current as { cause: unknown }).cause;
-    } else {
-      break;
-    }
+    break;
   }
   return false;
 }

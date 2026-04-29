@@ -71,6 +71,9 @@ describe('Request Scope (public status / setup required)', () => {
         async getReferenceCatalog() {
           return { kind: 'ok', nutrients: [], iconKeys: [] };
         },
+        async createFoodForOwner() {
+          return { kind: 'invalid_input', field: 'body', message: 'unused' };
+        },
       },
     };
     await expect(fake.status.isFirstOwnerSetupRequired()).resolves.toEqual({

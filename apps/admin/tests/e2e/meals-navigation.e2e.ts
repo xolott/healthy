@@ -36,6 +36,19 @@ test.describe("Meals navigation shell (integrated)", () => {
     await expect(page.getByRole("heading", { name: "Pantry" })).toBeVisible();
     await expect(page.getByTestId("pantry-catalog-health")).toBeVisible();
     await expect(page.getByTestId("pantry-empty")).toBeVisible();
+    await expect(page.getByTestId("pantry-create-food-card")).toBeVisible();
+
+    const foodLabel = `E2E Pantry Food ${Date.now()}`;
+    await page.getByTestId("pantry-create-food-name").fill(foodLabel);
+    await page.getByTestId("pantry-create-food-base-value").fill("50");
+    await page.getByTestId("pantry-create-food-calories").fill("120");
+    await page.getByTestId("pantry-create-food-protein").fill("4");
+    await page.getByTestId("pantry-create-food-fat").fill("2");
+    await page.getByTestId("pantry-create-food-carbs").fill("18");
+    await page.getByTestId("pantry-create-food-submit").click();
+
+    await expect(page.getByText(foodLabel)).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId("pantry-empty")).toHaveCount(0);
 
     await page.getByTestId("meals-nav-progress").click();
     await expect(page).toHaveURL(/\/progress/);
