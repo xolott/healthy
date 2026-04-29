@@ -3,9 +3,9 @@ import postgres from 'postgres';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { createAuditLogRepository } from '../src/audit-logs/repository.js';
-import { createUserRepository } from '../src/users/repository.js';
 import { auditLogs } from '../src/schema/index.js';
 import { startPostgresIntegration, type IntegrationHarness } from './helpers/integration-db.js';
+import { insertPersistedAuditLog, insertPersistedUser } from './helpers/persisted-builders.js';
 
 describe('audit log repository (integration)', () => {
   let harness: IntegrationHarness;
@@ -48,15 +48,11 @@ describe('audit log repository (integration)', () => {
   });
 
   it('records an actor-attributed event with request context', async () => {
-    const usersRepo = createUserRepository(harness.db);
     const auditRepo = createAuditLogRepository(harness.db);
 
-    const user = await usersRepo.createUser({
+    const user = await insertPersistedUser(harness.db, {
       email: 'actor-audit@example.com',
-      passwordHash: 'h',
       displayName: 'Actor',
-      role: 'member',
-      status: 'active',
     });
 
     const row = await auditRepo.appendAuditLog({
@@ -101,15 +97,11 @@ describe('audit log repository (integration)', () => {
   });
 
   it('sets actor_user_id to null when the actor user is hard-deleted', async () => {
-    const usersRepo = createUserRepository(harness.db);
     const auditRepo = createAuditLogRepository(harness.db);
 
-    const user = await usersRepo.createUser({
+    const user = await insertPersistedUser(harness.db, {
       email: 'hard-delete-audit@example.com',
-      passwordHash: 'h',
       displayName: 'Gone',
-      role: 'member',
-      status: 'active',
     });
 
     const log = await auditRepo.appendAuditLog({
@@ -165,16 +157,14 @@ describe('audit log repository (integration)', () => {
   });
 
   it('lists entity-scoped history in created order using the entity index path', async () => {
-    const auditRepo = createAuditLogRepository(harness.db);
-
-    await auditRepo.appendAuditLog({
+    await insertPersistedAuditLog(harness.db, {
       action: 'meal.created',
       entityType: 'meal',
       entityId: 'meal-1',
       summary: 'First',
     });
     await new Promise((r) => setTimeout(r, 5));
-    await auditRepo.appendAuditLog({
+    await insertPersistedAuditLog(harness.db, {
       action: 'meal.updated',
       entityType: 'meal',
       entityId: 'meal-1',

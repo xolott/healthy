@@ -4,9 +4,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import postgres from 'postgres';
 
 import { createSessionRepository } from '../src/sessions/repository.js';
-import { createUserRepository } from '../src/users/repository.js';
 import { users } from '../src/schema/index.js';
 import { startPostgresIntegration, type IntegrationHarness } from './helpers/integration-db.js';
+import { insertPersistedUser } from './helpers/persisted-builders.js';
 
 describe('session repository (integration)', () => {
   let harness: IntegrationHarness;
@@ -24,16 +24,13 @@ describe('session repository (integration)', () => {
   });
 
   it('creates a session with only a token hash and request context fields', async () => {
-    const usersRepo = createUserRepository(harness.db);
     const sessionsRepo = createSessionRepository(harness.db);
     const before = Date.now();
 
-    const user = await usersRepo.createUser({
+    const user = await insertPersistedUser(harness.db, {
       email: 'u1@example.com',
       passwordHash: 'h',
       displayName: 'U1',
-      role: 'member',
-      status: 'active',
     });
 
     const expires = new Date(before + 60_000);
@@ -60,21 +57,14 @@ describe('session repository (integration)', () => {
   });
 
   it('enforces global uniqueness of token hashes', async () => {
-    const usersRepo = createUserRepository(harness.db);
     const sessionsRepo = createSessionRepository(harness.db);
-    const u1 = await usersRepo.createUser({
+    const u1 = await insertPersistedUser(harness.db, {
       email: 'a@example.com',
-      passwordHash: 'h',
       displayName: 'A',
-      role: 'member',
-      status: 'active',
     });
-    const u2 = await usersRepo.createUser({
+    const u2 = await insertPersistedUser(harness.db, {
       email: 'b@example.com',
-      passwordHash: 'h',
       displayName: 'B',
-      role: 'member',
-      status: 'active',
     });
 
     const t = new Date(Date.now() + 60_000);
@@ -94,14 +84,10 @@ describe('session repository (integration)', () => {
   });
 
   it('revokes a session by token hash', async () => {
-    const usersRepo = createUserRepository(harness.db);
     const sessionsRepo = createSessionRepository(harness.db);
-    const user = await usersRepo.createUser({
+    const user = await insertPersistedUser(harness.db, {
       email: 'r@example.com',
-      passwordHash: 'h',
       displayName: 'R',
-      role: 'member',
-      status: 'active',
     });
     const t = new Date(Date.now() + 60_000);
     await sessionsRepo.createSession({ userId: user.id, tokenHash: 'to-revoke', expiresAt: t });
@@ -116,14 +102,10 @@ describe('session repository (integration)', () => {
   });
 
   it('lists expired unrevoked sessions for cleanup', async () => {
-    const usersRepo = createUserRepository(harness.db);
     const sessionsRepo = createSessionRepository(harness.db);
-    const user = await usersRepo.createUser({
+    const user = await insertPersistedUser(harness.db, {
       email: 'ex@example.com',
-      passwordHash: 'h',
       displayName: 'E',
-      role: 'member',
-      status: 'active',
     });
     const past = new Date(Date.now() - 3_600_000);
     await sessionsRepo.createSession({ userId: user.id, tokenHash: 'exp1', expiresAt: past });
@@ -154,14 +136,10 @@ describe('session repository (integration)', () => {
   });
 
   it('deletes sessions when a user is hard-deleted (cascade)', async () => {
-    const usersRepo = createUserRepository(harness.db);
     const sessionsRepo = createSessionRepository(harness.db);
-    const user = await usersRepo.createUser({
+    const user = await insertPersistedUser(harness.db, {
       email: 'cascade@example.com',
-      passwordHash: 'h',
       displayName: 'C',
-      role: 'member',
-      status: 'active',
     });
     const t = new Date(Date.now() + 60_000);
     await sessionsRepo.createSession({ userId: user.id, tokenHash: 'c1', expiresAt: t });
