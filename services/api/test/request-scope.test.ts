@@ -69,7 +69,7 @@ describe('Request Scope (public status / setup required)', () => {
           return { kind: 'not_found' };
         },
         async getReferenceCatalog() {
-          return { kind: 'ok', nutrients: [], iconKeys: [] };
+          return { kind: 'ok', nutrients: [], iconKeys: [], servingUnits: [] };
         },
         async createFoodForOwner() {
           return { kind: 'invalid_input', field: 'body', message: 'unused' };

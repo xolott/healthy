@@ -9,10 +9,12 @@ import type {
 } from '../request-scope/index.js';
 import { createRequestScopeForApp, type RequestScope } from '../request-scope/index.js';
 
+const predefinedServingUnitsEnum = ['slice', 'cup', 'unit', 'scoop', 'tbsp', 'tsp'] as const;
+
 const pantryReferenceResponse = {
   type: 'object',
   additionalProperties: false,
-  required: ['nutrients', 'iconKeys'],
+  required: ['nutrients', 'iconKeys', 'servingUnits'],
   properties: {
     nutrients: {
       type: 'array',
@@ -28,6 +30,18 @@ const pantryReferenceResponse = {
       },
     },
     iconKeys: { type: 'array', items: { type: 'string' } },
+    servingUnits: {
+      type: 'array',
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['key', 'displayName'],
+        properties: {
+          key: { type: 'string' },
+          displayName: { type: 'string' },
+        },
+      },
+    },
   },
 } as const;
 
@@ -138,6 +152,34 @@ const createFoodBodySchema = {
         carbohydrates: { type: 'number' },
       },
     },
+    servingOptions: {
+      type: 'array',
+      maxItems: 32,
+      items: {
+        oneOf: [
+          {
+            type: 'object',
+            additionalProperties: false,
+            required: ['kind', 'unit', 'grams'],
+            properties: {
+              kind: { type: 'string', const: 'unit' },
+              unit: { type: 'string', enum: [...predefinedServingUnitsEnum] },
+              grams: { type: 'number' },
+            },
+          },
+          {
+            type: 'object',
+            additionalProperties: false,
+            required: ['kind', 'label', 'grams'],
+            properties: {
+              kind: { type: 'string', const: 'custom' },
+              label: { type: 'string' },
+              grams: { type: 'number' },
+            },
+          },
+        ],
+      },
+    },
   },
 } as const;
 
@@ -213,6 +255,7 @@ function sendReferenceOutcome(reply: FastifyReply, outcome: PublicPantryReferenc
       return reply.status(200).send({
         nutrients: outcome.nutrients,
         iconKeys: [...outcome.iconKeys],
+        servingUnits: outcome.servingUnits,
       });
     default: {
       const _: never = outcome;

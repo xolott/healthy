@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseCreateFoodPayload, STORED_GRAMS_FOR_ONE_OUNCE } from '../src/pantry/create-food-payload.js';
+import {
+  parseCreateFoodPayload,
+  parseServingOptions,
+  scaleNutrientsToGrams,
+  STORED_GRAMS_FOR_ONE_OUNCE,
+} from '../src/pantry/create-food-payload.js';
 
 const validNutrients = {
   calories: 100,
@@ -105,5 +110,79 @@ describe('parseCreateFoodPayload', () => {
     if (r.kind === 'invalid_input') {
       expect(r.field).toBe('nutrients.protein');
     }
+  });
+
+  it('accepts optional servingOptions on unit and custom kinds', () => {
+    const r = parseCreateFoodPayload(
+      validBody({
+        servingOptions: [
+          { kind: 'unit', unit: 'slice', grams: 25 },
+          { kind: 'custom', label: 'Snack pack', grams: 40 },
+        ],
+      }),
+    );
+    expect(r.kind).toBe('ok');
+    if (r.kind !== 'ok') {
+      return;
+    }
+    expect(r.value.metadata.servingOptions).toHaveLength(2);
+    expect(r.value.metadata.servingOptions?.[0]).toEqual({ kind: 'unit', unit: 'slice', grams: 25 });
+    expect(r.value.metadata.servingOptions?.[1]).toEqual({
+      kind: 'custom',
+      label: 'Snack pack',
+      grams: 40,
+    });
+  });
+
+  it('rejects invalid serving unit key', () => {
+    const r = parseCreateFoodPayload(
+      validBody({
+        servingOptions: [{ kind: 'unit', unit: 'pizza', grams: 10 }],
+      }),
+    );
+    expect(r.kind).toBe('invalid_input');
+    if (r.kind === 'invalid_input') {
+      expect(r.field).toContain('unit');
+    }
+  });
+});
+
+describe('parseServingOptions', () => {
+  it('rejects non-array', () => {
+    const r = parseServingOptions({}, 100);
+    expect('field' in r).toBe(true);
+    if ('field' in r) {
+      expect(r.field).toBe('servingOptions');
+    }
+  });
+
+  it('parses predefined and custom servings', () => {
+    const r = parseServingOptions(
+      [
+        { kind: 'unit', unit: 'cup', grams: 240 },
+        { kind: 'custom', label: 'dash', grams: 1 },
+      ],
+      100,
+    );
+    expect(Array.isArray(r)).toBe(true);
+    if (Array.isArray(r)) {
+      expect(r).toEqual([
+        { kind: 'unit', unit: 'cup', grams: 240 },
+        { kind: 'custom', label: 'dash', grams: 1 },
+      ]);
+    }
+  });
+});
+
+describe('scaleNutrientsToGrams', () => {
+  it('scales nutrient amounts by mass ratio vs base', () => {
+    const n = { calories: 200, protein: 10, fat: 4, carbohydrates: 20 };
+    const scaled = scaleNutrientsToGrams(n, 100, 50);
+    expect(scaled).toEqual({
+      calories: 100,
+      protein: 5,
+      fat: 2,
+      carbohydrates: 10,
+    });
   });
 });

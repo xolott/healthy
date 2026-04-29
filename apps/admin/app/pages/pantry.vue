@@ -25,6 +25,88 @@ type PantryWireItem = {
 const referenceError = ref<string | null>(null);
 const nutrientsCount = ref<number | null>(null);
 const iconKeysList = ref<string[]>([]);
+const servingUnitsCatalog = ref<{ key: string; displayName: string }[]>([]);
+
+/** Optional extra rows for POST `servingOptions` when creating a food */
+type ServingDraft = {
+  id: number;
+  mode: "unit" | "custom";
+  unitKey: string;
+  customLabel: string;
+  grams: string;
+};
+
+let nextServingDraftId = 0;
+
+function makeEmptyServingDraft(unitFallback: string): ServingDraft {
+  const id = nextServingDraftId;
+  nextServingDraftId += 1;
+  return {
+    id,
+    mode: "unit",
+    unitKey: unitFallback,
+    customLabel: "",
+    grams: "",
+  };
+}
+
+const createFoodServings = ref<ServingDraft[]>([]);
+
+function addServingOptionRow() {
+  if (servingUnitsCatalog.value.length === 0) {
+    const id = nextServingDraftId;
+    nextServingDraftId += 1;
+    createFoodServings.value.push({
+      id,
+      mode: "custom",
+      unitKey: "slice",
+      customLabel: "",
+      grams: "",
+    });
+    return;
+  }
+  const first = servingUnitsCatalog.value[0]!.key;
+  createFoodServings.value = [...createFoodServings.value, makeEmptyServingDraft(first)];
+}
+
+function removeServingOptionRow(id: number) {
+  createFoodServings.value = createFoodServings.value.filter((r) => r.id !== id);
+}
+
+type ServingOptionWire =
+  | { kind: "unit"; unit: string; grams: number }
+  | { kind: "custom"; label: string; grams: number };
+
+function parseServingDraftsIntoPayload(): { ok: true; value: ServingOptionWire[] } | { ok: false; message: string } {
+  const out: ServingOptionWire[] = [];
+  for (const d of createFoodServings.value) {
+    const gRaw = d.grams.trim();
+    const labelTrim = d.customLabel.trim();
+    const isBlankRow =
+      d.mode === "unit"
+        ? gRaw === ""
+        : gRaw === "" && labelTrim === "";
+    if (isBlankRow) {
+      continue;
+    }
+    const gNum = Number(gRaw);
+    if (!Number.isFinite(gNum) || gNum <= 0) {
+      return { ok: false, message: "Each serving option needs a positive mass in grams." };
+    }
+    if (d.mode === "custom") {
+      if (labelTrim === "") {
+        return { ok: false, message: "Custom servings need a label." };
+      }
+      out.push({ kind: "custom", label: labelTrim, grams: gNum });
+    } else {
+      if (!servingUnitsCatalog.value.some((u) => u.key === d.unitKey)) {
+        return { ok: false, message: "Choose a predefined serving unit for each serving row." };
+      }
+      out.push({ kind: "unit", unit: d.unitKey, grams: gNum });
+    }
+  }
+  return { ok: true, value: out };
+}
 
 const items = ref<PantryWireItem[]>([]);
 const itemsError = ref<string | null>(null);
@@ -46,12 +128,14 @@ const createFoodSubmitting = ref(false);
 async function loadReference(base: string): Promise<boolean> {
   referenceError.value = null;
   try {
-    const res = await $fetch<{ nutrients: { key: string }[]; iconKeys: string[] }>(
-      `${normalizeHealthyApiBaseUrl(base)}/pantry/reference`,
-      { credentials: "include" },
-    );
+    const res = await $fetch<{
+      nutrients: { key: string }[];
+      iconKeys: string[];
+      servingUnits?: { key: string; displayName: string }[];
+    }>(`${normalizeHealthyApiBaseUrl(base)}/pantry/reference`, { credentials: "include" });
     nutrientsCount.value = res.nutrients.length;
     iconKeysList.value = res.iconKeys;
+    servingUnitsCatalog.value = res.servingUnits ?? [];
     if (createFoodIconKey.value === "" && res.iconKeys.length > 0) {
       const first = res.iconKeys[0];
       if (first) {
@@ -63,6 +147,8 @@ async function loadReference(base: string): Promise<boolean> {
     referenceError.value = "Unable to load nutrient catalog.";
     nutrientsCount.value = null;
     iconKeysList.value = [];
+    servingUnitsCatalog.value = [];
+    createFoodServings.value = [];
     return false;
   }
 }
@@ -182,6 +268,13 @@ async function submitCreateFood() {
   }
 
   const brandTrim = createFoodBrand.value.trim();
+
+  const servingsParsed = parseServingDraftsIntoPayload();
+  if (!servingsParsed.ok) {
+    createFoodError.value = servingsParsed.message;
+    return;
+  }
+
   createFoodSubmitting.value = true;
   try {
     await $fetch(`${normalizeHealthyApiBaseUrl(base)}/pantry/items/food`, {
@@ -198,6 +291,9 @@ async function submitCreateFood() {
           fat,
           carbohydrates: carbs,
         },
+        ...(servingsParsed.value.length > 0
+          ? { servingOptions: servingsParsed.value }
+          : {}),
       },
     });
     createFoodName.value = "";
@@ -207,6 +303,7 @@ async function submitCreateFood() {
     createFoodProtein.value = "";
     createFoodFat.value = "";
     createFoodCarbs.value = "";
+    createFoodServings.value = [];
     await fetchItemsPayload(base);
     itemsError.value = null;
   } catch (err: unknown) {
@@ -434,6 +531,91 @@ watch(tab, async () => {
               />
             </div>
           </div>
+
+          <div class="border-border space-y-3 border-t pt-3">
+            <div>
+              <p class="text-sm font-medium">Serving options <span class="text-muted-foreground font-normal">(optional)</span></p>
+              <p class="text-muted-foreground mt-0.5 text-xs">
+                Add practical portions (predefined units or a custom label). Each row is a mass in grams for one serving; nutrients scale from your base amount above.
+              </p>
+            </div>
+            <div
+              v-for="row in createFoodServings"
+              :key="row.id"
+              class="bg-muted/30 flex flex-col gap-2 rounded-md border border-border p-3 sm:flex-row sm:items-end"
+            >
+              <div class="grid flex-1 gap-2 sm:grid-cols-3">
+                <div class="space-y-1.5">
+                  <Label :for="`serving-mode-${row.id}`">Type</Label>
+                  <select
+                    :id="`serving-mode-${row.id}`"
+                    v-model="row.mode"
+                    class="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
+                  >
+                    <option value="unit" :disabled="servingUnitsCatalog.length === 0">
+                      Predefined unit
+                    </option>
+                    <option value="custom">
+                      Custom label
+                    </option>
+                  </select>
+                </div>
+                <div v-if="row.mode === 'unit'" class="space-y-1.5">
+                  <Label :for="`serving-unit-${row.id}`">Unit</Label>
+                  <select
+                    :id="`serving-unit-${row.id}`"
+                    v-model="row.unitKey"
+                    class="border-input bg-background h-8 w-full rounded-lg border px-2.5 text-sm"
+                    :disabled="servingUnitsCatalog.length === 0"
+                  >
+                    <option
+                      v-for="u in servingUnitsCatalog"
+                      :key="u.key"
+                      :value="u.key"
+                    >
+                      {{ u.displayName }}
+                    </option>
+                  </select>
+                </div>
+                <div v-else class="space-y-1.5 sm:col-span-1">
+                  <Label :for="`serving-label-${row.id}`">Label</Label>
+                  <Input
+                    :id="`serving-label-${row.id}`"
+                    v-model="row.customLabel"
+                    type="text"
+                    autocomplete="off"
+                    placeholder="e.g. half bar"
+                  />
+                </div>
+                <div class="space-y-1.5">
+                  <Label :for="`serving-grams-${row.id}`">Grams per serving</Label>
+                  <Input
+                    :id="`serving-grams-${row.id}`"
+                    v-model="row.grams"
+                    type="text"
+                    inputmode="decimal"
+                    placeholder="e.g. 30"
+                  />
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                class="shrink-0"
+                @click="removeServingOptionRow(row.id)"
+              >
+                Remove
+              </Button>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              data-testid="pantry-create-food-add-serving"
+              @click="addServingOptionRow"
+            >
+              Add serving option
+            </Button>
+          </div>
           <Button
             type="submit"
             :disabled="createFoodSubmitting"
@@ -476,7 +658,15 @@ watch(tab, async () => {
         class="flex items-center gap-3 px-3 py-2 text-sm"
       >
         <span class="text-muted-foreground font-mono text-xs">{{ it.iconKey }}</span>
-        <span class="font-medium">{{ it.name }}</span>
+        <NuxtLink
+          v-if="tab === 'food'"
+          class="font-medium text-foreground hover:underline"
+          :to="`/pantry/food/${it.id}`"
+          data-testid="pantry-food-item-link"
+        >
+          {{ it.name }}
+        </NuxtLink>
+        <span v-else class="font-medium">{{ it.name }}</span>
       </li>
     </ul>
   </section>

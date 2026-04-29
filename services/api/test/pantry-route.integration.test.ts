@@ -7,6 +7,7 @@ import { generateSessionToken } from '../src/auth/session-token.js';
 import { buildApp } from '../src/app.js';
 import { STORED_GRAMS_FOR_ONE_OUNCE } from '../src/pantry/create-food-payload.js';
 import { PANTRY_ICON_KEYS } from '../src/pantry/pantry-icon-keys.js';
+import { PREDEFINED_SERVING_UNIT_ENTRIES } from '../src/pantry/predefined-serving-units.js';
 import {
   insertPersistedPantryItem,
   insertPersistedSession,
@@ -76,6 +77,7 @@ describe('Pantry routes (integration)', () => {
       const body = JSON.parse(res.payload) as {
         nutrients: { key: string; displayName: string; canonicalUnit: string }[];
         iconKeys: string[];
+        servingUnits: { key: string; displayName: string }[];
       };
       expect(body.nutrients).toHaveLength(4);
       expect(body.nutrients.map((n) => n.key)).toEqual([
@@ -85,6 +87,7 @@ describe('Pantry routes (integration)', () => {
         'protein',
       ]);
       expect(body.iconKeys).toEqual([...PANTRY_ICON_KEYS]);
+      expect(body.servingUnits).toEqual([...PREDEFINED_SERVING_UNIT_ENTRIES]);
     } finally {
       await app.close();
     }
@@ -443,6 +446,117 @@ describe('Pantry routes (integration)', () => {
       const err = JSON.parse(res.payload) as { error: string; field: string };
       expect(err.error).toBe('invalid_input');
       expect(err.field).toBe('iconKey');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('POST /pantry/items/food persists serving options and GET detail returns them', async () => {
+    const owner = await insertPersistedUser(harness.db, {
+      email: 'servings-food@example.com',
+      passwordHash: await hashPasswordArgon2id(goodPassword),
+      displayName: 'Servings Owner',
+      role: 'owner',
+      status: 'active',
+    });
+    const { rawToken, tokenHash } = generateSessionToken();
+    await insertPersistedSession(harness.db, {
+      userId: owner.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/pantry/items/food',
+        headers: {
+          authorization: `Bearer ${rawToken}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        payload: {
+          name: 'Bread',
+          iconKey: 'food_apple',
+          baseAmount: { value: 100, unit: 'g' },
+          nutrients: {
+            calories: 250,
+            protein: 9,
+            fat: 3,
+            carbohydrates: 48,
+          },
+          servingOptions: [
+            { kind: 'unit', unit: 'slice', grams: 30 },
+            { kind: 'custom', label: 'Half sandwich', grams: 60 },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(201);
+      const created = JSON.parse(res.payload) as {
+        item: { id: string; metadata: Record<string, unknown> };
+      };
+      const servings = created.item.metadata['servingOptions'] as unknown[];
+      expect(Array.isArray(servings)).toBe(true);
+      expect(servings).toHaveLength(2);
+      expect(servings[0]).toEqual({ kind: 'unit', unit: 'slice', grams: 30 });
+      expect(servings[1]).toEqual({ kind: 'custom', label: 'Half sandwich', grams: 60 });
+
+      const detail = await app.inject({
+        method: 'GET',
+        url: `/pantry/items/${created.item.id}`,
+        headers: { authorization: `Bearer ${rawToken}`, accept: 'application/json' },
+      });
+      expect(detail.statusCode).toBe(200);
+      const detailBody = JSON.parse(detail.payload) as {
+        item: { metadata: Record<string, unknown> };
+      };
+      expect(detailBody.item.metadata['servingOptions']).toEqual(servings);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('POST /pantry/items/food returns invalid_input for duplicate serving unit entries', async () => {
+    const owner = await insertPersistedUser(harness.db, {
+      email: 'dup-unit@example.com',
+      passwordHash: await hashPasswordArgon2id(goodPassword),
+      displayName: 'Dup Owner',
+      role: 'owner',
+      status: 'active',
+    });
+    const { rawToken, tokenHash } = generateSessionToken();
+    await insertPersistedSession(harness.db, {
+      userId: owner.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    });
+
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/pantry/items/food',
+        headers: {
+          authorization: `Bearer ${rawToken}`,
+          accept: 'application/json',
+          'content-type': 'application/json',
+        },
+        payload: {
+          name: 'X',
+          iconKey: 'food_apple',
+          baseAmount: { value: 10, unit: 'g' },
+          nutrients: { calories: 10, protein: 1, fat: 0, carbohydrates: 1 },
+          servingOptions: [
+            { kind: 'unit', unit: 'cup', grams: 5 },
+            { kind: 'unit', unit: 'cup', grams: 10 },
+          ],
+        },
+      });
+      expect(res.statusCode).toBe(400);
+      const err = JSON.parse(res.payload) as { field: string; message: string };
+      expect(err.field).toContain('unit');
+      expect(err.message).toContain('Duplicate');
     } finally {
       await app.close();
     }

@@ -14,6 +14,7 @@ export function unusedPantryCapability(): RequestScope['pantry'] {
         kind: 'ok',
         nutrients: [],
         iconKeys: [],
+        servingUnits: [],
       };
     },
     async createFoodForOwner() {

@@ -119,10 +119,14 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
             final id = e['id'];
             final name = e['name'];
             final iconKey = e['iconKey'];
-            if (id is! String || name is! String || iconKey is! String) {
+            final itemType = e['itemType'];
+            if (id is! String ||
+                name is! String ||
+                iconKey is! String ||
+                itemType is! String) {
               return null;
             }
-            return _PantryItemWire(id: id, name: name, iconKey: iconKey);
+            return _PantryItemWire(id: id, name: name, iconKey: iconKey, itemType: itemType);
           })
           .whereType<_PantryItemWire>()
           .toList();
@@ -187,10 +191,14 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
             final id = e['id'];
             final name = e['name'];
             final iconKey = e['iconKey'];
-            if (id is! String || name is! String || iconKey is! String) {
+            final itemType = e['itemType'];
+            if (id is! String ||
+                name is! String ||
+                iconKey is! String ||
+                itemType is! String) {
               return null;
             }
-            return _PantryItemWire(id: id, name: name, iconKey: iconKey);
+            return _PantryItemWire(id: id, name: name, iconKey: iconKey, itemType: itemType);
           })
           .whereType<_PantryItemWire>()
           .toList();
@@ -290,6 +298,11 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
                       dense: true,
                       title: Text(it.name),
                       subtitle: Text(it.iconKey, style: const TextStyle(fontFamily: 'monospace', fontSize: 11)),
+                      onTap: _tab == _PantryTab.food && it.itemType == 'food'
+                          ? () {
+                              context.push('/pantry/food/${it.id}');
+                            }
+                          : null,
                     );
                   },
                 ),
@@ -302,9 +315,15 @@ class _MealsPantryCatalogScreenState extends State<MealsPantryCatalogScreen> {
 }
 
 class _PantryItemWire {
-  const _PantryItemWire({required this.id, required this.name, required this.iconKey});
+  const _PantryItemWire({
+    required this.id,
+    required this.name,
+    required this.iconKey,
+    required this.itemType,
+  });
 
   final String id;
   final String name;
   final String iconKey;
+  final String itemType;
 }

@@ -109,6 +109,11 @@ export type PublicPantryItemDetailOutcome =
   | { kind: 'not_found' }
   | { kind: 'ok'; item: PantryItemWire };
 
+export type ServingUnitCatalogEntry = {
+  key: string;
+  displayName: string;
+};
+
 export type PublicPantryReferenceOutcome =
   | { kind: 'persistence_not_configured' }
   | { kind: 'persistence_unavailable' }
@@ -116,6 +121,7 @@ export type PublicPantryReferenceOutcome =
       kind: 'ok';
       nutrients: NutrientCatalogEntry[];
       iconKeys: readonly string[];
+      servingUnits: ServingUnitCatalogEntry[];
     };
 
 export type PublicCreateFoodOutcome =

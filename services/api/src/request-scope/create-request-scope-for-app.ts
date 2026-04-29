@@ -10,6 +10,7 @@ import {
   listPantryItemsForOwner,
 } from '../pantry/pantry-persistence.js';
 import { parseCreateFoodPayload } from '../pantry/create-food-payload.js';
+import { PREDEFINED_SERVING_UNIT_ENTRIES } from '../pantry/predefined-serving-units.js';
 
 import type { PantryItemRow } from '@healthy/db/schema';
 
@@ -172,6 +173,7 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
               canonicalUnit: n.canonicalUnit,
             })),
             iconKeys: PANTRY_ICON_KEYS,
+            servingUnits: [...PREDEFINED_SERVING_UNIT_ENTRIES],
           };
         } catch (err) {
           app.log.warn({ err }, 'pantry nutrient catalog lookup failed');
