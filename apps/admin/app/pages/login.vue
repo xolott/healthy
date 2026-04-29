@@ -69,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { useMutation, useQueryCache } from "@pinia/colada";
+import { useMutation } from "@pinia/colada";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -82,9 +82,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useHealthyApiStore } from "@/stores/healthyApi";
 import { MissingAdminApiBaseUrlError, clientPasswordTooShortMessage } from "@/utils/firstOwnerOnboardingErrors";
-import { healthyAuthMeQueryKey, healthyPublicStatusQueryKey } from "@/utils/healthyApiQueryKeys";
 import { formatOwnerLoginError } from "@/utils/ownerLoginErrors";
 import { PASSWORD_MIN_LENGTH } from "@/utils/healthyApiAuth";
 import { createHealthyApiClient } from "@/utils/healthyApiClient";
@@ -96,8 +94,7 @@ const formError = ref<string | null>(null);
 const passwordMinLength = PASSWORD_MIN_LENGTH;
 
 const api = useHealthyApiBaseUrl();
-const queryCache = useQueryCache();
-const apiStore = useHealthyApiStore();
+const { afterOwnerSignedIn } = useOwnerLoginSignedInChoreography();
 
 const { mutateAsync, isLoading } = useMutation({
   mutation: async (input: { email: string; password: string }) => {
@@ -108,20 +105,7 @@ const { mutateAsync, isLoading } = useMutation({
     return createHealthyApiClient({ baseUrl: resolved.baseUrl }).ownerLogin(input);
   },
   async onSuccess(user) {
-    apiStore.setCurrentUser(user);
-    const resolved = api.value;
-    if (resolved.ok) {
-      await queryCache.invalidateQueries({
-        key: [...healthyPublicStatusQueryKey(resolved.baseUrl)],
-        exact: true,
-      });
-      await queryCache.invalidateQueries({
-        key: [...healthyAuthMeQueryKey(resolved.baseUrl)],
-        exact: true,
-      });
-    }
-    apiStore.markProbe();
-    await navigateTo("/home");
+    await afterOwnerSignedIn(user);
   },
 });
 
