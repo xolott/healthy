@@ -93,14 +93,21 @@ export const HEALTHY_API_OWNER_LOGIN_ENDPOINT = {
   path: "/auth/login" as const,
 };
 
+export const HEALTHY_API_AUTH_LOGOUT_ENDPOINT = {
+  method: "POST" as const,
+  path: "/auth/logout" as const,
+};
+
 export type HealthyApiPublicStatusEndpoint = typeof HEALTHY_API_PUBLIC_STATUS_ENDPOINT;
 export type HealthyApiAuthMeEndpoint = typeof HEALTHY_API_AUTH_ME_ENDPOINT;
 export type HealthyApiOwnerLoginEndpoint = typeof HEALTHY_API_OWNER_LOGIN_ENDPOINT;
+export type HealthyApiAuthLogoutEndpoint = typeof HEALTHY_API_AUTH_LOGOUT_ENDPOINT;
 
 export type HealthyApiClientEndpoint =
   | HealthyApiPublicStatusEndpoint
   | HealthyApiAuthMeEndpoint
-  | HealthyApiOwnerLoginEndpoint;
+  | HealthyApiOwnerLoginEndpoint
+  | HealthyApiAuthLogoutEndpoint;
 
 export type HealthyApiClientErrorKind =
   | "network"
@@ -160,6 +167,10 @@ export function healthyApiOwnerLoginUrl(normalizedBaseUrl: string): string {
   return `${normalizedBaseUrl}${HEALTHY_API_OWNER_LOGIN_ENDPOINT.path}`;
 }
 
+export function healthyApiAuthLogoutUrl(normalizedBaseUrl: string): string {
+  return `${normalizedBaseUrl}${HEALTHY_API_AUTH_LOGOUT_ENDPOINT.path}`;
+}
+
 export type CreateHealthyApiClientOptions = {
   baseUrl: string;
   fetch?: typeof fetch;
@@ -170,6 +181,8 @@ export type HealthyApiClient = {
   getPublicStatus(): Promise<HealthyPublicStatus>;
   getCurrentUser(): Promise<HealthyAuthMeUser>;
   ownerLogin(input: { email: string; password: string }): Promise<HealthyAuthMeUser>;
+  /** Revokes the current session; documented success is `204 No Content` (empty body). */
+  logout(): Promise<void>;
 };
 
 function mergeFetchInit(defaultRequestInit: RequestInit, override: RequestInit): RequestInit {
@@ -485,6 +498,72 @@ export function createHealthyApiClient(options: CreateHealthyApiClientOptions): 
       throw new HealthyApiClientError({
         kind: "unexpected_http_status",
         endpoint: HEALTHY_API_OWNER_LOGIN_ENDPOINT,
+        message: `Healthy API returned HTTP ${String(res.status)}`,
+        httpStatus: res.status,
+      });
+    },
+
+    async logout() {
+      const url = healthyApiAuthLogoutUrl(normalizedBase);
+      const headers = new Headers(defaultRequestInit.headers);
+      headers.set("Accept", "application/json");
+      const init = mergeFetchInit(defaultRequestInit, {
+        method: "POST",
+        credentials: "include",
+        headers,
+      });
+
+      let res: Response;
+      try {
+        res = await doFetch(url, init);
+      } catch (e) {
+        throw new HealthyApiClientError({
+          kind: "network",
+          endpoint: HEALTHY_API_AUTH_LOGOUT_ENDPOINT,
+          message: "Healthy API request failed",
+          cause: e,
+        });
+      }
+
+      if (res.status === 204) {
+        return;
+      }
+
+      let body: unknown;
+      try {
+        body = await res.json();
+      } catch (e) {
+        throw new HealthyApiClientError({
+          kind: "invalid_json",
+          endpoint: HEALTHY_API_AUTH_LOGOUT_ENDPOINT,
+          message: "Healthy API response was not valid JSON",
+          httpStatus: res.status,
+          cause: e,
+        });
+      }
+
+      if (res.status === 503) {
+        const parsed = authMeServiceUnavailableBodySchema.safeParse(body);
+        if (!parsed.success) {
+          throw new HealthyApiClientError({
+            kind: "error_body_invalid",
+            endpoint: HEALTHY_API_AUTH_LOGOUT_ENDPOINT,
+            message: "Healthy API /auth/logout error response did not match the documented shape",
+            httpStatus: 503,
+            cause: parsed.error,
+          });
+        }
+        throw new HealthyApiClientError({
+          kind: "service_unavailable",
+          endpoint: HEALTHY_API_AUTH_LOGOUT_ENDPOINT,
+          message: "Healthy API reported service_unavailable",
+          httpStatus: 503,
+        });
+      }
+
+      throw new HealthyApiClientError({
+        kind: "unexpected_http_status",
+        endpoint: HEALTHY_API_AUTH_LOGOUT_ENDPOINT,
         message: `Healthy API returned HTTP ${String(res.status)}`,
         httpStatus: res.status,
       });

@@ -12,6 +12,7 @@ import {
   postOwnerLogin,
   SetupNotFoundError,
 } from "../../app/utils/healthyApiAuth";
+import { HEALTHY_API_AUTH_LOGOUT_ENDPOINT } from "../../app/utils/healthyApiClient";
 
 describe("healthyApiAuth", () => {
   afterEach(() => {
@@ -256,27 +257,50 @@ describe("healthyApiAuth", () => {
     });
   });
 
-  it("postAuthLogout throws ApiServiceUnavailableError on 503", async () => {
+  it("postAuthLogout throws ApiServiceUnavailableError on documented 503", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
         status: 503,
         ok: false,
+        json: async () => ({ error: "service_unavailable" }),
       })) as unknown as typeof fetch,
     );
     await expect(postAuthLogout("https://api.example/")).rejects.toBeInstanceOf(ApiServiceUnavailableError);
   });
 
-  it("postAuthLogout POSTs with credentials and accepts 204", async () => {
+  it("postAuthLogout POSTs with credentials and accepts 204 without a JSON body", async () => {
     const fetchMock = vi.fn(async () => ({
       status: 204,
       ok: true,
     })) as unknown as typeof fetch;
     vi.stubGlobal("fetch", fetchMock);
     await postAuthLogout("https://api.example/");
-    expect(fetchMock).toHaveBeenCalledWith("https://api.example/auth/logout", {
-      method: "POST",
-      credentials: "include",
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example/auth/logout",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        headers: expect.any(Headers),
+      }),
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(((init.headers as Headers).get("Accept"))).toBe("application/json");
+  });
+
+  it("postAuthLogout surfaces unexpected statuses as HealthyApiClientError", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        status: 418,
+        ok: false,
+        json: async () => ({ teapot: true }),
+      })) as unknown as typeof fetch,
+    );
+    await expect(postAuthLogout("https://api.example/")).rejects.toMatchObject({
+      kind: "unexpected_http_status",
+      httpStatus: 418,
+      endpoint: HEALTHY_API_AUTH_LOGOUT_ENDPOINT,
     });
   });
 });

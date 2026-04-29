@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  HEALTHY_API_AUTH_LOGOUT_ENDPOINT,
   HEALTHY_API_AUTH_ME_ENDPOINT,
   HEALTHY_API_OWNER_LOGIN_ENDPOINT,
   HEALTHY_API_PUBLIC_STATUS_ENDPOINT,
@@ -556,6 +557,57 @@ describe("createHealthyApiClient / ownerLogin", () => {
     ).rejects.toMatchObject({
       kind: "network",
       endpoint: HEALTHY_API_OWNER_LOGIN_ENDPOINT,
+    });
+  });
+});
+
+describe("createHealthyApiClient / logout", () => {
+  it("resolves on 204 without reading JSON", async () => {
+    const jsonSpy = vi.fn(async () => ({}));
+    const fetchMock = vi.fn(async () => ({
+      status: 204,
+      ok: true,
+      json: jsonSpy,
+    })) as unknown as typeof fetch;
+
+    await expect(
+      createHealthyApiClient({ baseUrl: "http://example.test", fetch: fetchMock }).logout(),
+    ).resolves.toBeUndefined();
+    expect(jsonSpy).not.toHaveBeenCalled();
+    expect(fetchMock).toHaveBeenCalledWith("http://example.test/auth/logout", expect.any(Object));
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.credentials).toBe("include");
+  });
+
+  it("throws unexpected_http_status for non-204 non-503 statuses", async () => {
+    const fetchMock = vi.fn(async () => ({
+      status: 500,
+      ok: false,
+      json: async () => ({ error: "boom" }),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      createHealthyApiClient({ baseUrl: "http://example.test/", fetch: fetchMock }).logout(),
+    ).rejects.toMatchObject({
+      kind: "unexpected_http_status",
+      endpoint: HEALTHY_API_AUTH_LOGOUT_ENDPOINT,
+      httpStatus: 500,
+    });
+  });
+
+  it("reports service_unavailable on documented 503 body", async () => {
+    const fetchMock = vi.fn(async () => ({
+      status: 503,
+      ok: false,
+      json: async () => ({ error: "service_unavailable" }),
+    })) as unknown as typeof fetch;
+
+    await expect(
+      createHealthyApiClient({ baseUrl: "http://example.test", fetch: fetchMock }).logout(),
+    ).rejects.toMatchObject({
+      kind: "service_unavailable",
+      endpoint: HEALTHY_API_AUTH_LOGOUT_ENDPOINT,
+      httpStatus: 503,
     });
   });
 });

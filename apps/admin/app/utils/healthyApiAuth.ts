@@ -137,18 +137,19 @@ export async function postOwnerLogin(
 }
 
 /**
- * Revokes the current API session (HttpOnly cookie) and clears the cookie on the client.
+ * Revokes the current API session (HttpOnly cookie and/or Bearer path via default fetch wiring).
+ * Delegates to {@link createHealthyApiClient}; maps documented `503` `service_unavailable` to {@link ApiServiceUnavailableError}.
  */
-export async function postAuthLogout(apiBaseUrl: string): Promise<void> {
-  const base = apiBaseUrl.replace(/\/+$/, "");
-  const res = await fetch(`${base}/auth/logout`, {
-    method: "POST",
-    credentials: "include",
-  });
-  if (res.status === 503) {
-    throw new ApiServiceUnavailableError();
-  }
-  if (!res.ok) {
-    throw new Error(`HTTP ${String(res.status)}`);
+export async function postAuthLogout(
+  apiBaseUrl: string,
+  options?: Omit<CreateHealthyApiClientOptions, "baseUrl">,
+): Promise<void> {
+  try {
+    await createHealthyApiClient({ baseUrl: apiBaseUrl, ...options }).logout();
+  } catch (e) {
+    if (isHealthyApiClientError(e) && e.kind === "service_unavailable") {
+      throw new ApiServiceUnavailableError();
+    }
+    throw e;
   }
 }
