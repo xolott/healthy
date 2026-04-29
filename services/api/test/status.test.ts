@@ -1,6 +1,15 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
+import type { RequestScope } from '../src/request-scope/index.js';
+
+function unusedCurrentSession(): RequestScope['currentSession'] {
+  return {
+    async resolveFromRawToken(_rawToken: string) {
+      return { kind: 'unauthorized' as const, reason: 'missing_session' as const };
+    },
+  };
+}
 
 describe('GET /status', () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
@@ -21,6 +30,7 @@ describe('GET /status', () => {
             return { kind: 'ok', hasActiveOwner: false };
           },
         },
+        currentSession: unusedCurrentSession(),
       },
     });
 
@@ -45,6 +55,7 @@ describe('GET /status', () => {
             return { kind: 'ok', hasActiveOwner: true };
           },
         },
+        currentSession: unusedCurrentSession(),
       },
     });
 
@@ -79,6 +90,7 @@ describe('GET /status', () => {
             return { kind: 'persistence_unavailable' };
           },
         },
+        currentSession: unusedCurrentSession(),
       },
     });
 

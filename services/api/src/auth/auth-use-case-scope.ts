@@ -12,7 +12,6 @@ import { createDrizzleAuthPersistence } from './auth-persistence.js';
 import {
   createAuthUseCases,
   type OwnerLoginResult,
-  type ResolveCurrentSessionResult,
   validateFirstOwnerSetupPayload,
   type FirstOwnerSetupResult,
   type LogoutResult,
@@ -21,13 +20,6 @@ import { hashPasswordArgon2id, verifyPasswordArgon2id } from './hash-password.js
 import { generateSessionToken } from './session-token.js';
 
 export type { AuthMeUser } from './auth-use-cases.js';
-
-/**
- * Outcome of resolving the current session for GET /auth/me, including configuration checks.
- */
-export type AuthMeFromAppRequestOutcome =
-  | { kind: 'service_unavailable' }
-  | ResolveCurrentSessionResult;
 
 /**
  * Owner login from app configuration (database URL check + disposable connection).
@@ -121,25 +113,6 @@ export async function ownerLoginFromAppRequest(
   return withDisposableDatabase(url, async (db) => {
     const useCases = createAuthUseCasesForDatabase(db);
     return useCases.ownerLogin(rawEmail, rawPassword, ctx);
-  });
-}
-
-/**
- * Resolves the current session using app configuration: disposable DB connection,
- * factory-created Auth Use Cases, and Drizzle-backed persistence.
- */
-export async function resolveAuthMeFromAppRequest(
-  app: FastifyInstance,
-  rawToken: string,
-): Promise<AuthMeFromAppRequestOutcome> {
-  const url = getAuthDatabaseUrl(app);
-  if (url === undefined) {
-    return { kind: 'service_unavailable' };
-  }
-
-  return withDisposableDatabase(url, async (db) => {
-    const useCases = createAuthUseCasesForDatabase(db);
-    return useCases.resolveCurrentSession(rawToken);
   });
 }
 

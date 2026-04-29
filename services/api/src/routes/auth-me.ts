@@ -1,11 +1,8 @@
-import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 
 import { getSessionTokenFromRequest } from '../auth/parse-bearer-cookie.js';
-import {
-  resolveAuthMeFromAppRequest,
-  type AuthMeFromAppRequestOutcome,
-  type AuthMeUser,
-} from '../auth/auth-use-case-scope.js';
+import type { PublicCurrentSessionOutcome } from '../request-scope/index.js';
+import { createRequestScopeForApp, type RequestScope } from '../request-scope/index.js';
 
 const meResponse = {
   type: 'object',
@@ -44,9 +41,14 @@ const authMeServiceUnavailableResponse = {
   },
 } as const;
 
-function sendAuthMeOutcome(reply: FastifyReply, outcome: AuthMeFromAppRequestOutcome) {
+function resolveRequestScope(app: FastifyInstance, scope: RequestScope | undefined): RequestScope {
+  return scope ?? createRequestScopeForApp(app);
+}
+
+function sendAuthMeOutcome(reply: FastifyReply, outcome: PublicCurrentSessionOutcome) {
   switch (outcome.kind) {
-    case 'service_unavailable':
+    case 'persistence_not_configured':
+    case 'persistence_unavailable':
       return reply.status(503).send({ error: 'service_unavailable' });
     case 'ok':
       return reply.status(200).send({ user: outcome.user });
@@ -59,18 +61,8 @@ function sendAuthMeOutcome(reply: FastifyReply, outcome: AuthMeFromAppRequestOut
   }
 }
 
-/**
- * @public For tests: replace the default current-user resolution.
- */
-export type AuthMeRouteOptions = {
-  getUser?: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
-};
-
-export async function registerAuthMeRoute(app: FastifyInstance, options?: AuthMeRouteOptions) {
-  if (options?.getUser !== undefined) {
-    app.get('/auth/me', options.getUser);
-    return;
-  }
+export async function registerAuthMeRoute(app: FastifyInstance, requestScope?: RequestScope) {
+  const scope = resolveRequestScope(app, requestScope);
 
   app.get(
     '/auth/me',
@@ -95,10 +87,10 @@ export async function registerAuthMeRoute(app: FastifyInstance, options?: AuthMe
         return reply.status(401).send({ error: 'unauthorized' });
       }
 
-      const outcome = await resolveAuthMeFromAppRequest(app, rawToken);
+      const outcome = await scope.currentSession.resolveFromRawToken(rawToken);
       return sendAuthMeOutcome(reply, outcome);
     },
   );
 }
 
-export type { AuthMeUser };
+export type { AuthMeUser } from '../auth/auth-use-cases.js';

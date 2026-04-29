@@ -7,7 +7,7 @@ import { registerSwagger } from './plugins/swagger.js';
 import { registerHealthRoutes } from './routes/health.js';
 import { registerFirstOwnerSetupRoute, type FirstOwnerRouteOptions } from './routes/first-owner-setup.js';
 import { registerAuthLogoutRoute, type AuthLogoutRouteOptions } from './routes/auth-logout.js';
-import { registerAuthMeRoute, type AuthMeRouteOptions } from './routes/auth-me.js';
+import { registerAuthMeRoute } from './routes/auth-me.js';
 import { registerOwnerLoginRoute, type OwnerLoginRouteOptions } from './routes/owner-login.js';
 import type { RequestScope } from './request-scope/index.js';
 import { registerStatusRoutes } from './routes/status.js';
@@ -18,7 +18,6 @@ export type BuildAppOptions = {
   requestScope?: RequestScope;
   firstOwnerRouteOptions?: FirstOwnerRouteOptions;
   ownerLoginRouteOptions?: OwnerLoginRouteOptions;
-  authMeRouteOptions?: AuthMeRouteOptions;
   authLogoutRouteOptions?: AuthLogoutRouteOptions;
 };
 
@@ -33,7 +32,7 @@ export async function buildApp(options?: BuildAppOptions) {
   await registerStatusRoutes(app, options?.requestScope);
   await registerFirstOwnerSetupRoute(app, options?.firstOwnerRouteOptions);
   await registerOwnerLoginRoute(app, options?.ownerLoginRouteOptions);
-  await registerAuthMeRoute(app, options?.authMeRouteOptions);
+  await registerAuthMeRoute(app, options?.requestScope);
   await registerAuthLogoutRoute(app, options?.authLogoutRouteOptions);
 
   summarizeLogger(app.log);

@@ -77,9 +77,33 @@ describe('GET /auth/me', () => {
     expect(res.statusCode).toBe(503);
     expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
   });
+
+  it('returns 503 service_unavailable when request scope reports persistence_unavailable', async () => {
+    app = await buildApp({
+      requestScope: {
+        status: {
+          async activeOwnerExists() {
+            return { kind: 'ok', hasActiveOwner: true };
+          },
+        },
+        currentSession: {
+          async resolveFromRawToken() {
+            return { kind: 'persistence_unavailable' };
+          },
+        },
+      },
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { authorization: 'Bearer sometoken' },
+    });
+    expect(res.statusCode).toBe(503);
+    expect(JSON.parse(res.payload)).toEqual({ error: 'service_unavailable' });
+  });
 });
 
-describe('GET /auth/me (stubbed)', () => {
+describe('GET /auth/me (request-scope stub)', () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
   afterEach(async () => {
@@ -89,17 +113,32 @@ describe('GET /auth/me (stubbed)', () => {
     }
   });
 
-  it('returns 200 with user when getUser is injected', async () => {
+  it('returns 200 with user when request scope currentSession returns ok', async () => {
     app = await buildApp({
-      authMeRouteOptions: {
-        getUser: async (_req, reply) => {
-          return reply.status(200).send({
-            user: { id: '1', email: 'a@b', displayName: 'A', role: 'owner' as const },
-          });
+      requestScope: {
+        status: {
+          async activeOwnerExists() {
+            return { kind: 'ok', hasActiveOwner: true };
+          },
+        },
+        currentSession: {
+          async resolveFromRawToken() {
+            return {
+              kind: 'ok',
+              user: { id: '1', email: 'a@b', displayName: 'A', role: 'owner' },
+            };
+          },
         },
       },
     });
-    const res = await app.inject({ method: 'GET', url: '/auth/me' });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/auth/me',
+      headers: { authorization: 'Bearer stub-token' },
+    });
     expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.payload)).toEqual({
+      user: { id: '1', email: 'a@b', displayName: 'A', role: 'owner' },
+    });
   });
 });
