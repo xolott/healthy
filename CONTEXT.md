@@ -61,11 +61,18 @@ Repository shape in `@healthy/db` is unchanged in this seam.
 
 ### Request Scope
 
-The API request seam that owns configured persistence access and HTTP request
-context extraction before route handlers translate use-case outcomes to HTTP.
+The **sanctioned request-scoped persistence boundary** for the API: configured
+database access, persistence availability gates, request-derived inputs for auth
+and status work, and construction of capabilities that return closed outcome
+unions—not HTTP responses.
 
-Request Scope exposes auth and status capabilities plus request context; it does
-not expose raw database handles or route-ready HTTP outcomes. Decision record:
+Routes own HTTP translation (schemas, status codes, headers) and cookie
+mutation; they depend on Request Scope only for capabilities and outcomes.
+They do not import auth use-case factories or open persistence handles.
+
+Request Scope hides database lifecycle from callers (including disposable
+connections in the current adapter); pooling or shutdown-oriented lifecycle is
+a future adapter concern, not a route concern. Decision record:
 `docs/adr/0001-request-scope-boundary.md`.
 
 ### Active Owner
