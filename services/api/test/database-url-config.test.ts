@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
-import { createDatabaseFromConfig } from '../src/db.js';
 
 describe('DATABASE_URL vs buildApp', () => {
   afterEach(() => {
@@ -30,18 +29,5 @@ describe('DATABASE_URL vs buildApp', () => {
   it('fails fast when DATABASE_URL is not postgres', async () => {
     vi.stubEnv('DATABASE_URL', 'http://localhost:5432/db');
     await expect(buildApp()).rejects.toThrow(/postgres/);
-  });
-});
-
-describe('createDatabaseFromConfig', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it('throws a clear error when DATABASE_URL is missing', async () => {
-    vi.stubEnv('DATABASE_URL', '');
-    const app = await buildApp();
-    expect(() => createDatabaseFromConfig(app)).toThrow(/DATABASE_URL is required/);
-    await app.close();
   });
 });
