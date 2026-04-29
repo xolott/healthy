@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  HEALTHY_API_AUTH_ME_ENDPOINT,
+  HealthyApiClientError,
+} from "../../app/utils/healthyApiClient";
+import { authMeProbeNavigationFromClientError } from "../../app/utils/healthyApiAuthMe";
+import {
   isConfigurationErrorPath,
   isInternalHealthyAdminPath,
   resolveHealthyApiGlobalNavigation,
@@ -135,6 +140,27 @@ describe("resolveHealthyApiGlobalNavigation", () => {
         authMe: "error",
       }),
     ).toEqual({
+      action: "redirect",
+      target: { path: "/configuration-error", query: { reason: "unreachable" } },
+    });
+  });
+
+  it("chains HealthyApi#getCurrentUser auth classification into navigation on /login (mirrors middleware)", () => {
+    const base = {
+      path: "/login" as const,
+      apiBaseUrlTrimmed: "http://api",
+      publicStatus: { ok: true as const, setupRequired: false as const },
+    };
+    const unauth = authMeProbeNavigationFromClientError(
+      new HealthyApiClientError({
+        kind: "unauthenticated",
+        endpoint: HEALTHY_API_AUTH_ME_ENDPOINT,
+        message: "x",
+      }),
+    );
+    expect(resolveHealthyApiGlobalNavigation({ ...base, authMe: unauth })).toEqual({ action: "continue" });
+    const failed = authMeProbeNavigationFromClientError(new Error("offline"));
+    expect(resolveHealthyApiGlobalNavigation({ ...base, authMe: failed })).toEqual({
       action: "redirect",
       target: { path: "/configuration-error", query: { reason: "unreachable" } },
     });

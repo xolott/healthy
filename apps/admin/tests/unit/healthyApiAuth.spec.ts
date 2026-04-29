@@ -48,9 +48,13 @@ describe("healthyApiAuth", () => {
     vi.stubGlobal("fetch", fetchMock);
     const out = await fetchAuthMe("https://api.example/");
     expect(out).toEqual(user);
-    expect(fetchMock).toHaveBeenCalledWith("https://api.example/auth/me", {
-      credentials: "include",
-    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://api.example/auth/me",
+      expect.objectContaining({
+        credentials: "include",
+        headers: expect.any(Headers),
+      }),
+    );
   });
 
   it("fetchAuthMe throws AuthMeUnauthorizedError on 401", async () => {
@@ -65,7 +69,7 @@ describe("healthyApiAuth", () => {
     await expect(fetchAuthMe("https://api.example")).rejects.toBeInstanceOf(AuthMeUnauthorizedError);
   });
 
-  it("fetchAuthMe throws on non-401 HTTP errors (session probe / restoration)", async () => {
+  it("rejects with error_body_invalid on 503 without documented body (session probe / restoration)", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => ({
@@ -74,7 +78,10 @@ describe("healthyApiAuth", () => {
         json: async () => ({}),
       })) as unknown as typeof fetch,
     );
-    await expect(fetchAuthMe("https://api.example")).rejects.toThrow("HTTP 503");
+    await expect(fetchAuthMe("https://api.example")).rejects.toMatchObject({
+      kind: "error_body_invalid",
+      httpStatus: 503,
+    });
   });
 
   it("postOwnerLogin returns only the user on 200 (opaque session token is not part of the result)", async () => {

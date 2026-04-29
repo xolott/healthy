@@ -1,5 +1,6 @@
-import { AuthMeUnauthorizedError, fetchAuthMe } from "../utils/healthyApiAuth";
 import { resolveConfiguredApiBaseUrlForAdminRequest } from "../utils/healthyApiConfig";
+import { authMeProbeNavigationFromClientError } from "../utils/healthyApiAuthMe";
+import { createHealthyApiClient } from "../utils/healthyApiClient";
 import {
   isConfigurationErrorPath,
   isInternalHealthyAdminPath,
@@ -79,10 +80,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   let authMe: "authenticated" | "unauthorized" | "error";
   try {
-    await fetchAuthMe(baseUrl);
+    await createHealthyApiClient({ baseUrl }).getCurrentUser();
     authMe = "authenticated";
   } catch (e) {
-    authMe = e instanceof AuthMeUnauthorizedError ? "unauthorized" : "error";
+    authMe = authMeProbeNavigationFromClientError(e);
   }
 
   const d = resolveHealthyApiGlobalNavigation({

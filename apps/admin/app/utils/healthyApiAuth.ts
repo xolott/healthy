@@ -1,3 +1,10 @@
+import {
+  createHealthyApiClient,
+  isHealthyApiClientError,
+  type CreateHealthyApiClientOptions,
+  type HealthyAuthMeUser,
+} from "./healthyApiClient";
+
 export const PASSWORD_MIN_LENGTH = 12;
 
 export class InvalidOwnerLoginInputError extends Error {
@@ -15,12 +22,8 @@ export class OwnerLoginInvalidCredentialsError extends Error {
   }
 }
 
-export type CurrentUser = {
-  id: string;
-  email: string;
-  displayName: string;
-  role: string;
-};
+/** Current admin user (`/auth/me` success body). Roles match documented API enums. */
+export type CurrentUser = HealthyAuthMeUser;
 
 export type FirstOwnerSuccessBody = {
   user: CurrentUser;
@@ -66,31 +69,20 @@ export class ApiServiceUnavailableError extends Error {
 
 /**
  * Fetches the current user using the API session (HttpOnly cookie and/or future Bearer token wiring).
+ * Delegates to {@link createHealthyApiClient}; maps documented unauthenticated failures to {@link AuthMeUnauthorizedError}.
  */
-export async function fetchAuthMe(apiBaseUrl: string): Promise<CurrentUser> {
-  const base = apiBaseUrl.replace(/\/+$/, "");
-  const res = await fetch(`${base}/auth/me`, { credentials: "include" });
-  if (res.status === 401) {
-    throw new AuthMeUnauthorizedError();
+export async function fetchAuthMe(
+  apiBaseUrl: string,
+  options?: Omit<CreateHealthyApiClientOptions, "baseUrl">,
+): Promise<CurrentUser> {
+  try {
+    return await createHealthyApiClient({ baseUrl: apiBaseUrl, ...options }).getCurrentUser();
+  } catch (e) {
+    if (isHealthyApiClientError(e) && e.kind === "unauthenticated") {
+      throw new AuthMeUnauthorizedError();
+    }
+    throw e;
   }
-  if (!res.ok) {
-    throw new Error(`HTTP ${String(res.status)}`);
-  }
-  const body: unknown = await res.json();
-  if (typeof body !== "object" || body === null) {
-    throw new Error("Invalid /auth/me response");
-  }
-  const u = (body as { user?: CurrentUser }).user;
-  if (
-    u === undefined ||
-    typeof u.id !== "string" ||
-    typeof u.email !== "string" ||
-    typeof u.displayName !== "string" ||
-    typeof u.role !== "string"
-  ) {
-    throw new Error("Invalid /auth/me response");
-  }
-  return u;
 }
 
 /**

@@ -1,10 +1,13 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  HEALTHY_API_AUTH_ME_ENDPOINT,
+  HEALTHY_API_PUBLIC_STATUS_ENDPOINT,
   HealthyApiClientError,
   createHealthyApiClient,
   isHealthyApiClientError,
 } from "../../app/utils/healthyApiClient";
+import { fetchHealthyAuthMe, authMeProbeNavigationFromClientError } from "../../app/utils/healthyApiAuthMe";
 import { fetchHealthyPublicStatus } from "../../app/utils/healthyApiStatus";
 
 describe("createHealthyApiClient / getPublicStatus", () => {
@@ -100,7 +103,7 @@ describe("createHealthyApiClient / getPublicStatus", () => {
       expect(e).toMatchObject({
         kind: "service_unavailable",
         httpStatus: 503,
-        endpoint: { method: "GET", path: "/status" },
+        endpoint: HEALTHY_API_PUBLIC_STATUS_ENDPOINT,
       });
     }
   });
@@ -171,9 +174,185 @@ describe("createHealthyApiClient / getPublicStatus", () => {
   });
 });
 
+describe("createHealthyApiClient / getCurrentUser", () => {
+  const ownerUser = {
+    id: "u1",
+    email: "a@b.com",
+    displayName: "A",
+    role: "owner" as const,
+  };
+
+  it("GETs /auth/me with credentials include", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ user: ownerUser }),
+    })) as unknown as typeof fetch;
+
+    const client = createHealthyApiClient({
+      baseUrl: "http://example.test/",
+      fetch: fetchMock,
+    });
+
+    await expect(client.getCurrentUser()).resolves.toEqual(ownerUser);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "http://example.test/auth/me",
+      expect.objectContaining({
+        method: "GET",
+        credentials: "include",
+        headers: expect.any(Headers),
+      }),
+    );
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect((init.headers as Headers).get("Accept")).toBe("application/json");
+  });
+
+  it("merges defaultRequestInit with essentials taking precedence", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ user: ownerUser }),
+    })) as unknown as typeof fetch;
+
+    const client = createHealthyApiClient({
+      baseUrl: "http://example.test/",
+      fetch: fetchMock,
+      defaultRequestInit: {
+        credentials: "omit",
+        cache: "no-store",
+        headers: { "X-T": "1" },
+      },
+    });
+    await client.getCurrentUser();
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(init.credentials).toBe("include");
+    expect(init.cache).toBe("no-store");
+    const h = init.headers as Headers;
+    expect(h.get("Accept")).toBe("application/json");
+    expect(h.get("X-T")).toBe("1");
+  });
+
+  it("throws unauthenticated for documented 401 body", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: "unauthorized" }),
+    })) as unknown as typeof fetch;
+
+    await expect(createHealthyApiClient({ baseUrl: "http://example.test/", fetch: fetchMock }).getCurrentUser()).rejects.toMatchObject({
+      kind: "unauthenticated",
+      endpoint: HEALTHY_API_AUTH_ME_ENDPOINT,
+      httpStatus: 401,
+    });
+  });
+
+  it("throws error_body_invalid on 401 without documented shape", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: "nope" }),
+    })) as unknown as typeof fetch;
+
+    await expect(createHealthyApiClient({ baseUrl: "http://example.test/", fetch: fetchMock }).getCurrentUser()).rejects.toMatchObject({
+      kind: "error_body_invalid",
+      endpoint: HEALTHY_API_AUTH_ME_ENDPOINT,
+    });
+  });
+
+  it("maps authMe probe outcomes like global middleware", () => {
+    expect(authMeProbeNavigationFromClientError(new HealthyApiClientError({ kind: "unauthenticated", endpoint: HEALTHY_API_AUTH_ME_ENDPOINT, message: "" }))).toBe(
+      "unauthorized",
+    );
+    expect(authMeProbeNavigationFromClientError(new HealthyApiClientError({ kind: "network", endpoint: HEALTHY_API_AUTH_ME_ENDPOINT, message: "" }))).toBe("error");
+  });
+
+  it("rejects with error_body_invalid for 503 malformed body", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({}),
+    })) as unknown as typeof fetch;
+
+    await expect(createHealthyApiClient({ baseUrl: "http://example.test/", fetch: fetchMock }).getCurrentUser()).rejects.toMatchObject({
+      kind: "error_body_invalid",
+      httpStatus: 503,
+    });
+  });
+
+  it("rejects with unexpected_http_status for undocumented status", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 418,
+      json: async () => ({}),
+    })) as unknown as typeof fetch;
+
+    await expect(createHealthyApiClient({ baseUrl: "http://example.test/", fetch: fetchMock }).getCurrentUser()).rejects.toMatchObject({
+      kind: "unexpected_http_status",
+      httpStatus: 418,
+    });
+  });
+
+  it("rejects success_body_invalid on 200 malformed user", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      status: 200,
+      json: async () => ({ user: { id: "u1", email: "", displayName: "", role: "superadmin" } }),
+    })) as unknown as typeof fetch;
+
+    await expect(createHealthyApiClient({ baseUrl: "http://example.test/", fetch: fetchMock }).getCurrentUser()).rejects.toMatchObject({
+      kind: "success_body_invalid",
+      httpStatus: 200,
+    });
+  });
+
+  it("rejects with service_unavailable for documented 503 body", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: false,
+      status: 503,
+      json: async () => ({ error: "service_unavailable" }),
+    })) as unknown as typeof fetch;
+
+    await expect(createHealthyApiClient({ baseUrl: "http://example.test/", fetch: fetchMock }).getCurrentUser()).rejects.toMatchObject({
+      kind: "service_unavailable",
+      httpStatus: 503,
+    });
+  });
+});
+
+describe("fetchHealthyAuthMe", () => {
+  it("delegates to createHealthyApiClient#getCurrentUser", async () => {
+    const payload = {
+      user: {
+        id: "u1",
+        email: "a@b.com",
+        displayName: "X",
+        role: "member" as const,
+      },
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: async () => payload,
+      })) as unknown as typeof fetch,
+    );
+    try {
+      await expect(fetchHealthyAuthMe("http://example.test")).resolves.toEqual(payload.user);
+      expect(fetch).toHaveBeenCalledWith("http://example.test/auth/me", expect.any(Object));
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe("isHealthyApiClientError", () => {
   it("narrows HealthyApiClientError", () => {
-    const e = new HealthyApiClientError({ kind: "network", message: "x" });
+    const e = new HealthyApiClientError({
+      kind: "network",
+      endpoint: HEALTHY_API_PUBLIC_STATUS_ENDPOINT,
+      message: "x",
+    });
     expect(isHealthyApiClientError(e)).toBe(true);
     expect(isHealthyApiClientError(new Error("x"))).toBe(false);
   });

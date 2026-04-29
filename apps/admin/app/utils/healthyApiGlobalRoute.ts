@@ -38,7 +38,7 @@ export function resolveHealthyApiGlobalNavigation(input: {
   /** When the configured URL is missing or not parseable as http(s). */
   emptyApiBaseReason?: "missing" | "invalid_url";
   publicStatus?: PublicStatusResult;
-  /** Required whenever the middleware would have called `fetchAuthMe` before deciding. */
+  /** Required whenever the middleware would have resolved session via HealthyApiClient#getCurrentUser before deciding. */
   authMe?: AuthMeResult;
 }): HealthyGlobalNavigationResult {
   const { path, apiBaseUrlTrimmed } = input;
