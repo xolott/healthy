@@ -75,6 +75,15 @@ connections in the current adapter); pooling or shutdown-oriented lifecycle is
 a future adapter concern, not a route concern. Decision record:
 `docs/adr/0001-request-scope-boundary.md`.
 
+### Database Adapter
+
+The process-owned persistence lifecycle object for a Healthy API app. It pairs a
+typed Drizzle database with shutdown behavior for the underlying PostgreSQL
+client.
+
+Request Scope depends on Database Adapter-backed capabilities; routes depend on
+Request Scope and do not own database construction, pooling, or teardown.
+
 ### Active Owner
 
 A user with the `owner` role, `active` status, and no soft-delete timestamp.
