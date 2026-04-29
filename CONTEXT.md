@@ -1,5 +1,23 @@
 # Healthy Context
 
+## Shared context scope
+
+This file is authoritative for **domain terms** (product-relevant concepts) and **stable boundary vocabulary**—language that callers, routes, persistence seams, and tests must agree on so architectural boundaries stay legible across the repo.
+
+Keep it deliberately narrow. Do **not** treat `CONTEXT.md` as:
+
+- A broad catalog of modules, packages, folders, or “where everything lives”
+- A changelog, release narrative, or history of edits
+- A stand-in for [Architecture Decision Records](docs/adr/) (use ADRs for hard-to-reverse trade-offs)
+
+**Stable vocabulary versus incidental naming.** Entries belong here when a name denotes a sanctioned concept or boundary the team must reuse consistently (for example persistence seams aligned with policy and HTTP translation). Ordinary helpers, constructors, factories, or test adapters stay documented next to implementation unless they are explicitly promoted to shared boundary terms (when they are, define the boundary here, not the incidental mechanics).
+
+**When this file must change in the same PR.** Update `CONTEXT.md` together with code when the PR **introduces** a new domain or boundary term, **renames** one, or **materially redefines** what a documented term means (ownership, invariants, or caller-visible contract).
+
+**Reviewers and term drift.** If implementation, tests, or docs diverge from a definition here, fix that in **the same PR**: align names and wording to the canonical term in this file, **or** deliberately revise the glossary entry when the underlying model legitimately changed. Unresolved drift—or silent synonym swaps—is the problem to avoid.
+
+**File paths and links.** Brief pointers (for example to the module that owns a seam) are fine when they clarify **ownership** without tying the definition to incidental layout or filenames that refactor often.
+
 ## Domain Terms
 
 ### Auth Use Cases
