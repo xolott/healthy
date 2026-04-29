@@ -1,11 +1,14 @@
+import { normalizeEmail } from '@healthy/db';
 import { describe, expect, it } from 'vitest';
 
 import {
   createMemoryAuthPersistence,
   createMemoryAuthPersistenceStore,
 } from '../src/auth/auth-persistence-memory.js';
-import { hashSessionTokenForLookup } from '../src/auth/session-token.js';
+import type { AuthUserForOwnerLogin } from '../src/auth/auth-persistence.js';
 import { createAuthUseCases } from '../src/auth/auth-use-cases.js';
+import { MIN_PASSWORD_LENGTH } from '../src/auth/password-policy.js';
+import { hashSessionTokenForLookup } from '../src/auth/session-token.js';
 
 const fixedNow = new Date('2026-04-01T12:00:00.000Z');
 const userId = 'user-1';
@@ -23,7 +26,15 @@ const baseUser = {
 
 function useCases(store = createMemoryAuthPersistenceStore()) {
   const persistence = createMemoryAuthPersistence(store);
-  return { useCases: createAuthUseCases({ persistence, clock: () => fixedNow }), store };
+  return {
+    useCases: createAuthUseCases({
+      persistence,
+      clock: () => fixedNow,
+      verifyPassword: async () => false,
+      generateSessionToken: () => ({ rawToken: 'unused', tokenHash: 'unused' }),
+    }),
+    store,
+  };
 }
 
 describe('Auth Use Cases — resolveCurrentSession (policy, in-memory persistence)', () => {
@@ -108,5 +119,151 @@ describe('Auth Use Cases — resolveCurrentSession (policy, in-memory persistenc
     });
     store.usersById.set(userId, { ...baseUser, deletedAt: new Date('2025-01-01T00:00:00.000Z') });
     expect(await uc.resolveCurrentSession(rawToken)).toEqual({ kind: 'unauthorized', reason: 'user_ineligible' });
+  });
+});
+
+const loginRawToken = 'policy-owner-login-token______________';
+const loginTokenHash = hashSessionTokenForLookup(loginRawToken);
+const goodLoginPassword = 'goodpassword12';
+const storedLoginHashFixture = 'stored-hash';
+
+const sessionExpiresAfterLogin = new Date(fixedNow.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+function seedActiveOwnerForLogin(
+  store: ReturnType<typeof createMemoryAuthPersistenceStore>,
+  overrides: Partial<AuthUserForOwnerLogin> = {},
+): void {
+  const row: AuthUserForOwnerLogin = {
+    id: userId,
+    email: 'owner@example.com',
+    displayName: 'Owner',
+    role: 'owner',
+    status: 'active',
+    deletedAt: null,
+    passwordHash: storedLoginHashFixture,
+    ...overrides,
+  };
+  store.usersByEmailForLogin.set(normalizeEmail(row.email), row);
+}
+
+function ownerLoginUseCases(
+  store: ReturnType<typeof createMemoryAuthPersistenceStore>,
+  verifyPassword: (plain: string, storedHash: string) => Promise<boolean> = async (plain, hash) =>
+    plain === goodLoginPassword && hash === storedLoginHashFixture,
+) {
+  const persistence = createMemoryAuthPersistence(store);
+  return createAuthUseCases({
+    persistence,
+    clock: () => fixedNow,
+    verifyPassword,
+    generateSessionToken: () => ({ rawToken: loginRawToken, tokenHash: loginTokenHash }),
+  });
+}
+
+describe('Auth Use Cases — ownerLogin (policy, in-memory persistence)', () => {
+  const ctx = { ip: '127.0.0.1', userAgent: 'vitest' };
+
+  it('returns invalid_input for empty email after trim', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    const uc = ownerLoginUseCases(store);
+    expect(await uc.ownerLogin('   ', goodLoginPassword, ctx)).toEqual({
+      kind: 'invalid_input',
+      field: 'email',
+      message: 'Email is required',
+    });
+  });
+
+  it('returns invalid_input when email has no @', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    const uc = ownerLoginUseCases(store);
+    expect(await uc.ownerLogin('not-an-email', goodLoginPassword, ctx)).toEqual({
+      kind: 'invalid_input',
+      field: 'email',
+      message: 'Email is invalid',
+    });
+  });
+
+  it('returns invalid_input for password policy failures', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    seedActiveOwnerForLogin(store);
+    const uc = ownerLoginUseCases(store);
+    const short = 'x'.repeat(MIN_PASSWORD_LENGTH - 1);
+    const r = await uc.ownerLogin('owner@example.com', short, ctx);
+    expect(r.kind).toBe('invalid_input');
+    if (r.kind !== 'invalid_input') {
+      return;
+    }
+    expect(r.field).toBe('password');
+    expect(r.message).toContain(String(MIN_PASSWORD_LENGTH));
+  });
+
+  it('returns invalid_credentials for unknown email (neutral)', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    const uc = ownerLoginUseCases(store);
+    expect(await uc.ownerLogin('missing@example.com', goodLoginPassword, ctx)).toEqual({
+      kind: 'invalid_credentials',
+    });
+  });
+
+  it('returns invalid_credentials for wrong password (neutral)', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    seedActiveOwnerForLogin(store);
+    const uc = ownerLoginUseCases(store, async () => false);
+    expect(await uc.ownerLogin('owner@example.com', goodLoginPassword, ctx)).toEqual({
+      kind: 'invalid_credentials',
+    });
+  });
+
+  it('invalid_credentials shapes match for unknown email and wrong password', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    seedActiveOwnerForLogin(store);
+    const unknown = await ownerLoginUseCases(store).ownerLogin('nope@example.com', goodLoginPassword, ctx);
+    const wrongPw = await ownerLoginUseCases(store, async () => false).ownerLogin(
+      'owner@example.com',
+      goodLoginPassword,
+      ctx,
+    );
+    expect(unknown).toEqual(wrongPw);
+  });
+
+  it('returns invalid_credentials for disabled, non-owner, or soft-deleted owners', async () => {
+    const cases: Partial<AuthUserForOwnerLogin>[] = [
+      { status: 'disabled' },
+      { role: 'member' },
+      { deletedAt: new Date('2025-01-01T00:00:00.000Z') },
+    ];
+    for (const patch of cases) {
+      const store = createMemoryAuthPersistenceStore();
+      seedActiveOwnerForLogin(store, patch);
+      const uc = ownerLoginUseCases(store);
+      expect(await uc.ownerLogin('owner@example.com', goodLoginPassword, ctx)).toEqual({
+        kind: 'invalid_credentials',
+      });
+    }
+  });
+
+  it('creates session and last-login with deterministic token and clock on success', async () => {
+    const store = createMemoryAuthPersistenceStore();
+    seedActiveOwnerForLogin(store);
+    const uc = ownerLoginUseCases(store);
+    const r = await uc.ownerLogin('owner@example.com', goodLoginPassword, ctx);
+    expect(r).toEqual({
+      kind: 'success',
+      user: {
+        id: userId,
+        email: 'owner@example.com',
+        displayName: 'Owner',
+        role: 'owner',
+      },
+      rawSessionToken: loginRawToken,
+      sessionExpiresAt: sessionExpiresAfterLogin,
+    });
+    expect(store.sessionsByTokenHash.get(loginTokenHash)).toEqual({
+      userId,
+      revokedAt: null,
+      expiresAt: sessionExpiresAfterLogin,
+      lastUsedAt: fixedNow,
+    });
+    expect(store.lastLoginAtByUserId.get(userId)?.getTime()).toBe(fixedNow.getTime());
   });
 });

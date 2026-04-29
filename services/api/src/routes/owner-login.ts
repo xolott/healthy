@@ -1,9 +1,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { withDisposableDatabase } from '@healthy/db';
-
 import { appendSessionCookie, getRequestIp } from '../auth/http-session.js';
-import { runOwnerLoginInDb } from '../auth/owner-login.js';
+import { ownerLoginFromAppRequest } from '../auth/auth-me-from-request.js';
 
 const postBodySchema = {
   type: 'object',
@@ -97,26 +95,6 @@ export async function registerOwnerLoginRoute(
     },
     async (request, reply) => {
       const body = request.body;
-      const url = app.config.DATABASE_URL?.trim();
-      if (url === undefined || url === '') {
-        return reply.status(503).send({ error: 'service_unavailable' });
-      }
-
-      const email = body.email.trim();
-      if (email.length === 0) {
-        return reply.status(400).send({
-          error: 'invalid_input',
-          field: 'email',
-          message: 'Email is required',
-        });
-      }
-      if (!email.includes('@')) {
-        return reply.status(400).send({
-          error: 'invalid_input',
-          field: 'email',
-          message: 'Email is invalid',
-        });
-      }
 
       const secure = request.protocol === 'https';
       const ctx = {
@@ -124,11 +102,19 @@ export async function registerOwnerLoginRoute(
         userAgent: (request.headers['user-agent'] ?? null) as string | null,
       };
 
-      const result = await withDisposableDatabase(url, (db) =>
-        db.transaction(async (tx) => {
-          return runOwnerLoginInDb(tx, { email, password: body.password }, ctx);
-        }),
-      );
+      const result = await ownerLoginFromAppRequest(app, body.email, body.password, ctx);
+
+      if (result.kind === 'service_unavailable') {
+        return reply.status(503).send({ error: 'service_unavailable' });
+      }
+
+      if (result.kind === 'invalid_input') {
+        return reply.status(400).send({
+          error: 'invalid_input',
+          field: result.field,
+          message: result.message,
+        });
+      }
 
       if (result.kind === 'invalid_credentials') {
         return reply.status(401).send({ error: 'invalid_credentials' });

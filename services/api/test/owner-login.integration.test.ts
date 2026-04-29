@@ -171,4 +171,22 @@ describe('POST /auth/login (integration)', () => {
       await app.close();
     }
   });
+
+  it('returns 400 invalid_input for password shorter than policy minimum', async () => {
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/auth/login',
+        headers: { 'content-type': 'application/json' },
+        payload: JSON.stringify({ email: 'owner@example.com', password: 'x'.repeat(11) }),
+      });
+      expect(res.statusCode).toBe(400);
+      const body = JSON.parse(res.payload) as { error: string; field: string };
+      expect(body.error).toBe('invalid_input');
+      expect(body.field).toBe('password');
+    } finally {
+      await app.close();
+    }
+  });
 });

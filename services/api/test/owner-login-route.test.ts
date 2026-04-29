@@ -8,7 +8,7 @@ describe('POST /auth/login (unit)', () => {
   });
 
   it('returns 503 when DATABASE_URL is not configured', async () => {
-    vi.stubEnv('DATABASE_URL', undefined);
+    vi.stubEnv('DATABASE_URL', '');
     const app = await buildApp();
     try {
       const res = await app.inject({

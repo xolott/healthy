@@ -3,7 +3,13 @@ import type { FastifyInstance } from 'fastify';
 import { withDisposableDatabase, type Database } from '@healthy/db';
 
 import { createDrizzleAuthPersistence } from './auth-persistence.js';
-import { createAuthUseCases, type ResolveCurrentSessionResult } from './auth-use-cases.js';
+import {
+  createAuthUseCases,
+  type OwnerLoginResult,
+  type ResolveCurrentSessionResult,
+} from './auth-use-cases.js';
+import { verifyPasswordArgon2id } from './hash-password.js';
+import { generateSessionToken } from './session-token.js';
 
 /**
  * Outcome of resolving the current session for GET /auth/me, including configuration checks.
@@ -11,6 +17,13 @@ import { createAuthUseCases, type ResolveCurrentSessionResult } from './auth-use
 export type AuthMeFromAppRequestOutcome =
   | { kind: 'service_unavailable' }
   | ResolveCurrentSessionResult;
+
+/**
+ * Owner login from app configuration (database URL check + disposable connection).
+ */
+export type OwnerLoginFromAppRequestOutcome =
+  | { kind: 'service_unavailable' }
+  | OwnerLoginResult;
 
 /**
  * Returns a trimmed database URL when the app is configured for auth database access.
@@ -29,10 +42,39 @@ export function getAuthDatabaseUrl(app: FastifyInstance): string | undefined {
  */
 export function createAuthUseCasesForDatabase(
   db: Database,
-  clock: () => Date = () => new Date(),
+  overrides?: {
+    clock?: () => Date;
+    verifyPassword?: (plain: string, storedHash: string) => Promise<boolean>;
+    generateSessionToken?: () => { rawToken: string; tokenHash: string };
+  },
 ) {
-  const persistence = createDrizzleAuthPersistence(db);
-  return createAuthUseCases({ persistence, clock });
+  return createAuthUseCases({
+    persistence: createDrizzleAuthPersistence(db),
+    clock: overrides?.clock ?? (() => new Date()),
+    verifyPassword: overrides?.verifyPassword ?? verifyPasswordArgon2id,
+    generateSessionToken: overrides?.generateSessionToken ?? generateSessionToken,
+  });
+}
+
+/**
+ * Runs owner email/password login using app configuration: disposable DB connection
+ * and factory-created Auth Use Cases.
+ */
+export async function ownerLoginFromAppRequest(
+  app: FastifyInstance,
+  rawEmail: string,
+  rawPassword: string,
+  ctx: { ip: string | null; userAgent: string | null },
+): Promise<OwnerLoginFromAppRequestOutcome> {
+  const url = getAuthDatabaseUrl(app);
+  if (url === undefined) {
+    return { kind: 'service_unavailable' };
+  }
+
+  return withDisposableDatabase(url, async (db) => {
+    const useCases = createAuthUseCasesForDatabase(db);
+    return useCases.ownerLogin(rawEmail, rawPassword, ctx);
+  });
 }
 
 /**

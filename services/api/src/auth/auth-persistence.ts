@@ -1,4 +1,5 @@
 import { createSessionRepository, createUserRepository, type Database } from '@healthy/db';
+import type { UserRow } from '@healthy/db/schema';
 
 /**
  * Session facts for current-session policy (intent-shaped, not raw Drizzle rows).
@@ -23,6 +24,22 @@ export type AuthUserFacts = {
 };
 
 /**
+ * User facts plus stored password hash for owner login verification.
+ */
+export type AuthUserForOwnerLogin = AuthUserFacts & {
+  passwordHash: string;
+};
+
+export type OwnerLoginSessionInsert = {
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  lastUsedAt: Date;
+  ipAddress: string | null;
+  userAgent: string | null;
+};
+
+/**
  * Auth-intent persistence seam for the auth slice. Methods are single actions;
  * policy ordering lives in Auth Use Cases.
  */
@@ -30,6 +47,9 @@ export type AuthPersistence = {
   findSessionByTokenHash(tokenHash: string): Promise<AuthSessionFacts | undefined>;
   findUserById(userId: string): Promise<AuthUserFacts | undefined>;
   touchSessionLastUsedByTokenHash(tokenHash: string, at: Date): Promise<void>;
+  findUserForOwnerLoginByEmail(email: string): Promise<AuthUserForOwnerLogin | undefined>;
+  createOwnerLoginSession(input: OwnerLoginSessionInsert): Promise<void>;
+  setOwnerLastLoginAt(userId: string, at: Date): Promise<void>;
   withTransaction<T>(fn: (p: AuthPersistence) => Promise<T>): Promise<T>;
 };
 
@@ -65,6 +85,13 @@ function toUserFacts(row: {
   };
 }
 
+function toUserForOwnerLogin(row: UserRow): AuthUserForOwnerLogin {
+  return {
+    ...toUserFacts(row),
+    passwordHash: row.passwordHash,
+  };
+}
+
 /**
  * Drizzle-backed adapter composing existing session and user repositories.
  */
@@ -91,6 +118,29 @@ export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
 
     async touchSessionLastUsedByTokenHash(tokenHash, at) {
       await sessions.setLastUsedAtByTokenHash(tokenHash, at);
+    },
+
+    async findUserForOwnerLoginByEmail(email) {
+      const row = await users.findUserByEmail(email);
+      if (row === undefined) {
+        return undefined;
+      }
+      return toUserForOwnerLogin(row);
+    },
+
+    async createOwnerLoginSession(input) {
+      await sessions.createSession({
+        userId: input.userId,
+        tokenHash: input.tokenHash,
+        expiresAt: input.expiresAt,
+        lastUsedAt: input.lastUsedAt,
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+      });
+    },
+
+    async setOwnerLastLoginAt(userId, at) {
+      await users.setLastLoginAt(userId, at);
     },
 
     async withTransaction(fn) {

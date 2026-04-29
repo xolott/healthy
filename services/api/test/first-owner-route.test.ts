@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
 import { MIN_PASSWORD_LENGTH } from '../src/auth/password-policy.js';
@@ -7,6 +7,7 @@ describe('POST /setup/first-owner', () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     if (app !== undefined) {
       await app.close();
       app = undefined;
@@ -32,6 +33,7 @@ describe('POST /setup/first-owner', () => {
   });
 
   it('returns 503 when DATABASE_URL is not configured and password is valid', async () => {
+    vi.stubEnv('DATABASE_URL', '');
     app = await buildApp();
     const res = await app.inject({
       method: 'POST',

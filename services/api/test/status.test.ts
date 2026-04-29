@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
 
@@ -6,6 +6,7 @@ describe('GET /status', () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
 
   afterEach(async () => {
+    vi.unstubAllEnvs();
     if (app !== undefined) {
       await app.close();
       app = undefined;
@@ -57,6 +58,7 @@ describe('GET /status', () => {
   });
 
   it('returns 503 when DATABASE_URL is not configured and route is not overridden', async () => {
+    vi.stubEnv('DATABASE_URL', '');
     app = await buildApp();
 
     const res = await app.inject({ method: 'GET', url: '/status', headers: { accept: 'application/json' } });

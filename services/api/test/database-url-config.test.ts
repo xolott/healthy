@@ -9,7 +9,7 @@ describe('DATABASE_URL vs buildApp', () => {
   });
 
   it('starts when DATABASE_URL is unset (health-only)', async () => {
-    vi.stubEnv('DATABASE_URL', undefined);
+    vi.stubEnv('DATABASE_URL', '');
     const app = await buildApp();
     await app.close();
   });
@@ -37,7 +37,7 @@ describe('createDatabaseFromConfig', () => {
   });
 
   it('throws a clear error when DATABASE_URL is missing', async () => {
-    vi.stubEnv('DATABASE_URL', undefined);
+    vi.stubEnv('DATABASE_URL', '');
     const app = await buildApp();
     expect(() => createDatabaseFromConfig(app)).toThrow(/DATABASE_URL is required/);
     await app.close();
