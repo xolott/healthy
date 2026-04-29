@@ -1,5 +1,5 @@
 <template>
-  <div class="flex min-h-[50dvh] flex-col justify-center">
+  <div class="bg-background flex min-h-dvh flex-col justify-center px-4 py-8">
     <Card class="mx-auto w-full max-w-lg" aria-labelledby="login-title">
       <CardHeader>
         <CardTitle id="login-title">Sign in</CardTitle>
@@ -86,6 +86,10 @@ import { MissingAdminApiBaseUrlError, clientPasswordTooShortMessage } from "@/ut
 import { formatOwnerLoginError } from "@/utils/ownerLoginErrors";
 import { PASSWORD_MIN_LENGTH } from "@/utils/healthyApiAuth";
 import { createHealthyApiClient } from "@/utils/healthyApiClient";
+
+definePageMeta({
+  layout: false,
+});
 
 const email = ref("");
 const password = ref("");

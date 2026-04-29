@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:healthy_meals/app/home_shell_screen.dart';
+import 'package:healthy_meals/app/meals/meals_placeholder_screens.dart';
 
 void main() {
-  testWidgets('reaches app home shell when routed to /home', (WidgetTester tester) async {
+  testWidgets('reaches app home placeholder when routed to /home', (WidgetTester tester) async {
     final router = GoRouter(
       routes: [
         GoRoute(
@@ -14,7 +14,7 @@ void main() {
         ),
         GoRoute(
           path: '/home',
-          builder: (context, state) => const HomeShellScreen(),
+          builder: (context, state) => const MealsHomePlaceholder(),
         ),
       ],
     );

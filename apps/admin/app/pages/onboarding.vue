@@ -1,5 +1,5 @@
 <template>
-  <div class="flex min-h-[50dvh] flex-col justify-center">
+  <div class="bg-background flex min-h-dvh flex-col justify-center px-4 py-8">
     <Card class="mx-auto w-full max-w-lg" aria-labelledby="onboarding-title">
       <CardHeader>
         <CardTitle id="onboarding-title">Create owner account</CardTitle>
@@ -103,6 +103,10 @@ import {
 } from "@/utils/firstOwnerOnboardingErrors";
 import { PASSWORD_MIN_LENGTH } from "@/utils/healthyApiAuth";
 import { createHealthyApiClient } from "@/utils/healthyApiClient";
+
+definePageMeta({
+  layout: false,
+});
 
 const displayName = ref("");
 const email = ref("");

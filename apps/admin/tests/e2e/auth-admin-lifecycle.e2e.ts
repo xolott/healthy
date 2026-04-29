@@ -31,8 +31,8 @@ test.describe("Admin auth lifecycle (integrated)", () => {
     await page.getByTestId("login-submit").click();
 
     await expect(page).toHaveURL(/\/home/, { timeout: 60_000 });
-    await expect(page.getByRole("heading", { name: "Healthy administration shell" })).toBeVisible();
-    await expect(page.getByTestId("home-current-user")).toContainText("E2E Owner");
+    await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+    await expect(page.getByTestId("shell-current-user")).toContainText("E2E Owner");
 
     await page.getByTestId("logout-button").click();
     await expect(page).toHaveURL(/\/login/, { timeout: 60_000 });
