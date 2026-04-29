@@ -101,8 +101,17 @@ export type OwnerLoginResult =
       sessionExpiresAt: Date;
     };
 
+/**
+ * Closed result union for logout (session revocation); HTTP mapping stays in routes.
+ */
+export type LogoutResult =
+  | { kind: 'skipped'; reason: 'no_raw_token' }
+  | { kind: 'session_revoked' }
+  | { kind: 'noop'; reason: 'session_not_found_or_already_revoked' };
+
 export type AuthUseCases = {
   resolveCurrentSession(rawToken: string): Promise<ResolveCurrentSessionResult>;
+  logout(rawToken: string | undefined): Promise<LogoutResult>;
   ownerLogin(
     rawEmail: string,
     rawPassword: string,
@@ -160,6 +169,20 @@ export function createAuthUseCases(deps: CreateAuthUseCasesInput): AuthUseCases 
           role: user.role,
         },
       };
+    },
+
+    async logout(rawToken: string | undefined): Promise<LogoutResult> {
+      if (rawToken === undefined || rawToken.length === 0) {
+        return { kind: 'skipped', reason: 'no_raw_token' };
+      }
+
+      const tokenHash = hashSessionTokenForLookup(rawToken);
+      const now = deps.clock();
+      const { revoked } = await deps.persistence.revokeSessionByTokenHash(tokenHash, now);
+      if (revoked) {
+        return { kind: 'session_revoked' };
+      }
+      return { kind: 'noop', reason: 'session_not_found_or_already_revoked' };
     },
 
     async ownerLogin(

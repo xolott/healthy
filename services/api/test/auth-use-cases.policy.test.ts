@@ -379,3 +379,55 @@ describe('Auth Use Cases — firstOwnerSetup (policy, in-memory persistence)', (
     expect(store.lastLoginAtByUserId.get('user-1')?.getTime()).toBe(fixedNow.getTime());
   });
 });
+
+describe('Auth Use Cases — logout (policy, in-memory persistence)', () => {
+  const logoutRawToken = 'policy-logout-token___________________';
+  const logoutTokenHash = hashSessionTokenForLookup(logoutRawToken);
+
+  it('returns skipped no_raw_token when token is undefined', async () => {
+    const { useCases: uc } = useCases();
+    expect(await uc.logout(undefined)).toEqual({ kind: 'skipped', reason: 'no_raw_token' });
+  });
+
+  it('returns skipped no_raw_token when token is empty string', async () => {
+    const { useCases: uc } = useCases();
+    expect(await uc.logout('')).toEqual({ kind: 'skipped', reason: 'no_raw_token' });
+  });
+
+  it('revokes using deterministic SHA-256 hash of raw token', async () => {
+    const { store, useCases: uc } = useCases();
+    store.sessionsByTokenHash.set(logoutTokenHash, {
+      userId,
+      revokedAt: null,
+      expiresAt: new Date(fixedNow.getTime() + 60_000),
+      lastUsedAt: fixedNow,
+    });
+    store.usersById.set(userId, baseUser);
+
+    expect(await uc.logout(logoutRawToken)).toEqual({ kind: 'session_revoked' });
+    expect(store.sessionsByTokenHash.get(logoutTokenHash)?.revokedAt?.getTime()).toBe(fixedNow.getTime());
+  });
+
+  it('returns noop when no session exists for hash', async () => {
+    const { useCases: uc } = useCases();
+    expect(await uc.logout(logoutRawToken)).toEqual({
+      kind: 'noop',
+      reason: 'session_not_found_or_already_revoked',
+    });
+  });
+
+  it('returns noop when session already revoked', async () => {
+    const { store, useCases: uc } = useCases();
+    store.sessionsByTokenHash.set(logoutTokenHash, {
+      userId,
+      revokedAt: new Date(fixedNow.getTime() - 1000),
+      expiresAt: new Date(fixedNow.getTime() + 60_000),
+      lastUsedAt: null,
+    });
+
+    expect(await uc.logout(logoutRawToken)).toEqual({
+      kind: 'noop',
+      reason: 'session_not_found_or_already_revoked',
+    });
+  });
+});

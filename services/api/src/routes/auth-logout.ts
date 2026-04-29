@@ -1,10 +1,8 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
-import { withDisposableDatabase } from '@healthy/db';
-
 import { clearSessionCookie } from '../auth/http-session.js';
+import { logoutFromAppRequest } from '../auth/auth-me-from-request.js';
 import { getSessionTokenFromRequest } from '../auth/parse-bearer-cookie.js';
-import { revokeSessionByRawToken } from '../auth/revoke-session-by-raw-token.js';
 
 /**
  * @public For tests: replace the default handler.
@@ -30,18 +28,13 @@ export async function registerAuthLogoutRoute(app: FastifyInstance, options?: Au
       },
     },
     async (request, reply) => {
-      const url = app.config.DATABASE_URL?.trim();
-      if (url === undefined || url === '') {
-        return reply.status(503).send({ error: 'service_unavailable' });
-      }
-
       const t = getSessionTokenFromRequest({
         authorization: request.headers.authorization,
         cookie: request.headers.cookie,
       });
-      const rawToken = t.token;
-      if (rawToken !== undefined) {
-        await withDisposableDatabase(url, (db) => revokeSessionByRawToken(db, rawToken));
+      const outcome = await logoutFromAppRequest(app, t.token);
+      if (outcome.kind === 'service_unavailable') {
+        return reply.status(503).send({ error: 'service_unavailable' });
       }
 
       const secure = request.protocol === 'https';

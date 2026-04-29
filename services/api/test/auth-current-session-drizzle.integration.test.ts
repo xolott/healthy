@@ -10,7 +10,7 @@ import { startApiPostgresIntegration, type ApiIntegrationHarness } from './helpe
 
 const goodPassword = 'goodpassword12';
 
-describe('Drizzle Auth Persistence — resolveCurrentSession (integration)', () => {
+describe('Drizzle Auth Persistence — Auth Use Cases (integration)', () => {
   let harness: ApiIntegrationHarness;
 
   beforeAll(async () => {
@@ -66,5 +66,33 @@ describe('Drizzle Auth Persistence — resolveCurrentSession (integration)', () 
     const row = await sessionRepo.findSessionByTokenHash(tokenHash);
     expect(row?.lastUsedAt).toBeDefined();
     expect(row!.lastUsedAt!.getTime()).toBeGreaterThan(t0.getTime());
+  });
+
+  it('revokes session via factory logout against Drizzle-backed persistence', async () => {
+    const userRepo = createUserRepository(harness.db);
+    const sessionRepo = createSessionRepository(harness.db);
+    const user = await userRepo.createUser({
+      email: 'drizzle-logout@example.com',
+      passwordHash: await hashPasswordArgon2id(goodPassword),
+      displayName: 'Logout',
+      role: 'owner',
+      status: 'active',
+    });
+
+    const { rawToken, tokenHash } = generateSessionToken();
+    await sessionRepo.createSession({
+      userId: user.id,
+      tokenHash,
+      expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      lastUsedAt: new Date(Date.now() - 60_000),
+    });
+
+    const useCases = createAuthUseCasesForDatabase(harness.db);
+    expect(await useCases.logout(rawToken)).toEqual({ kind: 'session_revoked' });
+
+    const row = await sessionRepo.findSessionByTokenHash(tokenHash);
+    expect(row?.revokedAt).toBeDefined();
+
+    expect((await useCases.logout(rawToken)).kind).toBe('noop');
   });
 });

@@ -50,6 +50,15 @@ export function createMemoryAuthPersistence(store: MemoryAuthPersistenceStore): 
       return row === undefined ? undefined : { ...row };
     },
 
+    async revokeSessionByTokenHash(tokenHash, at) {
+      const row = store.sessionsByTokenHash.get(tokenHash);
+      if (row === undefined || row.revokedAt !== null) {
+        return { revoked: false };
+      }
+      row.revokedAt = at;
+      return { revoked: true };
+    },
+
     async findUserById(userId) {
       const row = store.usersById.get(userId);
       return row === undefined ? undefined : { ...row };

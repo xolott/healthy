@@ -55,6 +55,11 @@ export type CreateFirstOwnerUserInput = {
 
 export type AuthPersistence = {
   findSessionByTokenHash(tokenHash: string): Promise<AuthSessionFacts | undefined>;
+  /**
+   * Revokes by stored token hash when present and not yet revoked.
+   * Returns whether a row was updated (same semantics as session repository revoke).
+   */
+  revokeSessionByTokenHash(tokenHash: string, at: Date): Promise<{ revoked: boolean }>;
   findUserById(userId: string): Promise<AuthUserFacts | undefined>;
   touchSessionLastUsedByTokenHash(tokenHash: string, at: Date): Promise<void>;
   findUserForOwnerLoginByEmail(email: string): Promise<AuthUserForOwnerLogin | undefined>;
@@ -118,6 +123,11 @@ export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
         return undefined;
       }
       return toSessionFacts(row);
+    },
+
+    async revokeSessionByTokenHash(tokenHash, at) {
+      const row = await sessions.revokeSessionByTokenHash(tokenHash, at);
+      return { revoked: row !== undefined };
     },
 
     async findUserById(userId) {
