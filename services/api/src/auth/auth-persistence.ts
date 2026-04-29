@@ -53,6 +53,10 @@ export type CreateFirstOwnerUserInput = {
   passwordHash: string;
 };
 
+export type CreateFirstOwnerIfNoneExistsOutcome =
+  | { kind: 'created'; user: AuthUserFacts }
+  | { kind: 'already_exists' };
+
 export type AuthPersistence = {
   findSessionByTokenHash(tokenHash: string): Promise<AuthSessionFacts | undefined>;
   /**
@@ -66,7 +70,10 @@ export type AuthPersistence = {
   createOwnerLoginSession(input: OwnerLoginSessionInsert): Promise<void>;
   setOwnerLastLoginAt(userId: string, at: Date): Promise<void>;
   hasActiveOwner(): Promise<boolean>;
-  createFirstOwnerUser(input: CreateFirstOwnerUserInput): Promise<AuthUserFacts>;
+  /** Closed outcome; no thrown errors for “owner already present” / duplicate-email race. */
+  createFirstOwnerIfNoneExists(
+    input: CreateFirstOwnerUserInput,
+  ): Promise<CreateFirstOwnerIfNoneExistsOutcome>;
   withTransaction<T>(fn: (p: AuthPersistence) => Promise<T>): Promise<T>;
 };
 
@@ -169,13 +176,16 @@ export function createDrizzleAuthPersistence(db: Database): AuthPersistence {
       return users.hasActiveOwner();
     },
 
-    async createFirstOwnerUser(input) {
-      const row = await users.createFirstOwner({
+    async createFirstOwnerIfNoneExists(input) {
+      const outcome = await users.createFirstOwnerIfNoneExists({
         email: input.email,
         passwordHash: input.passwordHash,
         displayName: input.displayName,
       });
-      return toUserFacts(row);
+      if (outcome.kind === 'already_exists') {
+        return { kind: 'already_exists' };
+      }
+      return { kind: 'created', user: toUserFacts(outcome.row) };
     },
 
     async withTransaction(fn) {

@@ -1,10 +1,11 @@
-import { FirstOwnerAlreadyExistsError, normalizeEmail } from '@healthy/db';
+import { normalizeEmail } from '@healthy/db';
 
 import type {
   AuthPersistence,
   AuthSessionFacts,
   AuthUserFacts,
   AuthUserForOwnerLogin,
+  CreateFirstOwnerIfNoneExistsOutcome,
   CreateFirstOwnerUserInput,
   OwnerLoginSessionInsert,
 } from './auth-persistence.js';
@@ -94,9 +95,9 @@ export function createMemoryAuthPersistence(store: MemoryAuthPersistenceStore): 
       return memoryHasActiveOwner(store);
     },
 
-    async createFirstOwnerUser(input: CreateFirstOwnerUserInput) {
+    async createFirstOwnerIfNoneExists(input: CreateFirstOwnerUserInput): Promise<CreateFirstOwnerIfNoneExistsOutcome> {
       if (memoryHasActiveOwner(store)) {
-        throw new FirstOwnerAlreadyExistsError();
+        return { kind: 'already_exists' };
       }
       const id = `user-${store.usersById.size + 1}`;
       const email = normalizeEmail(input.email);
@@ -111,7 +112,7 @@ export function createMemoryAuthPersistence(store: MemoryAuthPersistenceStore): 
       store.usersById.set(id, { ...row });
       const forLogin: AuthUserForOwnerLogin = { ...row, passwordHash: input.passwordHash };
       store.usersByEmailForLogin.set(email, { ...forLogin });
-      return { ...row };
+      return { kind: 'created', user: { ...row } };
     },
 
     async withTransaction(fn) {

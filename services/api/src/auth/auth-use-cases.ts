@@ -1,5 +1,3 @@
-import { FirstOwnerAlreadyExistsError } from '@healthy/db';
-
 import type { AuthPersistence, AuthUserForOwnerLogin } from './auth-persistence.js';
 import { assertPasswordMeetsPolicy, PasswordPolicyError } from './password-policy.js';
 import { hashSessionTokenForLookup } from './session-token.js';
@@ -264,25 +262,19 @@ export function createAuthUseCases(deps: CreateAuthUseCasesInput): AuthUseCases 
       }
 
       return deps.persistence.withTransaction(async (p) => {
-        if (await p.hasActiveOwner()) {
+        const passwordHash = await deps.hashPassword(validated.password);
+
+        const outcome = await p.createFirstOwnerIfNoneExists({
+          email: validated.email,
+          displayName: validated.displayName,
+          passwordHash,
+        });
+
+        if (outcome.kind === 'already_exists') {
           return { kind: 'setup_unavailable' };
         }
 
-        const passwordHash = await deps.hashPassword(validated.password);
-
-        let user;
-        try {
-          user = await p.createFirstOwnerUser({
-            email: validated.email,
-            displayName: validated.displayName,
-            passwordHash,
-          });
-        } catch (e) {
-          if (e instanceof FirstOwnerAlreadyExistsError) {
-            return { kind: 'setup_unavailable' };
-          }
-          throw e;
-        }
+        const user = outcome.user;
 
         const { rawToken, tokenHash } = deps.generateSessionToken();
         const now = deps.clock();

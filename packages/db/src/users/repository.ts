@@ -23,6 +23,11 @@ function isActiveOwner(row: UserRow): boolean {
   return row.role === 'owner' && row.status === 'active' && row.deletedAt === null;
 }
 
+/** Unique violation — e.g. concurrent first-owner setups racing on the same email. */
+function isPgUniqueViolation(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && 'code' in e && (e as { code: unknown }).code === '23505';
+}
+
 export function createUserRepository(db: Database) {
   async function countActiveOwners(): Promise<number> {
     const [row] = await db
@@ -65,6 +70,33 @@ export function createUserRepository(db: Database) {
     return row;
   }
 
+  /**
+   * Setup path: create the initial owner when no active owner exists.
+   * Returns a closed outcome (no thrown errors for duplicate / owner-already-present cases).
+   */
+  async function createFirstOwnerIfNoneExistsImpl(
+    input: CreateFirstOwnerInput,
+  ): Promise<{ kind: 'created'; row: UserRow } | { kind: 'already_exists' }> {
+    if ((await countActiveOwners()) > 0) {
+      return { kind: 'already_exists' };
+    }
+    try {
+      const row = await insertUser({
+        email: input.email,
+        passwordHash: input.passwordHash,
+        displayName: input.displayName,
+        role: 'owner',
+        status: 'active',
+      });
+      return { kind: 'created', row };
+    } catch (e) {
+      if (isPgUniqueViolation(e)) {
+        return { kind: 'already_exists' };
+      }
+      throw e;
+    }
+  }
+
   return {
     createUser: insertUser,
 
@@ -72,18 +104,15 @@ export function createUserRepository(db: Database) {
       return (await countActiveOwners()) > 0;
     },
 
-    /** Setup path: create the initial owner when no active owner exists. */
+    createFirstOwnerIfNoneExists: createFirstOwnerIfNoneExistsImpl,
+
+    /** Setup path (throws for duplicate owner when callers expect exception-based flow). */
     async createFirstOwner(input: CreateFirstOwnerInput): Promise<UserRow> {
-      if ((await countActiveOwners()) > 0) {
+      const o = await createFirstOwnerIfNoneExistsImpl(input);
+      if (o.kind === 'already_exists') {
         throw new FirstOwnerAlreadyExistsError();
       }
-      return insertUser({
-        email: input.email,
-        passwordHash: input.passwordHash,
-        displayName: input.displayName,
-        role: 'owner',
-        status: 'active',
-      });
+      return o.row;
     },
 
     async findUserById(id: string): Promise<UserRow | undefined> {

@@ -63,4 +63,28 @@ describe('Drizzle Auth Persistence — firstOwnerSetup (integration)', () => {
     const userAgain = await userRepo.findUserById(row!.id);
     expect(userAgain?.lastLoginAt).toBeDefined();
   });
+
+  it('returns setup_unavailable when first-owner setup runs again after success', async () => {
+    const uc = createAuthUseCasesForDatabase(harness.db);
+    const ctx = { setCookie: true, ip: '127.0.0.1', userAgent: 'integration-test' };
+
+    const first = await uc.firstOwnerSetup('First Owner', 'second-run@example.com', goodPassword, ctx);
+    expect(first.kind).toBe('success');
+
+    const second = await uc.firstOwnerSetup('Other Owner', 'other@example.com', goodPassword, ctx);
+    expect(second).toEqual({ kind: 'setup_unavailable' });
+  });
+
+  it('handles concurrent setups with identical email: one succeeds, one setup_unavailable', async () => {
+    const uc = createAuthUseCasesForDatabase(harness.db);
+    const ctx = { setCookie: false, ip: null, userAgent: null };
+    const [a, b] = await Promise.all([
+      uc.firstOwnerSetup('A', 'dup@example.com', goodPassword, ctx),
+      uc.firstOwnerSetup('B', 'dup@example.com', goodPassword, ctx),
+    ]);
+    expect([a.kind, b.kind].sort()).toEqual(['setup_unavailable', 'success']);
+
+    const userRepo = createUserRepository(harness.db);
+    expect(await userRepo.findUserByEmail('dup@example.com')).toBeDefined();
+  });
 });
