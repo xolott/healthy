@@ -23,6 +23,22 @@ Extra subsections (for example implementation notes) are fine when they clarify 
 
 **Accepted ADRs are not rewritten** to match the current codebase or mood. If the decision changes, add a new ADR that **supersedes** the old one and update the old ADR’s status to **Superseded** with a pointer to the replacement. That preserves reasoning for auditors and future maintainers.
 
+### Superseding another ADR
+
+When a newer ADR replaces an older one:
+
+1. In the **new** ADR’s header or Context, name the superseded ADR by number and title and link its file.
+2. In the **old** ADR, set **Status** to **Superseded**, and add a short line immediately after the title block (before Context) such as **Superseded by:** [ADR NNNN — Title](NNNN-short-title-kebab-case.md)—so readers who land on stale content are routed forward without reading obsolete decision text first.
+3. Update the **Index** table below so the old row shows **Superseded** and the new row stays **Accepted** (or **Proposed** until merged).
+
+Stale ADRs remain in the repo for audit history; redirects live in status and supersession links, not in silent edits to the accepted decision body.
+
+### Relationship to `CONTEXT.md` and deepening notes
+
+[CONTEXT.md](../../CONTEXT.md) defines **domain and boundary vocabulary** readers must align with across the repo; ADRs capture **specific, hard-to-reverse choices** (`docs/deepening/` notes are **not** substitutes for ADRs).
+
+**Historical review write-ups** under **`docs/deepening/`** record exploration and review discussion. They complement ADRs but do **not** replace them: durable policy and glossary updates belong in **`CONTEXT.md`** or an ADR. When deepening work yields a constraint that should bind naming, ownership, or boundaries, promote it here or into a new ADR and link **`CONTEXT.md`** terms to that ADR only when the ADR materially constrains the term (see CONTEXT.md linking guidance)—not so every narrative thread becomes a mandatory glossary link.
+
 ## Index
 
 | ADR | Title | Status |

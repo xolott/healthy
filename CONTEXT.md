@@ -18,6 +18,12 @@ Keep it deliberately narrow. Do **not** treat `CONTEXT.md` as:
 
 **File paths and links.** Brief pointers (for example to the module that owns a seam) are fine when they clarify **ownership** without tying the definition to incidental layout or filenames that refactor often.
 
+**Linking a domain term to an ADR.** Add a link under a glossary entry **only when** the [Architecture Decision Record](docs/adr/) **materially constrains** how that term is used: its **meaning**, **ownership**, or **boundary** in code and reviews. If an ADR merely mentions a term or walks past it without setting a durable rule for that vocabulary, leave the definition here self-contained—**do not** treat ADR links as exhaustive history trails or require a link every time a term appears in a decision record. Reviewers apply this rule pragmatically: one strong pointer beats a checklist of mentions.
+
+**Durable vocabulary and policy versus deepening notes.** This file and [docs/adr/](docs/adr/README.md) are the **canonical, durable** place for shared terms and load-bearing architectural decisions—what newcomers and auditors should rely on day to day. Exploratory or historical architecture review narratives live under **`docs/deepening/`**. Deepening notes may motivate ADRs or glossary updates, but they are **not** operating policy by themselves; when a review conclusion should bind the repo, lift it into `CONTEXT.md` or an ADR and link from here as appropriate.
+
+The **Request Scope** entry below illustrates the linking rule: the term is anchored to [`docs/adr/0001-request-scope-boundary.md`](docs/adr/0001-request-scope-boundary.md) because that ADR fixes the sanctioned boundary between routes and persistence-backed capabilities—not because Request Scope is incidentally discussed elsewhere.
+
 ## Domain Terms
 
 ### Auth Use Cases
