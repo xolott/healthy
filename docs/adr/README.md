@@ -44,3 +44,4 @@ Stale ADRs remain in the repo for audit history; redirects live in status and su
 | ADR | Title | Status |
 |-----|--------|--------|
 | [0001](0001-request-scope-boundary.md) | Request Scope boundary | Accepted |
+| [0002](0002-food-log-mobile-first-admin-parity-deferred.md) | Food Log: mobile-first slice; admin parity deferred | Accepted |

@@ -195,5 +195,13 @@ views. Persistence: `food_log_entries` in `@healthy/db`; list and create flows
 go through authenticated HTTP and Request Scope (`foodLog` capability), not
 direct repository calls from clients.
 
+Row shape is **ready for future** per-entry time tweaks (`consumed_at` with the
+calendar key), quantity and serving edits (`quantity`, serving fields, snapshot
+macros), moves across days (`consumed_date` + `consumed_at` updates), and soft
+delete (`deleted_at`); day listings exclude rows where `deleted_at` is set.
+
+**Admin parity** (browse / edit Food Log Entries in operator-facing tools on par
+with mobile) is **deferred past the mobile-first slice**. See [ADR 0002](docs/adr/0002-food-log-mobile-first-admin-parity-deferred.md).
+
 _Avoid_: journal entry, diary row (use **Food Log Entry** for product and API
 vocabulary).

@@ -3,6 +3,12 @@ import { and, asc, eq, isNull } from 'drizzle-orm';
 import type { Database } from '@healthy/db/client';
 import { foodLogEntries, type FoodLogEntryRow, type NewFoodLogEntryRow } from '@healthy/db/schema';
 
+/**
+ * Reads day-scoped Food Log Entries for summaries and timelines.
+ *
+ * **Invariant:** Rows with `deleted_at` set are excluded; when soft-delete exists,
+ * day views and totals must not surface tombstoned entries.
+ */
 export async function listFoodLogEntriesForOwnerDate(
   db: Database,
   ownerUserId: string,

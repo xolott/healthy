@@ -165,7 +165,20 @@ export const recipeIngredients = pgTable(
 export type RecipeIngredientRow = typeof recipeIngredients.$inferSelect;
 export type NewRecipeIngredientRow = typeof recipeIngredients.$inferInsert;
 
-/** One logged consumption of a Pantry Item, snapshotting display and nutrition facts. */
+/**
+ * One logged consumption of a Pantry Item, snapshotting display and nutrition facts.
+ *
+ * **Future-ready fields (edit/delete/move without migrating shape):**
+ * - `consumed_at` — per-entry instant; reschedule flows may update this alongside
+ *   `consumed_date` without creating a new snapshot row.
+ * - `quantity`, `serving_*` — servings and nutrient snapshot columns persist edits
+ *   when PATCH-style flows arrive.
+ * - `deleted_at` — soft-delete; day reads must filter `deleted_at IS NULL` (API:
+ *   `listFoodLogEntriesForOwnerDate`).
+ *
+ * Individual edit/move/delete UX and operator admin parity are out of scope for
+ * the mobile-first slice; parity is documented in CONTEXT and ADR 0002.
+ */
 export const foodLogEntries = pgTable(
   'food_log_entries',
   {
