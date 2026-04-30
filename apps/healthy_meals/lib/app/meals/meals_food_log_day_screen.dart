@@ -5,11 +5,68 @@ import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/navigation/meals_destinations.dart';
+import 'meals_food_log_shell_sync.dart';
 import 'pantry_http.dart';
+
+/// One Food Log Entry row as returned by GET `/food-log/entries`.
+@immutable
+class FoodLogEntryListItem {
+  const FoodLogEntryListItem({
+    required this.id,
+    required this.displayName,
+    required this.calories,
+    required this.proteinGrams,
+    required this.fatGrams,
+    required this.carbohydratesGrams,
+    required this.consumedDate,
+  });
+
+  final String id;
+  final String displayName;
+  final double calories;
+  final double proteinGrams;
+  final double fatGrams;
+  final double carbohydratesGrams;
+  final String consumedDate;
+
+  static FoodLogEntryListItem? tryParse(dynamic e) {
+    if (e is! Map<String, dynamic>) {
+      return null;
+    }
+    final id = e['id'];
+    final name = e['displayName'];
+    final cal = e['calories'];
+    final p = e['proteinGrams'];
+    final f = e['fatGrams'];
+    final c = e['carbohydratesGrams'];
+    final d = e['consumedDate'];
+    if (id is! String ||
+        name is! String ||
+        cal is! num ||
+        p is! num ||
+        f is! num ||
+        c is! num ||
+        d is! String) {
+      return null;
+    }
+    return FoodLogEntryListItem(
+      id: id,
+      displayName: name,
+      calories: cal.toDouble(),
+      proteinGrams: p.toDouble(),
+      fatGrams: f.toDouble(),
+      carbohydratesGrams: c.toDouble(),
+      consumedDate: d,
+    );
+  }
+}
 
 /// Food Log tab: loads Food Log Entries for a selected local calendar day.
 class MealsFoodLogDayScreen extends StatefulWidget {
-  const MealsFoodLogDayScreen({super.key});
+  const MealsFoodLogDayScreen({super.key, this.syncFabDay = true});
+
+  /// When true, publishes the selected day for the FAB entry composer.
+  final bool syncFabDay;
 
   @override
   State<MealsFoodLogDayScreen> createState() => _MealsFoodLogDayScreenState();
@@ -19,13 +76,33 @@ class _MealsFoodLogDayScreenState extends State<MealsFoodLogDayScreen> {
   late DateTime _selectedDay;
   bool _loading = true;
   String? _error;
-  bool _hasEntries = false;
+  List<FoodLogEntryListItem> _entries = const [];
 
   @override
   void initState() {
     super.initState();
     _selectedDay = _dateOnly(DateTime.now());
+    mealsFoodLogDayRefreshSignal.addListener(_onRefreshSignal);
     _load();
+  }
+
+  @override
+  void dispose() {
+    mealsFoodLogDayRefreshSignal.removeListener(_onRefreshSignal);
+    super.dispose();
+  }
+
+  void _onRefreshSignal() {
+    if (mounted) {
+      _load();
+    }
+  }
+
+  void _publishFabDay() {
+    if (!widget.syncFabDay) {
+      return;
+    }
+    mealsFoodLogSelectedDayNotifier.value = _dateOnly(_selectedDay);
   }
 
   DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
@@ -50,7 +127,7 @@ class _MealsFoodLogDayScreenState extends State<MealsFoodLogDayScreen> {
       setState(() {
         _loading = false;
         _error = 'Server URL is not configured.';
-        _hasEntries = false;
+        _entries = const [];
       });
       return;
     }
@@ -58,13 +135,13 @@ class _MealsFoodLogDayScreenState extends State<MealsFoodLogDayScreen> {
       setState(() {
         _loading = false;
         _error = 'Not signed in.';
-        _hasEntries = false;
+        _entries = const [];
       });
       return;
     }
-    final uri = Uri.parse('$base/food-log/entries').replace(
-      queryParameters: {'date': _toApiDate(_selectedDay)},
-    );
+    final uri = Uri.parse(
+      '$base/food-log/entries',
+    ).replace(queryParameters: {'date': _toApiDate(_selectedDay)});
     try {
       final res = await PantryHttp.get(
         uri,
@@ -77,7 +154,7 @@ class _MealsFoodLogDayScreenState extends State<MealsFoodLogDayScreen> {
         setState(() {
           _loading = false;
           _error = 'Unable to load Food Log.';
-          _hasEntries = false;
+          _entries = const [];
         });
         return;
       }
@@ -86,22 +163,30 @@ class _MealsFoodLogDayScreenState extends State<MealsFoodLogDayScreen> {
         setState(() {
           _loading = false;
           _error = 'Unable to load Food Log.';
-          _hasEntries = false;
+          _entries = const [];
         });
         return;
       }
       final raw = body['entries'];
-      final count = raw is List<dynamic> ? raw.length : 0;
+      final list = <FoodLogEntryListItem>[];
+      if (raw is List<dynamic>) {
+        for (final e in raw) {
+          final row = FoodLogEntryListItem.tryParse(e);
+          if (row != null) {
+            list.add(row);
+          }
+        }
+      }
       setState(() {
         _loading = false;
         _error = null;
-        _hasEntries = count > 0;
+        _entries = list;
       });
     } catch (_) {
       setState(() {
         _loading = false;
         _error = 'Unable to load Food Log.';
-        _hasEntries = false;
+        _entries = const [];
       });
     }
   }
@@ -110,7 +195,14 @@ class _MealsFoodLogDayScreenState extends State<MealsFoodLogDayScreen> {
     setState(() {
       _selectedDay = _dateOnly(_selectedDay.add(Duration(days: delta)));
     });
+    _publishFabDay();
     await _load();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _publishFabDay();
   }
 
   @override
@@ -169,26 +261,84 @@ class _MealsFoodLogDayScreenState extends State<MealsFoodLogDayScreen> {
               ),
             ),
           )
-        else if (!_hasEntries)
+        else if (_entries.isEmpty)
           SliverFillRemaining(
             hasScrollBody: false,
             child: _FoodLogEmptyDay(dayLabel: _formatHeading(_selectedDay)),
           )
         else
-          SliverFillRemaining(
-            hasScrollBody: false,
-            child: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Entries for this day will appear here.',
-                  style: theme.textTheme.bodyLarge,
-                  textAlign: TextAlign.center,
-                ),
-              ),
+          SliverPadding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            sliver: SliverList.separated(
+              itemCount: _entries.length,
+              separatorBuilder: (context, index) =>
+                  const SizedBox(height: 8),
+              itemBuilder: (context, i) {
+                final e = _entries[i];
+                return _FoodLogEntryCard(entry: e);
+              },
             ),
           ),
       ],
+    );
+  }
+}
+
+class _FoodLogEntryCard extends StatelessWidget {
+  const _FoodLogEntryCard({required this.entry});
+
+  final FoodLogEntryListItem entry;
+
+  static String _fmt(num v) {
+    if (v == v.roundToDouble()) {
+      return '${v.toInt()}';
+    }
+    return v.toStringAsFixed(1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Card(
+      elevation: 0,
+      color: scheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.restaurant_outlined, color: scheme.primary),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    entry.displayName,
+                    style: theme.textTheme.titleMedium,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              '${entry.calories.round()} kcal',
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'Protein ${_fmt(entry.proteinGrams)} g · '
+              'Carbs ${_fmt(entry.carbohydratesGrams)} g · '
+              'Fat ${_fmt(entry.fatGrams)} g',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -210,11 +360,7 @@ class _FoodLogEmptyDay extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.restaurant_outlined,
-              size: 56,
-              color: scheme.primary,
-            ),
+            Icon(Icons.restaurant_outlined, size: 56, color: scheme.primary),
             const SizedBox(height: 24),
             Text(
               'No Food Log entries',

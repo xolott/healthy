@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/navigation/meals_destinations.dart';
 import 'meals_food_log_day_screen.dart';
+import 'meals_food_log_entry_composer_screen.dart';
+import 'meals_food_log_shell_sync.dart';
 import 'pantry_create_food_screen.dart';
 import 'pantry_create_recipe_screen.dart';
 
@@ -76,6 +78,7 @@ Widget mealsShellFloatingActionButton({
   }
 
   final openedFromHome = branchIndex == 0;
+  final openedFromFoodLog = branchIndex == 1;
 
   return OpenContainer<Object?>(
     key: const Key('meals-fab-journal-open-container'),
@@ -97,12 +100,20 @@ Widget mealsShellFloatingActionButton({
         label: const Text('New entry'),
       );
     },
-    openBuilder: (context, _) {
+    openBuilder: (context, closeContainer) {
+      if (openedFromFoodLog) {
+        return MealsFoodLogEntryComposerScreen(
+          onDone: () => closeContainer(returnValue: true),
+        );
+      }
       return _JournalFabOpenPage(openedFromHome: openedFromHome);
     },
-    onClosed: (_) {
+    onClosed: (data) {
       if (openedFromHome) {
         goBranch(1);
+      }
+      if (openedFromFoodLog && data == true) {
+        mealsFoodLogDayRefreshSignal.value++;
       }
     },
   );
@@ -127,10 +138,10 @@ class _JournalFabOpenPage extends StatelessWidget {
         ),
       ),
       body: openedFromHome
-          ? const MealsFoodLogDayScreen()
-          : const Center(
+          ? const MealsFoodLogDayScreen(syncFabDay: false)
+          : Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: Text(
                   'Food log entry composer is not available yet.',
                   textAlign: TextAlign.center,
