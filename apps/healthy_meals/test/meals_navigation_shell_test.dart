@@ -12,7 +12,9 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
-  testWidgets('bottom nav reaches real Pantry catalog tab', (WidgetTester tester) async {
+  testWidgets('bottom nav reaches real Pantry catalog tab', (
+    WidgetTester tester,
+  ) async {
     FlutterSecureStorage.setMockInitialValues({
       'healthy_session_token': 'nav-test-session',
       'healthy_api_base_url': 'https://nav-shell.test',
@@ -85,21 +87,19 @@ void main() {
       ],
     );
 
-    await tester.pumpWidget(
-      MaterialApp.router(
-        routerConfig: router,
-      ),
-    );
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('meals-nav-pantry')));
     await tester.pumpAndSettle();
 
-    expect(find.byKey(const Key('pantry-catalog-health')), findsOneWidget);
-    expect(find.byKey(const Key('pantry-empty')), findsOneWidget);
+    expect(find.byKey(const Key('pantry-tab-food-top')), findsOneWidget);
+    expect(find.byKey(const Key('pantry-food-empty')), findsOneWidget);
   });
 
-  testWidgets('center plus selects Food Log branch', (WidgetTester tester) async {
+  testWidgets('center plus selects Food Log branch', (
+    WidgetTester tester,
+  ) async {
     final router = GoRouter(
       initialLocation: '/home',
       routes: [
@@ -145,16 +145,23 @@ void main() {
       ],
     );
 
-    await tester.pumpWidget(
-      MaterialApp.router(
-        routerConfig: router,
-      ),
-    );
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const Key('meals-fab-food-log')));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Food logging will open from this destination'), findsOneWidget);
+    expect(
+      find.textContaining('Food logging will open from this destination'),
+      findsWidgets,
+    );
+
+    await tester.tap(find.byTooltip('Close'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Food logging will open from this destination'),
+      findsOneWidget,
+    );
   });
 }

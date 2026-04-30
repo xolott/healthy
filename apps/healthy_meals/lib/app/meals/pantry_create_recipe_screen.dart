@@ -23,11 +23,11 @@ class _PantryOption {
 
 class _IngRow {
   _IngRow({required this.pantryItemId, required String qty})
-      : qtyCtrl = TextEditingController(text: qty),
-        mode = 'base',
-        unitKey = '',
-        customLabel = '',
-        recipeUsesBatchYield = true;
+    : qtyCtrl = TextEditingController(text: qty),
+      mode = 'base',
+      unitKey = '',
+      customLabel = '',
+      recipeUsesBatchYield = true;
 
   String pantryItemId;
   final TextEditingController qtyCtrl;
@@ -43,13 +43,18 @@ class _IngRow {
 
 /// Create recipe from saved foods and/or nested recipes (POST `/pantry/items/recipe`).
 class MealsPantryCreateRecipeScreen extends StatefulWidget {
-  const MealsPantryCreateRecipeScreen({super.key});
+  const MealsPantryCreateRecipeScreen({super.key, this.onDone});
+
+  /// When set (e.g. shell FAB `OpenContainer`), invoked instead of [GoRouter.pop] after a successful save.
+  final VoidCallback? onDone;
 
   @override
-  State<MealsPantryCreateRecipeScreen> createState() => _MealsPantryCreateRecipeScreenState();
+  State<MealsPantryCreateRecipeScreen> createState() =>
+      _MealsPantryCreateRecipeScreenState();
 }
 
-class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeScreen> {
+class _MealsPantryCreateRecipeScreenState
+    extends State<MealsPantryCreateRecipeScreen> {
   bool _loading = true;
   String? _refError;
   String? _formError;
@@ -92,7 +97,9 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
     }
     final out = <String>[];
     for (final e in so) {
-      if (e is Map<String, dynamic> && e['kind'] == 'unit' && e['unit'] is String) {
+      if (e is Map<String, dynamic> &&
+          e['kind'] == 'unit' &&
+          e['unit'] is String) {
         out.add(e['unit'] as String);
       }
     }
@@ -106,7 +113,9 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
     }
     final out = <String>[];
     for (final e in so) {
-      if (e is Map<String, dynamic> && e['kind'] == 'custom' && e['label'] is String) {
+      if (e is Map<String, dynamic> &&
+          e['kind'] == 'custom' &&
+          e['label'] is String) {
         out.add(e['label'] as String);
       }
     }
@@ -147,10 +156,14 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
     if (row.mode == 'base') {
       row.mode = units.isNotEmpty ? 'unit' : 'custom';
     }
-    if (row.mode == 'unit' && units.isNotEmpty && !units.contains(row.unitKey)) {
+    if (row.mode == 'unit' &&
+        units.isNotEmpty &&
+        !units.contains(row.unitKey)) {
       row.unitKey = units.first;
     }
-    if (row.mode == 'custom' && labels.isNotEmpty && !labels.contains(row.customLabel)) {
+    if (row.mode == 'custom' &&
+        labels.isNotEmpty &&
+        !labels.contains(row.customLabel)) {
       row.customLabel = labels.first;
     }
   }
@@ -179,7 +192,10 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
       final refUri = Uri.parse('$base/pantry/reference');
       final refRes = await PantryHttp.get(
         refUri,
-        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
       );
       if (refRes.statusCode != 200) {
         setState(() {
@@ -203,10 +219,15 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
       }
 
       Future<Map<String, dynamic>> fetchItems(String itemType) async {
-        final uri = Uri.parse('$base/pantry/items').replace(queryParameters: {'itemType': itemType});
+        final uri = Uri.parse(
+          '$base/pantry/items',
+        ).replace(queryParameters: {'itemType': itemType});
         final res = await PantryHttp.get(
           uri,
-          headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+          headers: {
+            'Authorization': 'Bearer $token',
+            'Accept': 'application/json',
+          },
         );
         if (res.statusCode != 200) {
           throw FormatException(itemType);
@@ -349,13 +370,16 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
       }
       final q = num.tryParse(row.qtyCtrl.text.trim());
       if (q == null || q <= 0) {
-        setState(() => _formError = 'Each ingredient needs a positive quantity.');
+        setState(
+          () => _formError = 'Each ingredient needs a positive quantity.',
+        );
         return;
       }
 
       if (meta['kind'] == 'recipe') {
-        final servingOption =
-            row.recipeUsesBatchYield ? <String, dynamic>{'kind': 'base'} : <String, dynamic>{'kind': 'unit', 'unit': 'serving'};
+        final servingOption = row.recipeUsesBatchYield
+            ? <String, dynamic>{'kind': 'base'}
+            : <String, dynamic>{'kind': 'unit', 'unit': 'serving'};
         ingredients.add({
           'recipeId': row.pantryItemId,
           'quantity': q,
@@ -412,7 +436,11 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
         body: jsonEncode(payload),
       );
       if (res.statusCode == 201 && mounted) {
-        context.pop(true);
+        if (widget.onDone != null) {
+          widget.onDone!();
+        } else {
+          context.pop(true);
+        }
         return;
       }
       if (res.statusCode == 400) {
@@ -460,7 +488,9 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                         ),
                       ),
                     if (_pantryCatalog.isEmpty)
-                      const Text('Save at least one food or recipe in your pantry first.')
+                      const Text(
+                        'Save at least one food or recipe in your pantry first.',
+                      )
                     else ...[
                       TextField(
                         controller: _nameCtrl,
@@ -478,7 +508,13 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                             isDense: true,
                             items: _iconKeys
                                 .map(
-                                  (k) => DropdownMenuItem(value: k, child: Text(k, style: const TextStyle(fontSize: 13))),
+                                  (k) => DropdownMenuItem(
+                                    value: k,
+                                    child: Text(
+                                      k,
+                                      style: const TextStyle(fontSize: 13),
+                                    ),
+                                  ),
                                 )
                                 .toList(),
                             onChanged: _iconKeys.isEmpty
@@ -493,7 +529,9 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                       ),
                       TextField(
                         controller: _servingsCtrl,
-                        decoration: const InputDecoration(labelText: 'Servings (yield)'),
+                        decoration: const InputDecoration(
+                          labelText: 'Servings (yield)',
+                        ),
                         keyboardType: TextInputType.number,
                         key: const Key('pantry-create-recipe-servings'),
                       ),
@@ -506,7 +544,10 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                         key: const Key('pantry-create-recipe-serving-label'),
                       ),
                       const SizedBox(height: 16),
-                      const Text('Ingredients', style: TextStyle(fontWeight: FontWeight.w600)),
+                      const Text(
+                        'Ingredients',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
                       ...List.generate(_rows.length, (i) {
                         final row = _rows[i];
                         final meta = _metaForId(row.pantryItemId) ?? {};
@@ -520,15 +561,21 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
                                 DropdownButton<String>(
-                                  value: row.pantryItemId.isEmpty ? null : row.pantryItemId,
+                                  value: row.pantryItemId.isEmpty
+                                      ? null
+                                      : row.pantryItemId,
                                   isExpanded: true,
                                   items: _pantryCatalog
                                       .map(
                                         (p) => DropdownMenuItem(
                                           value: p.id,
                                           child: Text(
-                                            p.itemType == 'recipe' ? '${p.name} (recipe)' : p.name,
-                                            style: const TextStyle(fontSize: 13),
+                                            p.itemType == 'recipe'
+                                                ? '${p.name} (recipe)'
+                                                : p.name,
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                            ),
                                           ),
                                         ),
                                       )
@@ -546,7 +593,9 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                                 ),
                                 TextField(
                                   controller: row.qtyCtrl,
-                                  decoration: const InputDecoration(labelText: 'Quantity'),
+                                  decoration: const InputDecoration(
+                                    labelText: 'Quantity',
+                                  ),
                                   keyboardType: TextInputType.number,
                                 ),
                                 if (isRecipe)
@@ -554,8 +603,14 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                                     value: row.recipeUsesBatchYield,
                                     isExpanded: true,
                                     items: const [
-                                      DropdownMenuItem(value: true, child: Text('Full recipe yield')),
-                                      DropdownMenuItem(value: false, child: Text('Per labeled serving')),
+                                      DropdownMenuItem(
+                                        value: true,
+                                        child: Text('Full recipe yield'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: false,
+                                        child: Text('Per labeled serving'),
+                                      ),
                                     ],
                                     onChanged: (v) {
                                       if (v == null) {
@@ -572,7 +627,10 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                                     padding: EdgeInsets.only(top: 4),
                                     child: Text(
                                       'Uses this food’s base amount.',
-                                      style: TextStyle(color: Colors.black54, fontSize: 12),
+                                      style: TextStyle(
+                                        color: Colors.black54,
+                                        fontSize: 12,
+                                      ),
                                     ),
                                   ),
                                 if (!isRecipe && hasOpt) ...[
@@ -580,8 +638,14 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                                     value: row.mode,
                                     isExpanded: true,
                                     items: const [
-                                      DropdownMenuItem(value: 'unit', child: Text('Predefined unit')),
-                                      DropdownMenuItem(value: 'custom', child: Text('Custom label')),
+                                      DropdownMenuItem(
+                                        value: 'unit',
+                                        child: Text('Predefined unit'),
+                                      ),
+                                      DropdownMenuItem(
+                                        value: 'custom',
+                                        child: Text('Custom label'),
+                                      ),
                                     ],
                                     onChanged: (v) {
                                       if (v == null) {
@@ -595,10 +659,17 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                                   ),
                                   if (row.mode == 'unit')
                                     DropdownButton<String>(
-                                      value: row.unitKey.isEmpty ? null : row.unitKey,
+                                      value: row.unitKey.isEmpty
+                                          ? null
+                                          : row.unitKey,
                                       isExpanded: true,
                                       items: _unitKeys(meta)
-                                          .map((u) => DropdownMenuItem(value: u, child: Text(u)))
+                                          .map(
+                                            (u) => DropdownMenuItem(
+                                              value: u,
+                                              child: Text(u),
+                                            ),
+                                          )
                                           .toList(),
                                       onChanged: (v) {
                                         if (v != null) {
@@ -608,10 +679,17 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                                     )
                                   else
                                     DropdownButton<String>(
-                                      value: row.customLabel.isEmpty ? null : row.customLabel,
+                                      value: row.customLabel.isEmpty
+                                          ? null
+                                          : row.customLabel,
                                       isExpanded: true,
                                       items: _customLabels(meta)
-                                          .map((l) => DropdownMenuItem(value: l, child: Text(l)))
+                                          .map(
+                                            (l) => DropdownMenuItem(
+                                              value: l,
+                                              child: Text(l),
+                                            ),
+                                          )
                                           .toList(),
                                       onChanged: (v) {
                                         if (v != null) {
@@ -621,13 +699,19 @@ class _MealsPantryCreateRecipeScreenState extends State<MealsPantryCreateRecipeS
                                     ),
                                 ],
                                 if (_rows.length > 1)
-                                  TextButton(onPressed: () => _removeRow(i), child: const Text('Remove')),
+                                  TextButton(
+                                    onPressed: () => _removeRow(i),
+                                    child: const Text('Remove'),
+                                  ),
                               ],
                             ),
                           ),
                         );
                       }),
-                      TextButton(onPressed: _addRow, child: const Text('Add ingredient')),
+                      TextButton(
+                        onPressed: _addRow,
+                        child: const Text('Add ingredient'),
+                      ),
                       const SizedBox(height: 12),
                       FilledButton(
                         key: const Key('pantry-create-recipe-submit'),

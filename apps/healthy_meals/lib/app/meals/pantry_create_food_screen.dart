@@ -33,13 +33,18 @@ class _ServingRowState {
 
 /// Form to add a Food to the authenticated user's Pantry (matches admin POST `/pantry/items/food`).
 class MealsPantryCreateFoodScreen extends StatefulWidget {
-  const MealsPantryCreateFoodScreen({super.key});
+  const MealsPantryCreateFoodScreen({super.key, this.onDone});
+
+  /// When set (e.g. shell FAB `OpenContainer`), invoked instead of [GoRouter.pop] after a successful save.
+  final VoidCallback? onDone;
 
   @override
-  State<MealsPantryCreateFoodScreen> createState() => _MealsPantryCreateFoodScreenState();
+  State<MealsPantryCreateFoodScreen> createState() =>
+      _MealsPantryCreateFoodScreenState();
 }
 
-class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScreen> {
+class _MealsPantryCreateFoodScreenState
+    extends State<MealsPantryCreateFoodScreen> {
   final _nameCtrl = TextEditingController();
   final _brandCtrl = TextEditingController();
   final _baseCtrl = TextEditingController();
@@ -109,7 +114,10 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
       final uri = Uri.parse('$base/pantry/reference');
       final res = await PantryHttp.get(
         uri,
-        headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
       );
       if (res.statusCode != 200) {
         setState(() {
@@ -126,7 +134,10 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
       if (raw is! List<dynamic>) {
         throw const FormatException('iconKeys');
       }
-      final keys = raw.map((e) => e is String ? e : null).whereType<String>().toList();
+      final keys = raw
+          .map((e) => e is String ? e : null)
+          .whereType<String>()
+          .toList();
 
       final suRaw = body['servingUnits'];
       final servingUnits = <_ServingUnitWire>[];
@@ -167,8 +178,9 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
     for (final r in _servingRows) {
       final gRaw = r.gramsCtrl.text.trim();
       final labelTrim = r.labelCtrl.text.trim();
-      final blank =
-          r.custom ? (gRaw.isEmpty && labelTrim.isEmpty) : gRaw.isEmpty;
+      final blank = r.custom
+          ? (gRaw.isEmpty && labelTrim.isEmpty)
+          : gRaw.isEmpty;
       if (blank) {
         continue;
       }
@@ -282,7 +294,11 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
       );
       if (res.statusCode == 201) {
         if (mounted) {
-          context.pop(true);
+          if (widget.onDone != null) {
+            widget.onDone!();
+          } else {
+            context.pop(true);
+          }
         }
         return;
       }
@@ -324,7 +340,10 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   if (_referenceError != null)
-                    Text(_referenceError!, style: const TextStyle(color: Colors.red)),
+                    Text(
+                      _referenceError!,
+                      style: const TextStyle(color: Colors.red),
+                    ),
                   if (_referenceError == null) ...[
                     if (_formError != null)
                       Padding(
@@ -343,7 +362,9 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
                     ),
                     TextField(
                       controller: _brandCtrl,
-                      decoration: const InputDecoration(labelText: 'Brand (optional)'),
+                      decoration: const InputDecoration(
+                        labelText: 'Brand (optional)',
+                      ),
                       textInputAction: TextInputAction.next,
                       key: const Key('pantry-create-food-brand'),
                     ),
@@ -360,7 +381,10 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
                               .map(
                                 (k) => DropdownMenuItem<String>(
                                   value: k,
-                                  child: Text(k, style: const TextStyle(fontSize: 13)),
+                                  child: Text(
+                                    k,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
                                 ),
                               )
                               .toList(),
@@ -379,8 +403,12 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
                         Expanded(
                           child: TextField(
                             controller: _baseCtrl,
-                            decoration: const InputDecoration(labelText: 'Base amount'),
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            decoration: const InputDecoration(
+                              labelText: 'Base amount',
+                            ),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
                             key: const Key('pantry-create-food-base-value'),
                           ),
                         ),
@@ -402,26 +430,40 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
                     ),
                     TextField(
                       controller: _calCtrl,
-                      decoration: const InputDecoration(labelText: 'Calories (kcal)'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Calories (kcal)',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       key: const Key('pantry-create-food-calories'),
                     ),
                     TextField(
                       controller: _proteinCtrl,
-                      decoration: const InputDecoration(labelText: 'Protein (g)'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Protein (g)',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       key: const Key('pantry-create-food-protein'),
                     ),
                     TextField(
                       controller: _fatCtrl,
                       decoration: const InputDecoration(labelText: 'Fat (g)'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       key: const Key('pantry-create-food-fat'),
                     ),
                     TextField(
                       controller: _carbsCtrl,
-                      decoration: const InputDecoration(labelText: 'Carbohydrates (g)'),
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: const InputDecoration(
+                        labelText: 'Carbohydrates (g)',
+                      ),
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
                       key: const Key('pantry-create-food-carbs'),
                     ),
                     const SizedBox(height: 16),
@@ -446,15 +488,28 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
                               children: [
                                 Expanded(
                                   child: DropdownButtonFormField<bool>(
-                                    value: _servingUnits.isEmpty ? true : r.custom,
-                                    decoration: const InputDecoration(labelText: 'Type'),
+                                    value: _servingUnits.isEmpty
+                                        ? true
+                                        : r.custom,
+                                    decoration: const InputDecoration(
+                                      labelText: 'Type',
+                                    ),
                                     items: _servingUnits.isEmpty
                                         ? const [
-                                            DropdownMenuItem(value: true, child: Text('Custom label')),
+                                            DropdownMenuItem(
+                                              value: true,
+                                              child: Text('Custom label'),
+                                            ),
                                           ]
                                         : const [
-                                            DropdownMenuItem(value: false, child: Text('Predefined unit')),
-                                            DropdownMenuItem(value: true, child: Text('Custom label')),
+                                            DropdownMenuItem(
+                                              value: false,
+                                              child: Text('Predefined unit'),
+                                            ),
+                                            DropdownMenuItem(
+                                              value: true,
+                                              child: Text('Custom label'),
+                                            ),
                                           ],
                                     onChanged: _servingUnits.isEmpty
                                         ? null
@@ -462,8 +517,10 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
                                             if (v != null) {
                                               setState(() {
                                                 r.custom = v;
-                                                if (!v && _servingUnits.isNotEmpty) {
-                                                  r.unitKey = _servingUnits.first.key;
+                                                if (!v &&
+                                                    _servingUnits.isNotEmpty) {
+                                                  r.unitKey =
+                                                      _servingUnits.first.key;
                                                 }
                                               });
                                             }
@@ -480,12 +537,17 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
                             if (!r.custom && _servingUnits.isNotEmpty)
                               DropdownButtonFormField<String>(
                                 value: r.unitKey,
-                                decoration: const InputDecoration(labelText: 'Unit'),
+                                decoration: const InputDecoration(
+                                  labelText: 'Unit',
+                                ),
                                 items: _servingUnits
                                     .map(
                                       (u) => DropdownMenuItem<String>(
                                         value: u.key,
-                                        child: Text(u.displayName, style: const TextStyle(fontSize: 13)),
+                                        child: Text(
+                                          u.displayName,
+                                          style: const TextStyle(fontSize: 13),
+                                        ),
                                       ),
                                     )
                                     .toList(),
@@ -498,12 +560,19 @@ class _MealsPantryCreateFoodScreenState extends State<MealsPantryCreateFoodScree
                             if (r.custom)
                               TextField(
                                 controller: r.labelCtrl,
-                                decoration: const InputDecoration(labelText: 'Label'),
+                                decoration: const InputDecoration(
+                                  labelText: 'Label',
+                                ),
                               ),
                             TextField(
                               controller: r.gramsCtrl,
-                              decoration: const InputDecoration(labelText: 'Grams per serving'),
-                              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                              decoration: const InputDecoration(
+                                labelText: 'Grams per serving',
+                              ),
+                              keyboardType:
+                                  const TextInputType.numberWithOptions(
+                                    decimal: true,
+                                  ),
                             ),
                           ],
                         ),

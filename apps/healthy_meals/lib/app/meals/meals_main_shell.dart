@@ -1,71 +1,75 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
-import '../../core/config/app_identity.dart';
-import '../../core/navigation/meals_destinations.dart';
 import 'meals_bottom_nav.dart';
+import 'meals_shell_fab.dart';
+import 'pantry_fab_scope.dart';
 
-class MealsMainShell extends StatelessWidget {
-  const MealsMainShell({
-    super.key,
-    required this.navigationShell,
-  });
+class MealsMainShell extends StatefulWidget {
+  const MealsMainShell({super.key, required this.navigationShell});
 
   final StatefulNavigationShell navigationShell;
 
-  static String _titleForIndex(int index) {
-    return switch (index) {
-      0 => MealsDestinations.homeLabel,
-      1 => MealsDestinations.foodLogLabel,
-      2 => MealsDestinations.pantryLabel,
-      3 => MealsDestinations.progressLabel,
-      _ => AppIdentity.title,
-    };
+  @override
+  State<MealsMainShell> createState() => _MealsMainShellState();
+}
+
+class _MealsMainShellState extends State<MealsMainShell> {
+  late final ValueNotifier<int> _pantryCatalogTabIndex;
+  late final ValueNotifier<int> _pantryFoodCatalogRevision;
+  late final ValueNotifier<int> _pantryRecipeCatalogRevision;
+
+  @override
+  void initState() {
+    super.initState();
+    _pantryCatalogTabIndex = ValueNotifier(0);
+    _pantryFoodCatalogRevision = ValueNotifier(0);
+    _pantryRecipeCatalogRevision = ValueNotifier(0);
   }
 
-  Future<void> _signOut(BuildContext context) async {
-    final base = await ApiBaseUrlStore.read();
-    final token = await readSessionToken();
-    if (base != null && token != null && token.isNotEmpty) {
-      try {
-        await postAuthLogout(base, bearerToken: token);
-      } catch (e) {
-        if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Could not sign out on the server: $e')),
-          );
-        }
-        return;
-      }
-    }
-    await clearSessionToken();
-    if (context.mounted) {
-      context.go('/login');
-    }
+  @override
+  void dispose() {
+    _pantryCatalogTabIndex.dispose();
+    _pantryFoodCatalogRevision.dispose();
+    _pantryRecipeCatalogRevision.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final navigationShell = widget.navigationShell;
     final index = navigationShell.currentIndex;
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(_titleForIndex(index)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout),
-            tooltip: 'Sign out',
-            onPressed: () => _signOut(context),
-          ),
-        ],
-      ),
-      body: navigationShell,
-      bottomNavigationBar: MealsBottomNav(
-        currentIndex: index,
-        onDestinationSelected: navigationShell.goBranch,
-        onCenterPlus: () {
-          navigationShell.goBranch(1);
-        },
+    return PantryFabScope(
+      tabIndexListenable: _pantryCatalogTabIndex,
+      foodCatalogRevision: _pantryFoodCatalogRevision,
+      recipeCatalogRevision: _pantryRecipeCatalogRevision,
+      child: Scaffold(
+        body: navigationShell,
+        floatingActionButton: index == 3
+            ? null
+            : AnimatedSwitcher(
+                duration: const Duration(milliseconds: 200),
+                switchInCurve: Curves.easeInOut,
+                switchOutCurve: Curves.easeInOut,
+                transitionBuilder: (child, animation) =>
+                    ScaleTransition(scale: animation, child: child),
+                child: KeyedSubtree(
+                  key: ValueKey<int>(index),
+                  child: mealsShellFloatingActionButton(
+                    context: context,
+                    branchIndex: index,
+                    goBranch: navigationShell.goBranch,
+                    pantryTabListenable: _pantryCatalogTabIndex,
+                    pantryFoodCatalogRevision: _pantryFoodCatalogRevision,
+                    pantryRecipeCatalogRevision: _pantryRecipeCatalogRevision,
+                  ),
+                ),
+              ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+        bottomNavigationBar: MealsBottomNav(
+          currentIndex: index,
+          onDestinationSelected: navigationShell.goBranch,
+        ),
       ),
     );
   }
