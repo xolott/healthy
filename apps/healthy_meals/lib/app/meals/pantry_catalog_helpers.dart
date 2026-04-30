@@ -157,9 +157,22 @@ List<String> ingredientIconKeysFromRecipeMetadata(
   if (raw is! List<dynamic>) {
     return const <String>[];
   }
-  return raw
-      .whereType<String>()
-      .map((s) => s.trim())
-      .where((s) => s.isNotEmpty)
-      .toList();
+  final out = <String>[];
+  for (final e in raw) {
+    if (e is! String) {
+      continue;
+    }
+    final s = e.trim();
+    if (s.isEmpty) {
+      continue;
+    }
+    if (out.contains(s)) {
+      continue;
+    }
+    out.add(s);
+    if (out.length >= 3) {
+      break;
+    }
+  }
+  return out;
 }

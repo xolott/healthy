@@ -180,6 +180,19 @@ void main() {
       <String>['food_bowl', 'food_egg'],
     );
     expect(
+      ingredientIconKeysFromRecipeMetadata(<String, dynamic>{
+        'kind': 'recipe',
+        'ingredientIconKeys': <dynamic>[
+          'food_bowl',
+          'food_egg',
+          'food_bowl',
+          'food_banana',
+          'food_milk',
+        ],
+      }),
+      <String>['food_bowl', 'food_egg', 'food_banana'],
+    );
+    expect(
       ingredientIconKeysFromRecipeMetadata(<String, dynamic>{'kind': 'recipe'}),
       isEmpty,
     );

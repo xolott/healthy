@@ -21,11 +21,114 @@ String _caloriesLabel(double? cal) {
   return '${cal.round()} kcal';
 }
 
-String _leadingIconWireKey(PantryCatalogItem item) {
+String _singleLeadingWireKey(PantryCatalogItem item) {
   if (item.ingredientIconKeys.isNotEmpty) {
     return item.ingredientIconKeys.first;
   }
   return item.iconKey;
+}
+
+class _IngredientIconBadge extends StatelessWidget {
+  const _IngredientIconBadge({
+    required this.wireIconKey,
+    required this.surfaceColor,
+    required this.borderColor,
+    required this.iconColor,
+  });
+
+  final String wireIconKey;
+  final Color surfaceColor;
+  final Color borderColor;
+  final Color iconColor;
+
+  static const double diameter = 26;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        shape: BoxShape.circle,
+        border: Border.all(color: borderColor),
+      ),
+      child: SizedBox(
+        width: diameter,
+        height: diameter,
+        child: Center(
+          child: HugeIcon(
+            icon: pantryHugeIconStrokeData(wireIconKey),
+            size: 14,
+            color: iconColor,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PantryLeadingVisual extends StatelessWidget {
+  const _PantryLeadingVisual({required this.item});
+
+  final PantryCatalogItem item;
+
+  static const double _slotSize = 48;
+  static const double _overlapStep = 14;
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final keys = item.ingredientIconKeys;
+    final clusterKeys = keys.length > 3 ? keys.sublist(0, 3) : [...keys];
+
+    if (clusterKeys.length >= 2) {
+      final n = clusterKeys.length;
+      final width = _IngredientIconBadge.diameter + _overlapStep * (n - 1);
+      final border = scheme.outline.withValues(alpha: 0.32);
+      return Semantics(
+        label: 'Top recipe ingredients (${clusterKeys.length} icons)',
+        child: SizedBox(
+          width: width,
+          height: _slotSize,
+          child: Stack(
+            clipBehavior: Clip.none,
+            alignment: Alignment.centerLeft,
+            children: <Widget>[
+              for (var i = 0; i < n; i++)
+                Positioned(
+                  left: i * _overlapStep,
+                  top: (_slotSize - _IngredientIconBadge.diameter) / 2,
+                  child: _IngredientIconBadge(
+                    wireIconKey: clusterKeys[i],
+                    surfaceColor: scheme.surfaceContainerHighest,
+                    borderColor: border,
+                    iconColor: scheme.onSurfaceVariant,
+                  ),
+                ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final wire = _singleLeadingWireKey(item);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        shape: BoxShape.circle,
+      ),
+      child: SizedBox(
+        width: _slotSize,
+        height: _slotSize,
+        child: Center(
+          child: HugeIcon(
+            icon: pantryHugeIconStrokeData(wire),
+            size: 26,
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Material 3 pantry catalog row: Hugeicons leading tile, highlighted calories,
@@ -62,23 +165,7 @@ class PantryCatalogListTile extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: <Widget>[
-              DecoratedBox(
-                decoration: BoxDecoration(
-                  color: scheme.surfaceContainerHighest,
-                  shape: BoxShape.circle,
-                ),
-                child: SizedBox(
-                  width: 48,
-                  height: 48,
-                  child: Center(
-                    child: HugeIcon(
-                      icon: pantryHugeIconStrokeData(_leadingIconWireKey(item)),
-                      size: 26,
-                      color: scheme.onSurfaceVariant,
-                    ),
-                  ),
-                ),
-              ),
+              _PantryLeadingVisual(item: item),
               const SizedBox(width: 16),
               Expanded(
                 child: Column(

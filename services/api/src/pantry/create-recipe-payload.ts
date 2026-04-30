@@ -22,6 +22,8 @@ export type RecipeItemMetadataWire = {
   servingLabel: string;
   nutrients: FoodNutrientsWire;
   nutrientsPerServing: FoodNutrientsWire;
+  /** Distinct pantry icon keys per ingredient line, capped at 3, highest scaled calories first. */
+  ingredientIconKeys?: string[];
 };
 
 export type CreateRecipeIngredientForRow = {
@@ -179,7 +181,7 @@ function asRecipeMetadata(row: PantryItemRow): RecipeItemMetadataWire | null {
     }
   }
   const labelRes = typeof m['servingLabel'] === 'string' ? (m['servingLabel'] as string) : 'serving';
-  return {
+  const parsed: RecipeItemMetadataWire = {
     kind: 'recipe',
     servings,
     servingLabel: labelRes,
@@ -196,6 +198,41 @@ function asRecipeMetadata(row: PantryItemRow): RecipeItemMetadataWire | null {
       carbohydrates: nps['carbohydrates'] as number,
     },
   };
+  const ikRaw = m['ingredientIconKeys'];
+  if (Array.isArray(ikRaw) && ikRaw.length > 0) {
+    const ik: string[] = [];
+    for (const el of ikRaw) {
+      if (typeof el !== 'string' || !ICON_KEY_SET.has(el)) {
+        continue;
+      }
+      if (!ik.includes(el)) {
+        ik.push(el);
+      }
+      if (ik.length >= 3) {
+        break;
+      }
+    }
+    if (ik.length > 0) {
+      parsed.ingredientIconKeys = ik;
+    }
+  }
+  return parsed;
+}
+
+/** Aggregates calorie contribution per pantry icon key, then yields up to three distinct keys. */
+export function topIngredientIconKeysByScaledCalories(
+  caloriesContributionByPantryIcon: Map<string, number>,
+): string[] {
+  return [...caloriesContributionByPantryIcon.entries()]
+    .sort((a, b) => {
+      const d = b[1] - a[1];
+      if (d !== 0) {
+        return d;
+      }
+      return a[0].localeCompare(b[0]);
+    })
+    .map(([k]) => k)
+    .slice(0, 3);
 }
 
 function asFoodMetadata(row: PantryItemRow): FoodItemMetadataWire | null {
@@ -474,6 +511,7 @@ export function planCreateRecipe(
 
   let totals = zeroNutrients;
   const ingredientRows: CreateRecipeIngredientForRow[] = [];
+  const caloriesContributionByPantryIcon = new Map<string, number>();
 
   for (let i = 0; i < parsedLines.length; i++) {
     const line = parsedLines[i]!;
@@ -507,6 +545,10 @@ export function planCreateRecipe(
       }
 
       totals = sumNutrients(totals, scaled);
+      caloriesContributionByPantryIcon.set(
+        row.iconKey,
+        (caloriesContributionByPantryIcon.get(row.iconKey) ?? 0) + scaled.calories,
+      );
       ingredientRows.push({
         ingredientFoodPantryItemId: line.pantryItemId,
         ingredientKind: 'food',
@@ -535,6 +577,10 @@ export function planCreateRecipe(
     }
 
     totals = sumNutrients(totals, scaledRecipe);
+    caloriesContributionByPantryIcon.set(
+      row.iconKey,
+      (caloriesContributionByPantryIcon.get(row.iconKey) ?? 0) + scaledRecipe.calories,
+    );
     ingredientRows.push({
       ingredientFoodPantryItemId: line.pantryItemId,
       ingredientKind: 'recipe',
@@ -548,12 +594,16 @@ export function planCreateRecipe(
 
   const nutrientsPerServing = scaleNutrientsScalar(totals, 1 / servings);
 
+  const ingredientIconKeys = topIngredientIconKeysByScaledCalories(
+    caloriesContributionByPantryIcon,
+  );
   const metadata: RecipeItemMetadataWire = {
     kind: 'recipe',
     servings,
     servingLabel: labelRes,
     nutrients: totals,
     nutrientsPerServing,
+    ...(ingredientIconKeys.length > 0 ? { ingredientIconKeys } : {}),
   };
 
   return {

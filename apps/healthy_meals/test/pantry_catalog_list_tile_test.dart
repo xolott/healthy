@@ -144,27 +144,87 @@ void main() {
     },
   );
 
-  testWidgets('Recipe row uses first ingredientIconKeys when provided', (
-    WidgetTester tester,
-  ) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: PantryCatalogListTile(
-              item: _sampleRecipe(
-                id: 'rec-b',
-                iconKey: 'recipe_pot',
-                ingredientIconKeys: const <String>['food_bowl'],
+  testWidgets(
+    'Recipe row uses leading ingredient icon when one ingredientIconKeys entry',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: PantryCatalogListTile(
+                item: _sampleRecipe(
+                  id: 'rec-b',
+                  iconKey: 'recipe_pot',
+                  ingredientIconKeys: const <String>['food_bowl'],
+                ),
+                onTap: () {},
               ),
-              onTap: () {},
             ),
           ),
         ),
-      ),
-    );
+      );
 
-    final icon = tester.widget<HugeIcon>(find.byType(HugeIcon));
-    expect(icon.icon, HugeIcons.strokeRoundedRiceBowl01);
-  });
+      expect(find.byType(HugeIcon), findsOneWidget);
+      final icon = tester.widget<HugeIcon>(find.byType(HugeIcon));
+      expect(icon.icon, HugeIcons.strokeRoundedRiceBowl01);
+    },
+  );
+
+  testWidgets(
+    'Recipe row overlaps two Hugeicons when ingredientIconKeys has two entries',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: PantryCatalogListTile(
+                item: _sampleRecipe(
+                  id: 'rec-c',
+                  iconKey: 'recipe_pot',
+                  ingredientIconKeys: const <String>['food_bowl', 'food_egg'],
+                ),
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(HugeIcon), findsNWidgets(2));
+      final icons = tester
+          .widgetList<HugeIcon>(find.byType(HugeIcon))
+          .map((h) => h.icon)
+          .toSet();
+      expect(icons.contains(HugeIcons.strokeRoundedRiceBowl01), isTrue);
+      expect(icons.contains(HugeIcons.strokeRoundedEgg), isTrue);
+    },
+  );
+
+  testWidgets(
+    'Recipe row overlaps three Hugeicons when ingredientIconKeys has three entries',
+    (WidgetTester tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: PantryCatalogListTile(
+                item: _sampleRecipe(
+                  id: 'rec-d',
+                  iconKey: 'recipe_pot',
+                  ingredientIconKeys: const <String>[
+                    'food_bowl',
+                    'food_egg',
+                    'food_banana',
+                  ],
+                ),
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.byType(HugeIcon), findsNWidgets(3));
+    },
+  );
 }

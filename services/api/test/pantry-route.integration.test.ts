@@ -635,6 +635,7 @@ describe('Pantry routes (integration)', () => {
       expect(n['calories']).toBe(200);
       expect(nps['calories']).toBe(100);
       expect(created.item.ingredients).toHaveLength(2);
+      expect(created.item.metadata['ingredientIconKeys']).toEqual(['food_bowl', 'food_egg']);
 
       const ingRows = await harness.db
         .select()
@@ -740,6 +741,7 @@ describe('Pantry routes (integration)', () => {
       };
       expect(outer.item.ingredients?.[0]?.ingredientKind).toBe('recipe');
       expect((outer.item.metadata['nutrients'] as Record<string, unknown>)['calories']).toEqual(innerCal);
+      expect(outer.item.metadata['ingredientIconKeys']).toEqual(['recipe_pot']);
     } finally {
       await app.close();
     }
