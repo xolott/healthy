@@ -16,20 +16,6 @@ class MealsHomePlaceholder extends StatelessWidget {
   }
 }
 
-class MealsFoodLogPlaceholder extends StatelessWidget {
-  const MealsFoodLogPlaceholder({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return const _PlaceholderBody(
-      title: MealsDestinations.foodLogLabel,
-      message:
-          'Food logging will open from this destination after the logging flow is implemented.\n\n'
-          'Use the center + action for a quick path to Food Log entry.',
-    );
-  }
-}
-
 class MealsPantryPlaceholder extends StatelessWidget {
   const MealsPantryPlaceholder({super.key});
 

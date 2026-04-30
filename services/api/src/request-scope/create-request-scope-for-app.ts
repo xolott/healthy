@@ -20,12 +20,23 @@ import {
   loadNutrientsCatalog,
   listPantryItemsForOwner,
 } from '../pantry/pantry-persistence.js';
+import {
+  collectFoodLogBatchPantryIds,
+  planFoodLogBatch,
+} from '../food-log/plan-food-log-batch.js';
+import { insertFoodLogEntries, listFoodLogEntriesForOwnerDate } from '../food-log/food-log-persistence.js';
 import { PREDEFINED_SERVING_UNIT_ENTRIES } from '../pantry/predefined-serving-units.js';
 
 import type { Database } from '@healthy/db/client';
-import { pantryItems, type PantryItemRow, type RecipeIngredientRow } from '@healthy/db/schema';
+import {
+  pantryItems,
+  type FoodLogEntryRow,
+  type PantryItemRow,
+  type RecipeIngredientRow,
+} from '@healthy/db/schema';
 
 import type {
+  FoodLogEntryWire,
   PantryItemDetailWire,
   PantryItemWire,
   RecipeIngredientWire,
@@ -41,6 +52,19 @@ function mapPantryRowToWire(row: PantryItemRow): PantryItemWire {
     metadata: row.metadata,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+function mapFoodLogRowToWire(row: FoodLogEntryRow): FoodLogEntryWire {
+  return {
+    id: row.id,
+    pantryItemId: row.pantryItemId ?? '',
+    displayName: row.displayName,
+    calories: row.calories,
+    proteinGrams: row.proteinGrams,
+    fatGrams: row.fatGrams,
+    carbohydratesGrams: row.carbohydratesGrams,
+    consumedDate: row.consumedDate,
   };
 }
 
@@ -302,6 +326,58 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
             };
           }
           app.log.warn({ err }, 'pantry create recipe failed');
+          return { kind: 'persistence_unavailable' };
+        }
+      },
+    },
+    foodLog: {
+      async listEntriesForOwnerOnLocalDate(ownerUserId: string, consumedDate: string) {
+        const adapter = app.databaseAdapter;
+        if (adapter === null) {
+          return { kind: 'persistence_not_configured' };
+        }
+        try {
+          const rows = await listFoodLogEntriesForOwnerDate(adapter.db, ownerUserId, consumedDate);
+          return { kind: 'ok', entries: rows.map(mapFoodLogRowToWire) };
+        } catch (err) {
+          app.log.warn({ err }, 'food log list failed');
+          return { kind: 'persistence_unavailable' };
+        }
+      },
+
+      async createEntriesBatchForOwner(ownerUserId: string, rawBody: unknown) {
+        const adapter = app.databaseAdapter;
+        if (adapter === null) {
+          return { kind: 'persistence_not_configured' };
+        }
+        const idsRes = collectFoodLogBatchPantryIds(rawBody);
+        if (idsRes.kind === 'invalid_input') {
+          return {
+            kind: 'invalid_input',
+            field: idsRes.field,
+            message: idsRes.message,
+          };
+        }
+        try {
+          const pantryRows = await findPantryItemsForOwnerByIds(adapter.db, ownerUserId, idsRes.ids);
+          const map = new Map(pantryRows.map((r) => [r.id, r]));
+          for (const id of idsRes.ids) {
+            if (!map.has(id)) {
+              return {
+                kind: 'invalid_input',
+                field: 'entries',
+                message: 'One or more Pantry items were not found for this owner.',
+              };
+            }
+          }
+          const planned = planFoodLogBatch(ownerUserId, rawBody, map, new Date());
+          if (planned.kind === 'invalid_input') {
+            return planned;
+          }
+          const inserted = await insertFoodLogEntries(adapter.db, planned.rows);
+          return { kind: 'ok', entries: inserted.map(mapFoodLogRowToWire) };
+        } catch (err) {
+          app.log.warn({ err }, 'food log batch create failed');
           return { kind: 'persistence_unavailable' };
         }
       },

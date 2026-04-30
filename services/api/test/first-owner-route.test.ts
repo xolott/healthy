@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
 import { MIN_PASSWORD_LENGTH } from '../src/auth/password-policy.js';
+import { unusedFoodLogCapability } from './helpers/unused-food-log-scope.js';
 import { unusedPantryCapability } from './helpers/unused-pantry-scope.js';
 
 describe('POST /setup/first-owner', () => {
@@ -80,6 +81,7 @@ describe('POST /setup/first-owner', () => {
           },
         },
         pantry: unusedPantryCapability(),
+        foodLog: unusedFoodLogCapability(),
       },
     });
     const res = await app.inject({
@@ -155,6 +157,7 @@ describe('GET /auth/me', () => {
           },
         },
         pantry: unusedPantryCapability(),
+        foodLog: unusedFoodLogCapability(),
       },
     });
     const res = await app.inject({
@@ -209,6 +212,7 @@ describe('GET /auth/me (Request Scope stub)', () => {
           },
         },
         pantry: unusedPantryCapability(),
+        foodLog: unusedFoodLogCapability(),
       },
     });
     const res = await app.inject({

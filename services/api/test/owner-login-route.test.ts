@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
+import { unusedFoodLogCapability } from './helpers/unused-food-log-scope.js';
 import { unusedPantryCapability } from './helpers/unused-pantry-scope.js';
 
 describe('POST /auth/login (unit)', () => {
@@ -55,6 +56,7 @@ describe('POST /auth/login (unit)', () => {
           },
         },
         pantry: unusedPantryCapability(),
+        foodLog: unusedFoodLogCapability(),
       },
     });
     try {
@@ -100,6 +102,7 @@ describe('POST /auth/login (unit)', () => {
           },
         },
         pantry: unusedPantryCapability(),
+        foodLog: unusedFoodLogCapability(),
       },
     });
     try {

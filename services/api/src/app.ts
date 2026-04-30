@@ -9,6 +9,7 @@ import { registerFirstOwnerSetupRoute } from './routes/first-owner-setup.js';
 import { registerAuthLogoutRoute } from './routes/auth-logout.js';
 import { registerAuthMeRoute } from './routes/auth-me.js';
 import { registerOwnerLoginRoute } from './routes/owner-login.js';
+import { registerFoodLogRoutes } from './routes/food-log.js';
 import { registerPantryRoutes } from './routes/pantry.js';
 import type { RequestScope } from './request-scope/index.js';
 import { registerStatusRoutes } from './routes/status.js';
@@ -32,6 +33,7 @@ export async function buildApp(options?: BuildAppOptions) {
   await registerOwnerLoginRoute(app, options?.requestScope);
   await registerAuthMeRoute(app, options?.requestScope);
   await registerPantryRoutes(app, options?.requestScope);
+  await registerFoodLogRoutes(app, options?.requestScope);
   await registerAuthLogoutRoute(app, options?.requestScope);
 
   summarizeLogger(app.log);

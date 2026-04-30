@@ -1,4 +1,5 @@
 export type {
+  FoodLogEntryWire,
   NutrientCatalogEntry,
   PantryItemDetailWire,
   PantryItemWire,
@@ -7,6 +8,8 @@ export type {
   RecipeIngredientWire,
   PublicCurrentSessionOutcome,
   PublicFirstOwnerSetupOutcome,
+  PublicFoodLogBatchCreateOutcome,
+  PublicFoodLogListOutcome,
   PublicLogoutOutcome,
   PublicOwnerLoginOutcome,
   PublicPantryItemDetailOutcome,
@@ -16,6 +19,7 @@ export type {
   RequestScope,
   RequestScopeCurrentSessionCapability,
   RequestScopeFirstOwnerSetupCapability,
+  RequestScopeFoodLogCapability,
   RequestScopeLogoutCapability,
   RequestScopePantryCapability,
   RequestScopeOwnerLoginCapability,

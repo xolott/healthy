@@ -4,6 +4,7 @@
  */
 import { isNull, sql } from 'drizzle-orm';
 import {
+  date,
   doublePrecision,
   index,
   integer,
@@ -164,5 +165,42 @@ export const recipeIngredients = pgTable(
 export type RecipeIngredientRow = typeof recipeIngredients.$inferSelect;
 export type NewRecipeIngredientRow = typeof recipeIngredients.$inferInsert;
 
+/** One logged consumption of a Pantry Item, snapshotting display and nutrition facts. */
+export const foodLogEntries = pgTable(
+  'food_log_entries',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    ownerUserId: uuid('owner_user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    pantryItemId: uuid('pantry_item_id').references(() => pantryItems.id, { onDelete: 'set null' }),
+    pantryItemType: pantryItemTypeEnum('pantry_item_type').notNull(),
+    displayName: text('display_name').notNull(),
+    iconKey: text('icon_key').notNull(),
+    consumedAt: timestamp('consumed_at', { withTimezone: true }).notNull(),
+    consumedDate: date('consumed_date', { mode: 'string' }).notNull(),
+    servingKind: text('serving_kind').notNull(),
+    servingUnitKey: text('serving_unit_key'),
+    servingCustomLabel: text('serving_custom_label'),
+    quantity: doublePrecision('quantity').notNull(),
+    calories: doublePrecision('calories').notNull(),
+    proteinGrams: doublePrecision('protein_grams').notNull(),
+    fatGrams: doublePrecision('fat_grams').notNull(),
+    carbohydratesGrams: doublePrecision('carbohydrates_grams').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  },
+  (t) => [
+    index('food_log_entries_owner_date_time_idx')
+      .on(t.ownerUserId, t.consumedDate, t.consumedAt, t.id)
+      .where(isNull(t.deletedAt)),
+    index('food_log_entries_owner_pantry_item_idx').on(t.ownerUserId, t.pantryItemId),
+  ],
+);
+
+export type FoodLogEntryRow = typeof foodLogEntries.$inferSelect;
+export type NewFoodLogEntryRow = typeof foodLogEntries.$inferInsert;
+
 /** Relational schema map passed to `drizzle({ schema })`. */
-export const schema = { users, sessions, auditLogs, nutrients, pantryItems, recipeIngredients };
+export const schema = { users, sessions, auditLogs, nutrients, pantryItems, recipeIngredients, foodLogEntries };

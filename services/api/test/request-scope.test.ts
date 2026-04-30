@@ -78,6 +78,14 @@ describe('Request Scope (public status / setup required)', () => {
           return { kind: 'invalid_input', field: 'body', message: 'unused' };
         },
       },
+      foodLog: {
+        async listEntriesForOwnerOnLocalDate() {
+          return { kind: 'ok', entries: [] };
+        },
+        async createEntriesBatchForOwner() {
+          return { kind: 'invalid_input', field: 'body', message: 'unused' };
+        },
+      },
     };
     await expect(fake.status.isFirstOwnerSetupRequired()).resolves.toEqual({
       kind: 'ok',

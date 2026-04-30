@@ -184,3 +184,16 @@ when no Active Owner exists.
 An opaque, revocable authentication credential. Only a hash of the raw token is
 stored in the database; browsers may carry the raw token in an HttpOnly cookie,
 and mobile clients may carry it as a Bearer token.
+
+### Food Log Entry
+
+A durable record of **one** logged consumption of a Pantry Item on behalf of the
+authenticated owner. Each Food Log Entry **snapshots** display metadata (name,
+icon) and scaled nutrients for the chosen serving and quantity at log time, and
+is indexed by **local calendar date** (`consumed_date`, YYYY-MM-DD) for day
+views. Persistence: `food_log_entries` in `@healthy/db`; list and create flows
+go through authenticated HTTP and Request Scope (`foodLog` capability), not
+direct repository calls from clients.
+
+_Avoid_: journal entry, diary row (use **Food Log Entry** for product and API
+vocabulary).

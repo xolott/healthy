@@ -94,7 +94,7 @@ function parseServingLabel(raw: unknown): string | { field: string; message: str
   return t;
 }
 
-function parseUuid(raw: unknown, field: string): string | { field: string; message: string } {
+export function parseUuid(raw: unknown, field: string): string | { field: string; message: string } {
   if (typeof raw !== 'string') {
     return { field, message: 'Must be a string.' };
   }
@@ -107,7 +107,7 @@ function parseUuid(raw: unknown, field: string): string | { field: string; messa
   return t;
 }
 
-function parseQuantity(raw: unknown, field: string): number | { field: string; message: string } {
+export function parseQuantity(raw: unknown, field: string): number | { field: string; message: string } {
   if (typeof raw !== 'number' || !Number.isFinite(raw)) {
     return { field, message: 'Must be a finite number.' };
   }
@@ -117,7 +117,7 @@ function parseQuantity(raw: unknown, field: string): number | { field: string; m
   return raw;
 }
 
-function parseIngredientServingOption(
+export function parseIngredientServingOption(
   raw: unknown,
   fieldPrefix: string,
 ): RecipeIngredientServingWire | { field: string; message: string } {
@@ -146,7 +146,7 @@ function parseIngredientServingOption(
   return { field: `${fieldPrefix}.servingOption.kind`, message: 'Must be base, unit, or custom.' };
 }
 
-function asRecipeMetadata(row: PantryItemRow): RecipeItemMetadataWire | null {
+export function recipeItemMetadataFromPantryRow(row: PantryItemRow): RecipeItemMetadataWire | null {
   if (row.itemType !== 'recipe') {
     return null;
   }
@@ -235,7 +235,7 @@ export function topIngredientIconKeysByScaledCalories(
     .slice(0, 3);
 }
 
-function asFoodMetadata(row: PantryItemRow): FoodItemMetadataWire | null {
+export function foodItemMetadataFromPantryRow(row: PantryItemRow): FoodItemMetadataWire | null {
   if (row.itemType !== 'food') {
     return null;
   }
@@ -525,7 +525,7 @@ export function planCreateRecipe(
     const sf = servingToRowFields(line.serving);
 
     if (line.kind === 'food') {
-      const foodMeta = asFoodMetadata(row);
+      const foodMeta = foodItemMetadataFromPantryRow(row);
       if (foodMeta === null) {
         return { kind: 'invalid_input', field: `${fp}.foodId`, message: 'Item is not a food.' };
       }
@@ -561,7 +561,7 @@ export function planCreateRecipe(
       continue;
     }
 
-    const recipeMeta = asRecipeMetadata(row);
+    const recipeMeta = recipeItemMetadataFromPantryRow(row);
     if (recipeMeta === null) {
       return { kind: 'invalid_input', field: `${fp}.recipeId`, message: 'Item is not a recipe.' };
     }

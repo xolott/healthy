@@ -6,6 +6,7 @@ import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
 import 'login_screen.dart';
 import 'meals/meals_home_screen.dart';
+import 'meals/meals_food_log_day_screen.dart';
 import 'meals/meals_main_shell.dart';
 import 'meals/pantry_catalog_screen.dart';
 import 'meals/pantry_create_food_screen.dart';
@@ -88,7 +89,7 @@ final mealsRouter = GoRouter(
             GoRoute(
               path: '/food-log',
               pageBuilder: (context, state) => const NoTransitionPage<void>(
-                child: MealsFoodLogPlaceholder(),
+                child: MealsFoodLogDayScreen(),
               ),
             ),
           ],

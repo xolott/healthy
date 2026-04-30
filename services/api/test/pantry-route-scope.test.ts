@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
 import type { RequestScope } from '../src/request-scope/index.js';
+import { unusedFoodLogCapability } from './helpers/unused-food-log-scope.js';
 import { unusedPantryCapability } from './helpers/unused-pantry-scope.js';
 
 const authScopeUnavailable: RequestScope = {
@@ -36,6 +37,7 @@ const authScopeUnavailable: RequestScope = {
     },
   },
   pantry: unusedPantryCapability(),
+  foodLog: unusedFoodLogCapability(),
 };
 
 function okOwnerSession() {

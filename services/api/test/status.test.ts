@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { buildApp } from '../src/app.js';
 import type { RequestScope } from '../src/request-scope/index.js';
+import { unusedFoodLogCapability } from './helpers/unused-food-log-scope.js';
 import { unusedPantryCapability } from './helpers/unused-pantry-scope.js';
 
 function unusedCurrentSession(): RequestScope['currentSession'] {
@@ -61,6 +62,7 @@ describe('GET /status', () => {
         ownerLogin: unusedOwnerLogin(),
         firstOwnerSetup: unusedFirstOwnerSetup(),
         pantry: unusedPantryCapability(),
+        foodLog: unusedFoodLogCapability(),
       },
     });
 
@@ -90,6 +92,7 @@ describe('GET /status', () => {
         ownerLogin: unusedOwnerLogin(),
         firstOwnerSetup: unusedFirstOwnerSetup(),
         pantry: unusedPantryCapability(),
+        foodLog: unusedFoodLogCapability(),
       },
     });
 
@@ -129,6 +132,7 @@ describe('GET /status', () => {
         ownerLogin: unusedOwnerLogin(),
         firstOwnerSetup: unusedFirstOwnerSetup(),
         pantry: unusedPantryCapability(),
+        foodLog: unusedFoodLogCapability(),
       },
     });
 

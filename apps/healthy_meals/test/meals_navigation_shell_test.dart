@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:healthy_meals/app/meals/meals_food_log_day_screen.dart';
 import 'package:healthy_meals/app/meals/meals_main_shell.dart';
 import 'package:healthy_meals/app/meals/meals_placeholder_screens.dart';
 import 'package:healthy_meals/app/meals/pantry_catalog_screen.dart';
@@ -62,7 +63,7 @@ void main() {
               routes: [
                 GoRoute(
                   path: '/food-log',
-                  builder: (context, state) => const MealsFoodLogPlaceholder(),
+                  builder: (context, state) => const MealsFoodLogDayScreen(),
                 ),
               ],
             ),
@@ -100,6 +101,22 @@ void main() {
   testWidgets('center plus selects Food Log branch', (
     WidgetTester tester,
   ) async {
+    FlutterSecureStorage.setMockInitialValues({
+      'healthy_session_token': 'fab-test-session',
+      'healthy_api_base_url': 'https://fab-shell.test',
+    });
+    addTearDown(() {
+      PantryHttp.client = http.Client();
+    });
+
+    PantryHttp.client = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/food-log/entries')) {
+        return http.Response(jsonEncode({'entries': <dynamic>[]}), 200);
+      }
+      return http.Response('not found', 404);
+    });
+
     final router = GoRouter(
       initialLocation: '/home',
       routes: [
@@ -120,7 +137,7 @@ void main() {
               routes: [
                 GoRoute(
                   path: '/food-log',
-                  builder: (context, state) => const MealsFoodLogPlaceholder(),
+                  builder: (context, state) => const MealsFoodLogDayScreen(),
                 ),
               ],
             ),
@@ -151,17 +168,11 @@ void main() {
     await tester.tap(find.byKey(const Key('meals-fab-food-log')));
     await tester.pumpAndSettle();
 
-    expect(
-      find.textContaining('Food logging will open from this destination'),
-      findsWidgets,
-    );
+    expect(find.byKey(const Key('food-log-empty-state')), findsOneWidget);
 
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
 
-    expect(
-      find.textContaining('Food logging will open from this destination'),
-      findsOneWidget,
-    );
+    expect(find.byKey(const Key('food-log-empty-state')), findsOneWidget);
   });
 }

@@ -36,6 +36,13 @@
       "when": 1777500000000,
       "tag": "0004_recipe_ingredients",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777518000000,
+      "tag": "0005_food_log_entries",
+      "breakpoints": true
     }
   ]
 }

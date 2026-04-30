@@ -159,6 +159,37 @@ export type RequestScopePantryCapability = {
   createRecipeForOwner(ownerUserId: string, rawBody: unknown): Promise<PublicCreateRecipeOutcome>;
 };
 
+/** One logged consumption row as returned by Food Log HTTP (snapshot fields). */
+export type FoodLogEntryWire = {
+  id: string;
+  pantryItemId: string;
+  displayName: string;
+  calories: number;
+  proteinGrams: number;
+  fatGrams: number;
+  carbohydratesGrams: number;
+  consumedDate: string;
+};
+
+export type PublicFoodLogListOutcome =
+  | { kind: 'persistence_not_configured' }
+  | { kind: 'persistence_unavailable' }
+  | { kind: 'ok'; entries: FoodLogEntryWire[] };
+
+export type PublicFoodLogBatchCreateOutcome =
+  | { kind: 'persistence_not_configured' }
+  | { kind: 'persistence_unavailable' }
+  | { kind: 'invalid_input'; field: string; message: string }
+  | { kind: 'ok'; entries: FoodLogEntryWire[] };
+
+export type RequestScopeFoodLogCapability = {
+  listEntriesForOwnerOnLocalDate(
+    ownerUserId: string,
+    consumedDate: string,
+  ): Promise<PublicFoodLogListOutcome>;
+  createEntriesBatchForOwner(ownerUserId: string, rawBody: unknown): Promise<PublicFoodLogBatchCreateOutcome>;
+};
+
 export type RequestScope = {
   status: RequestScopeStatusCapability;
   currentSession: RequestScopeCurrentSessionCapability;
@@ -167,4 +198,5 @@ export type RequestScope = {
   firstOwnerSetup: RequestScopeFirstOwnerSetupCapability;
 
   pantry: RequestScopePantryCapability;
+  foodLog: RequestScopeFoodLogCapability;
 };

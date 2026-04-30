@@ -2,7 +2,7 @@ import 'package:animations/animations.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/navigation/meals_destinations.dart';
-import 'meals_placeholder_screens.dart';
+import 'meals_food_log_day_screen.dart';
 import 'pantry_create_food_screen.dart';
 import 'pantry_create_recipe_screen.dart';
 
@@ -127,7 +127,7 @@ class _JournalFabOpenPage extends StatelessWidget {
         ),
       ),
       body: openedFromHome
-          ? const MealsFoodLogPlaceholder()
+          ? const MealsFoodLogDayScreen()
           : const Center(
               child: Padding(
                 padding: EdgeInsets.all(24),
