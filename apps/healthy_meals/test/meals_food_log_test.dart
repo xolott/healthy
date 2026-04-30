@@ -365,4 +365,119 @@ void main() {
       expect(e0['servingOption'], {'kind': 'base'});
     },
   );
+
+  testWidgets(
+    'composer batches multiple added drafts in one POST',
+    (WidgetTester tester) async {
+      FlutterSecureStorage.setMockInitialValues({
+        'healthy_session_token': 'composer-batch-test',
+        'healthy_api_base_url': 'https://composer.test',
+      });
+      addTearDown(() {
+        PantryHttp.client = http.Client();
+      });
+
+      String? capturedBody;
+      PantryHttp.client = MockClient((request) async {
+        if (request.url.path.endsWith('/pantry/items') &&
+            request.method == 'GET') {
+          final t = request.url.queryParameters['itemType'];
+          if (t == 'recipe') {
+            return http.Response(jsonEncode({'items': <dynamic>[]}), 200);
+          }
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {
+                  'id': 'food-uuid-a',
+                  'name': 'First Food',
+                  'iconKey': 'food_bowl',
+                  'itemType': 'food',
+                  'metadata': {
+                    'kind': 'food',
+                    'nutrients': {
+                      'calories': 100,
+                      'protein': 3,
+                      'carbohydrates': 20,
+                      'fat': 1,
+                    },
+                    'baseAmountGrams': 100,
+                  },
+                },
+                {
+                  'id': 'food-uuid-b',
+                  'name': 'Second Food',
+                  'iconKey': 'food_bowl',
+                  'itemType': 'food',
+                  'metadata': {
+                    'kind': 'food',
+                    'nutrients': {
+                      'calories': 50,
+                      'protein': 2,
+                      'carbohydrates': 10,
+                      'fat': 0.5,
+                    },
+                    'baseAmountGrams': 50,
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        if (request.url.path.endsWith('/food-log/entries/batch') &&
+            request.method == 'POST') {
+          capturedBody = request.body;
+          return http.Response(
+            jsonEncode({
+              'entries': [
+                {'id': 'a', 'pantryItemId': 'food-uuid-a'},
+                {'id': 'b', 'pantryItemId': 'food-uuid-b'},
+              ],
+            }),
+            201,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+
+      var done = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MealsFoodLogEntryComposerScreen(onDone: () => done = true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Food or recipe'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('First Food'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('food-log-composer-add-to-meal')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Add food or recipe'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Second Food'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(done, isTrue);
+      expect(capturedBody, isNotNull);
+      final decoded = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      final entries = decoded['entries'] as List<dynamic>;
+      expect(entries, hasLength(2));
+      expect(
+        (entries[0] as Map<String, dynamic>)['pantryItemId'],
+        'food-uuid-a',
+      );
+      expect(
+        (entries[1] as Map<String, dynamic>)['pantryItemId'],
+        'food-uuid-b',
+      );
+    },
+  );
 }

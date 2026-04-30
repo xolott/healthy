@@ -10,6 +10,109 @@ import 'pantry_catalog_item.dart';
 import 'pantry_http.dart';
 import 'pantry_infinite_catalog_list.dart';
 
+@immutable
+class _FoodLogDraftEntry {
+  const _FoodLogDraftEntry({
+    required this.item,
+    required this.quantity,
+    required this.selectedServingIndex,
+  });
+
+  final PantryCatalogItem item;
+  final double quantity;
+  final int selectedServingIndex;
+}
+
+bool _hasValidServingFor(PantryCatalogItem item, int selectedServingIndex) {
+  if (item.itemType == PantryCatalogItemType.recipe) {
+    return selectedServingIndex >= 0 && selectedServingIndex <= 1;
+  }
+  final opts = item.foodServingOptions;
+  if (opts.isEmpty) {
+    return true;
+  }
+  return selectedServingIndex >= 0 && selectedServingIndex < opts.length;
+}
+
+Map<String, dynamic>? _servingWireFor(
+  PantryCatalogItem item,
+  int selectedServingIndex,
+) {
+  if (item.itemType == PantryCatalogItemType.recipe) {
+    if (selectedServingIndex == 0) {
+      return <String, dynamic>{'kind': 'base'};
+    }
+    if (selectedServingIndex == 1) {
+      return <String, dynamic>{'kind': 'unit', 'unit': 'serving'};
+    }
+    return null;
+  }
+  final opts = item.foodServingOptions;
+  if (opts.isEmpty) {
+    return <String, dynamic>{'kind': 'base'};
+  }
+  if (!_hasValidServingFor(item, selectedServingIndex)) {
+    return null;
+  }
+  return opts[selectedServingIndex].toServingOptionWire();
+}
+
+({double cal, double protein, double carbs, double fat})? _draftTotalsFor(
+  PantryCatalogItem item,
+  double q,
+  int selectedServingIndex,
+) {
+  if (!_hasValidServingFor(item, selectedServingIndex)) {
+    return null;
+  }
+  if (item.itemType == PantryCatalogItemType.recipe) {
+    if (selectedServingIndex == 0) {
+      final c = item.recipeYieldCalories;
+      final p = item.recipeYieldProteinGrams;
+      final carb = item.recipeYieldCarbohydratesGrams;
+      final f = item.recipeYieldFatGrams;
+      if (c == null || p == null || carb == null || f == null) {
+        return null;
+      }
+      return (cal: c * q, protein: p * q, carbs: carb * q, fat: f * q);
+    }
+    final c = item.caloriesPerBase;
+    final p = item.proteinGramsPerBase;
+    final carb = item.carbohydratesGramsPerBase;
+    final f = item.fatGramsPerBase;
+    if (c == null || p == null || carb == null || f == null) {
+      return null;
+    }
+    return (cal: c * q, protein: p * q, carbs: carb * q, fat: f * q);
+  }
+
+  final baseG = item.baseAmountGrams;
+  final c = item.caloriesPerBase;
+  final p = item.proteinGramsPerBase;
+  final carb = item.carbohydratesGramsPerBase;
+  final fat = item.fatGramsPerBase;
+  if (baseG == null || c == null || p == null || carb == null || fat == null) {
+    return null;
+  }
+
+  final double consumedGramsTotal;
+  final opts = item.foodServingOptions;
+  if (opts.isEmpty) {
+    consumedGramsTotal = baseG * q;
+  } else {
+    consumedGramsTotal = opts[selectedServingIndex].gramsPerServing * q;
+  }
+
+  return foodLogNutrientsForConsumedGrams(
+    baseAmountGrams: baseG,
+    caloriesPerBase: c,
+    proteinPerBase: p,
+    carbohydratesPerBase: carb,
+    fatPerBase: fat,
+    consumedGramsTotal: consumedGramsTotal,
+  );
+}
+
 /// Composer: log Pantry Foods or Recipes as Food Log Entries (serving-aware).
 class MealsFoodLogEntryComposerScreen extends StatefulWidget {
   const MealsFoodLogEntryComposerScreen({super.key, required this.onDone});
@@ -27,6 +130,7 @@ class _MealsFoodLogEntryComposerScreenState
   final TextEditingController _quantityController = TextEditingController(
     text: '1',
   );
+  List<_FoodLogDraftEntry> _drafts = const [];
   PantryCatalogItem? _item;
   int _selectedServingIndex = 0;
   bool _saving = false;
@@ -61,99 +165,99 @@ class _MealsFoodLogEntryComposerScreenState
     return v;
   }
 
-  bool _hasValidServingSelection(PantryCatalogItem item) {
-    if (item.itemType == PantryCatalogItemType.recipe) {
-      return _selectedServingIndex >= 0 && _selectedServingIndex <= 1;
-    }
-    final opts = item.foodServingOptions;
-    if (opts.isEmpty) {
-      return true;
-    }
-    return _selectedServingIndex >= 0 && _selectedServingIndex < opts.length;
-  }
-
-  Map<String, dynamic>? _servingOptionWire(PantryCatalogItem item) {
-    if (item.itemType == PantryCatalogItemType.recipe) {
-      if (_selectedServingIndex == 0) {
-        return <String, dynamic>{'kind': 'base'};
-      }
-      if (_selectedServingIndex == 1) {
-        return <String, dynamic>{'kind': 'unit', 'unit': 'serving'};
-      }
+  _FoodLogDraftEntry? _stagedDraftEntry() {
+    final item = _item;
+    final qty = _parseQuantity();
+    if (item == null ||
+        qty == null ||
+        !_hasValidServingFor(item, _selectedServingIndex)) {
       return null;
     }
-    final opts = item.foodServingOptions;
-    if (opts.isEmpty) {
-      return <String, dynamic>{'kind': 'base'};
-    }
-    if (!_hasValidServingSelection(item)) {
+    if (_servingWireFor(item, _selectedServingIndex) == null) {
       return null;
     }
-    return opts[_selectedServingIndex].toServingOptionWire();
+    if (_draftTotalsFor(item, qty, _selectedServingIndex) == null) {
+      return null;
+    }
+    return _FoodLogDraftEntry(
+      item: item,
+      quantity: qty,
+      selectedServingIndex: _selectedServingIndex,
+    );
   }
 
-  ({double cal, double protein, double carbs, double fat})? _draftTotals() {
+  /// Entries that will be sent on save, or `null` if the batch is empty or
+  /// the staged line is incomplete or invalid.
+  List<_FoodLogDraftEntry>? _entriesForBatch() {
+    final out = List<_FoodLogDraftEntry>.from(_drafts);
+    if (_item != null) {
+      final staged = _stagedDraftEntry();
+      if (staged == null) {
+        return null;
+      }
+      out.add(staged);
+    }
+    if (out.isEmpty) {
+      return null;
+    }
+    return out;
+  }
+
+  ({double cal, double protein, double carbs, double fat})?
+  _combinedMealTotals() {
+    double cal = 0;
+    double protein = 0;
+    double carbs = 0;
+    double fat = 0;
+    var any = false;
+    for (final d in _drafts) {
+      final t = _draftTotalsFor(d.item, d.quantity, d.selectedServingIndex);
+      if (t == null) {
+        return null;
+      }
+      cal += t.cal;
+      protein += t.protein;
+      carbs += t.carbs;
+      fat += t.fat;
+      any = true;
+    }
     final item = _item;
     final q = _parseQuantity();
-    if (item == null || q == null) {
+    if (item != null && q != null) {
+      final t = _draftTotalsFor(item, q, _selectedServingIndex);
+      if (t == null) {
+        return null;
+      }
+      cal += t.cal;
+      protein += t.protein;
+      carbs += t.carbs;
+      fat += t.fat;
+      any = true;
+    }
+    if (!any) {
       return null;
     }
-    if (item.itemType == PantryCatalogItemType.recipe) {
-      if (!_hasValidServingSelection(item)) {
-        return null;
-      }
-      if (_selectedServingIndex == 0) {
-        final c = item.recipeYieldCalories;
-        final p = item.recipeYieldProteinGrams;
-        final carb = item.recipeYieldCarbohydratesGrams;
-        final f = item.recipeYieldFatGrams;
-        if (c == null || p == null || carb == null || f == null) {
-          return null;
-        }
-        return (cal: c * q, protein: p * q, carbs: carb * q, fat: f * q);
-      }
-      final c = item.caloriesPerBase;
-      final p = item.proteinGramsPerBase;
-      final carb = item.carbohydratesGramsPerBase;
-      final f = item.fatGramsPerBase;
-      if (c == null || p == null || carb == null || f == null) {
-        return null;
-      }
-      return (cal: c * q, protein: p * q, carbs: carb * q, fat: f * q);
-    }
+    return (cal: cal, protein: protein, carbs: carbs, fat: fat);
+  }
 
-    final baseG = item.baseAmountGrams;
-    final c = item.caloriesPerBase;
-    final p = item.proteinGramsPerBase;
-    final carb = item.carbohydratesGramsPerBase;
-    final fat = item.fatGramsPerBase;
-    if (baseG == null ||
-        c == null ||
-        p == null ||
-        carb == null ||
-        fat == null) {
-      return null;
+  void _addStagedToDrafts() {
+    final staged = _stagedDraftEntry();
+    if (staged == null) {
+      return;
     }
+    setState(() {
+      _drafts = List<_FoodLogDraftEntry>.from(_drafts)..add(staged);
+      _item = null;
+      _selectedServingIndex = 0;
+      _quantityController.text = '1';
+    });
+  }
 
-    final double consumedGramsTotal;
-    final opts = item.foodServingOptions;
-    if (opts.isEmpty) {
-      consumedGramsTotal = baseG * q;
-    } else {
-      if (!_hasValidServingSelection(item)) {
-        return null;
-      }
-      consumedGramsTotal = opts[_selectedServingIndex].gramsPerServing * q;
-    }
-
-    return foodLogNutrientsForConsumedGrams(
-      baseAmountGrams: baseG,
-      caloriesPerBase: c,
-      proteinPerBase: p,
-      carbohydratesPerBase: carb,
-      fatPerBase: fat,
-      consumedGramsTotal: consumedGramsTotal,
-    );
+  void _removeDraftAt(int index) {
+    setState(() {
+      final next = List<_FoodLogDraftEntry>.from(_drafts)..removeAt(index);
+      _drafts = next;
+    });
   }
 
   Future<String> _resolveBaseUrl() async {
@@ -204,18 +308,23 @@ class _MealsFoodLogEntryComposerScreenState
   }
 
   Future<void> _save() async {
-    final item = _item;
-    final qty = _parseQuantity();
-    if (item == null ||
-        qty == null ||
-        _saving ||
-        !_hasValidServingSelection(item)) {
+    final entries = _entriesForBatch();
+    if (entries == null || _saving) {
       return;
     }
-    final serving = _servingOptionWire(item);
-    if (serving == null) {
-      return;
+    final wireRows = <Map<String, dynamic>>[];
+    for (final e in entries) {
+      final serving = _servingWireFor(e.item, e.selectedServingIndex);
+      if (serving == null) {
+        return;
+      }
+      wireRows.add(<String, dynamic>{
+        'pantryItemId': e.item.id,
+        'quantity': e.quantity,
+        'servingOption': serving,
+      });
     }
+
     final base = await _resolveBaseUrl();
     final token = await readSessionToken();
     if (!mounted) {
@@ -238,9 +347,7 @@ class _MealsFoodLogEntryComposerScreenState
     final bodyMap = <String, dynamic>{
       'consumedAt': _consumedAt.toIso8601String(),
       'consumedDate': DateFormat('yyyy-MM-dd').format(_consumedAt),
-      'entries': <Map<String, dynamic>>[
-        {'pantryItemId': item.id, 'quantity': qty, 'servingOption': serving},
-      ],
+      'entries': wireRows,
     };
     try {
       final res = await PantryHttp.post(
@@ -306,6 +413,32 @@ class _MealsFoodLogEntryComposerScreenState
     return v.toStringAsFixed(1);
   }
 
+  static String _formatQuantityDouble(double v) {
+    if (v == v.roundToDouble()) {
+      return '${v.toInt()}';
+    }
+    return v.toStringAsFixed(1);
+  }
+
+  static String _unitPhraseForTotals(PantryCatalogItem item, int servingIndex) {
+    if (item.itemType == PantryCatalogItemType.recipe) {
+      return servingIndex == 0 ? 'full recipe(s)' : 'serving(s)';
+    }
+    if (item.foodServingOptions.isEmpty) {
+      return 'base serving(s)';
+    }
+    return 'serving unit(s)';
+  }
+
+  String _draftLineSubtitle(_FoodLogDraftEntry d) {
+    final it = d.item;
+    final qtyStr = _formatQuantityDouble(d.quantity);
+    final unitPhrase = _unitPhraseForTotals(it, d.selectedServingIndex);
+    final lines = _draftTotalsFor(it, d.quantity, d.selectedServingIndex);
+    final kcalStr = lines == null ? '—' : '${lines.cal.round()}';
+    return '$qtyStr $unitPhrase · $kcalStr kcal';
+  }
+
   String _quantityFieldLabel(PantryCatalogItem? item) {
     if (item == null) {
       return 'Quantity';
@@ -326,13 +459,10 @@ class _MealsFoodLogEntryComposerScreenState
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final item = _item;
-    final totals = _draftTotals();
-    final canSave =
-        item != null &&
-        _parseQuantity() != null &&
-        !_saving &&
-        _hasValidServingSelection(item) &&
-        totals != null;
+    final combined = _combinedMealTotals();
+    final mealCount = _drafts.length + (_stagedDraftEntry() != null ? 1 : 0);
+    final batchOk = _entriesForBatch();
+    final canSave = batchOk != null && !_saving;
 
     return Scaffold(
       appBar: AppBar(
@@ -364,9 +494,38 @@ class _MealsFoodLogEntryComposerScreenState
             onTap: _pickDateTime,
           ),
           const Divider(),
+          if (_drafts.isNotEmpty) ...[
+            Text('In this meal', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 4),
+            for (var i = 0; i < _drafts.length; i++) ...[
+              ListTile(
+                key: ValueKey<Object>('food-log-draft-$i'),
+                contentPadding: EdgeInsets.zero,
+                title: Text(
+                  _drafts[i].item.itemType == PantryCatalogItemType.food &&
+                          _drafts[i].item.brand != null &&
+                          _drafts[i].item.brand!.isNotEmpty
+                      ? '${_drafts[i].item.name} · ${_drafts[i].item.brand}'
+                      : _drafts[i].item.name,
+                ),
+                subtitle: Text(_draftLineSubtitle(_drafts[i])),
+                trailing: IconButton(
+                  tooltip: 'Remove',
+                  icon: Icon(
+                    Icons.remove_circle_outline,
+                    color: scheme.onSurfaceVariant,
+                  ),
+                  onPressed: () => _removeDraftAt(i),
+                ),
+              ),
+            ],
+            const Divider(),
+          ],
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Food or recipe'),
+            title: Text(
+              _drafts.isEmpty ? 'Food or recipe' : 'Add food or recipe',
+            ),
             subtitle: Text(
               item == null
                   ? 'Choose from your Pantry'
@@ -462,30 +621,73 @@ class _MealsFoodLogEntryComposerScreenState
             ),
             onChanged: (_) => setState(() {}),
           ),
+          if (item != null && _stagedDraftEntry() != null) ...[
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              key: const Key('food-log-composer-add-to-meal'),
+              onPressed: _addStagedToDrafts,
+              icon: const Icon(Icons.add),
+              label: const Text('Add to this meal'),
+            ),
+          ],
           const SizedBox(height: 24),
           Text('Summary', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
-          if (item == null)
+          if (item == null && _drafts.isEmpty)
             Text(
               'Select a food or recipe to see nutrition.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
             )
-          else ...[
-            if (!_hasValidServingSelection(item))
+          else if (item == null && _drafts.isNotEmpty) ...[
+            if (combined == null)
+              Text(
+                'Complete each item above to update meal totals.',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              )
+            else ...[
+              Text(
+                mealCount > 1
+                    ? 'Meal totals ($mealCount items)'
+                    : 'Totals for '
+                          '${_formatQuantityDouble(_drafts.single.quantity)} '
+                          '${_unitPhraseForTotals(_drafts.single.item, _drafts.single.selectedServingIndex)}, '
+                          'scaled by your choice.',
+                style: theme.textTheme.labelLarge,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                '${combined.cal.round()} kcal total',
+                style: theme.textTheme.headlineSmall?.copyWith(
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Protein ${_fmtNut(combined.protein)} g · '
+                'Carbs ${_fmtNut(combined.carbs)} g · '
+                'Fat ${_fmtNut(combined.fat)} g',
+                style: theme.textTheme.bodyLarge,
+              ),
+            ],
+          ],
+          if (_item != null) ...[
+            if (!_hasValidServingFor(_item!, _selectedServingIndex))
               Text(
                 'Choose a valid serving.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: scheme.error,
                 ),
               )
-            else if (item.itemType == PantryCatalogItemType.recipe) ...[
+            else if (_item!.itemType == PantryCatalogItemType.recipe) ...[
               if (_selectedServingIndex == 0 &&
-                  (item.recipeYieldCalories == null ||
-                      item.recipeYieldProteinGrams == null ||
-                      item.recipeYieldCarbohydratesGrams == null ||
-                      item.recipeYieldFatGrams == null))
+                  (_item!.recipeYieldCalories == null ||
+                      _item!.recipeYieldProteinGrams == null ||
+                      _item!.recipeYieldCarbohydratesGrams == null ||
+                      _item!.recipeYieldFatGrams == null))
                 Text(
                   'Full-yield nutrition is missing for this recipe.',
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -493,10 +695,10 @@ class _MealsFoodLogEntryComposerScreenState
                   ),
                 )
               else if (_selectedServingIndex == 1 &&
-                  (item.caloriesPerBase == null ||
-                      item.proteinGramsPerBase == null ||
-                      item.carbohydratesGramsPerBase == null ||
-                      item.fatGramsPerBase == null))
+                  (_item!.caloriesPerBase == null ||
+                      _item!.proteinGramsPerBase == null ||
+                      _item!.carbohydratesGramsPerBase == null ||
+                      _item!.fatGramsPerBase == null))
                 Text(
                   'Per-serving nutrition is incomplete for this recipe.',
                   style: theme.textTheme.bodyMedium?.copyWith(
@@ -506,63 +708,65 @@ class _MealsFoodLogEntryComposerScreenState
               else if (_selectedServingIndex == 0)
                 Text(
                   'One full recipe: '
-                  '${_fmtNut(item.recipeYieldCalories)} kcal · '
-                  'P ${_fmtNut(item.recipeYieldProteinGrams)} g · '
-                  'C ${_fmtNut(item.recipeYieldCarbohydratesGrams)} g · '
-                  'F ${_fmtNut(item.recipeYieldFatGrams)} g',
+                  '${_fmtNut(_item!.recipeYieldCalories)} kcal · '
+                  'P ${_fmtNut(_item!.recipeYieldProteinGrams)} g · '
+                  'C ${_fmtNut(_item!.recipeYieldCarbohydratesGrams)} g · '
+                  'F ${_fmtNut(_item!.recipeYieldFatGrams)} g',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
                 )
               else
                 Text(
-                  'Per ${item.recipeServingLabel ?? 'serving'}: '
-                  '${_fmtNut(item.caloriesPerBase)} kcal · '
-                  'P ${_fmtNut(item.proteinGramsPerBase)} g · '
-                  'C ${_fmtNut(item.carbohydratesGramsPerBase)} g · '
-                  'F ${_fmtNut(item.fatGramsPerBase)} g',
+                  'Per ${_item!.recipeServingLabel ?? 'serving'}: '
+                  '${_fmtNut(_item!.caloriesPerBase)} kcal · '
+                  'P ${_fmtNut(_item!.proteinGramsPerBase)} g · '
+                  'C ${_fmtNut(_item!.carbohydratesGramsPerBase)} g · '
+                  'F ${_fmtNut(_item!.fatGramsPerBase)} g',
                   style: theme.textTheme.bodySmall?.copyWith(
                     color: scheme.onSurfaceVariant,
                   ),
                 ),
-            ] else if (item.servingDescriptor != null)
+            ] else if (_item!.servingDescriptor != null)
               Text(
-                'Per ${item.servingDescriptor}: '
-                '${_fmtNut(item.caloriesPerBase)} kcal · '
-                'P ${_fmtNut(item.proteinGramsPerBase)} g · '
-                'C ${_fmtNut(item.carbohydratesGramsPerBase)} g · '
-                'F ${_fmtNut(item.fatGramsPerBase)} g',
+                'Per ${_item!.servingDescriptor}: '
+                '${_fmtNut(_item!.caloriesPerBase)} kcal · '
+                'P ${_fmtNut(_item!.proteinGramsPerBase)} g · '
+                'C ${_fmtNut(_item!.carbohydratesGramsPerBase)} g · '
+                'F ${_fmtNut(_item!.fatGramsPerBase)} g',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
               ),
             const SizedBox(height: 12),
-            if (totals != null) ...[
+            if (combined != null) ...[
               Text(
-                'Totals for ${_formatQuantityForSummary(_quantityController.text)} '
-                '${item.itemType == PantryCatalogItemType.recipe ? (_selectedServingIndex == 0 ? 'full recipe(s)' : 'serving(s)') : (item.foodServingOptions.isEmpty ? 'base serving(s)' : 'serving unit(s)')}, '
-                'scaled by your choice.',
+                mealCount > 1
+                    ? 'Meal totals ($mealCount items)'
+                    : 'Totals for ${_formatQuantityForSummary(_quantityController.text)} '
+                          '${_unitPhraseForTotals(_item!, _selectedServingIndex)}, '
+                          'scaled by your choice.',
                 style: theme.textTheme.labelLarge,
               ),
               const SizedBox(height: 8),
               Text(
-                '${totals.cal.round()} kcal total',
+                '${combined.cal.round()} kcal total',
                 style: theme.textTheme.headlineSmall?.copyWith(
                   fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
-                'Protein ${_fmtNut(totals.protein)} g · '
-                'Carbs ${_fmtNut(totals.carbs)} g · '
-                'Fat ${_fmtNut(totals.fat)} g',
+                'Protein ${_fmtNut(combined.protein)} g · '
+                'Carbs ${_fmtNut(combined.carbs)} g · '
+                'Fat ${_fmtNut(combined.fat)} g',
                 style: theme.textTheme.bodyLarge,
               ),
-            ] else if (item.itemType != PantryCatalogItemType.recipe ||
+            ] else if (_item!.itemType != PantryCatalogItemType.recipe ||
                 ((_selectedServingIndex == 0 &&
-                        item.recipeYieldCalories != null) ||
+                        _item!.recipeYieldCalories != null) ||
                     (_selectedServingIndex == 1 &&
-                        item.caloriesPerBase != null)))
+                        _item!.caloriesPerBase != null)))
               Text(
                 'Nutrition data is incomplete for this item.',
                 style: theme.textTheme.bodyMedium?.copyWith(
