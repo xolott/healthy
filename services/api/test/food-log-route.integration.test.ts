@@ -413,6 +413,211 @@ describe('Food Log routes (integration)', () => {
     }
   });
 
+  it('lists entries for a local date in ascending consumedAt order', async () => {
+    const { user, authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'food-log-order@example.com',
+      displayName: 'Order Logger',
+      role: 'owner',
+      status: 'active',
+      plainPassword: INTEGRATION_TEST_PLAIN_PASSWORD,
+    });
+    const food = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: user.id,
+      itemType: 'food',
+      name: 'Apple',
+      iconKey: 'food_bowl',
+      metadata: {
+        kind: 'food',
+        baseAmountGrams: 100,
+        nutrients: {
+          calories: 52,
+          protein: 0.3,
+          fat: 0.2,
+          carbohydrates: 14,
+        },
+      },
+    });
+
+    const app = await buildApp();
+    try {
+      const later = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: { ...authHeaders, 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          consumedAt: '2026-06-15T20:00:00.000Z',
+          consumedDate: '2026-06-15',
+          entries: [{ pantryItemId: food.id, quantity: 1, servingOption: { kind: 'base' } }],
+        }),
+      });
+      expect(later.statusCode).toBe(201);
+
+      const earlier = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: { ...authHeaders, 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          consumedAt: '2026-06-15T08:00:00.000Z',
+          consumedDate: '2026-06-15',
+          entries: [{ pantryItemId: food.id, quantity: 1, servingOption: { kind: 'base' } }],
+        }),
+      });
+      expect(earlier.statusCode).toBe(201);
+
+      const listRes = await app.inject({
+        method: 'GET',
+        url: '/food-log/entries?date=2026-06-15',
+        headers: authHeaders,
+      });
+      expect(listRes.statusCode).toBe(200);
+      const listBody = JSON.parse(listRes.payload) as { entries: Array<{ id: string }> };
+      expect(listBody.entries).toHaveLength(2);
+      const createEarlier = JSON.parse(earlier.payload) as { entries: Array<{ id: string }> };
+      const createLater = JSON.parse(later.payload) as { entries: Array<{ id: string }> };
+      expect(listBody.entries[0]!.id).toBe(createEarlier.entries[0]!.id);
+      expect(listBody.entries[1]!.id).toBe(createLater.entries[0]!.id);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('returns only entries for the requested consumedDate, not adjacent days', async () => {
+    const { user, authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'food-log-date-scope@example.com',
+      displayName: 'Date Scope Logger',
+      role: 'owner',
+      status: 'active',
+      plainPassword: INTEGRATION_TEST_PLAIN_PASSWORD,
+    });
+    const food = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: user.id,
+      itemType: 'food',
+      name: 'Banana',
+      iconKey: 'food_bowl',
+      metadata: {
+        kind: 'food',
+        baseAmountGrams: 100,
+        nutrients: {
+          calories: 89,
+          protein: 1.1,
+          fat: 0.3,
+          carbohydrates: 23,
+        },
+      },
+    });
+
+    const app = await buildApp();
+    try {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: { ...authHeaders, 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          consumedAt: '2026-07-01T12:00:00.000Z',
+          consumedDate: '2026-07-01',
+          entries: [{ pantryItemId: food.id, quantity: 1, servingOption: { kind: 'base' } }],
+        }),
+      });
+      expect(createRes.statusCode).toBe(201);
+
+      const nextDayRes = await app.inject({
+        method: 'GET',
+        url: '/food-log/entries?date=2026-07-02',
+        headers: authHeaders,
+      });
+      expect(nextDayRes.statusCode).toBe(200);
+      expect(JSON.parse(nextDayRes.payload)).toEqual({ entries: [] });
+
+      const prevDayRes = await app.inject({
+        method: 'GET',
+        url: '/food-log/entries?date=2026-06-30',
+        headers: authHeaders,
+      });
+      expect(prevDayRes.statusCode).toBe(200);
+      expect(JSON.parse(prevDayRes.payload)).toEqual({ entries: [] });
+
+      const sameDayRes = await app.inject({
+        method: 'GET',
+        url: '/food-log/entries?date=2026-07-01',
+        headers: authHeaders,
+      });
+      expect(sameDayRes.statusCode).toBe(200);
+      const sameBody = JSON.parse(sameDayRes.payload) as { entries: Array<{ displayName: string }> };
+      expect(sameBody.entries).toHaveLength(1);
+      expect(sameBody.entries[0]!.displayName).toBe('Banana');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('does not list another owner Food Log entries for the same local date', async () => {
+    const { user: ownerA, authHeaders: headersA } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'food-log-owner-a@example.com',
+      displayName: 'Owner A',
+      role: 'owner',
+      status: 'active',
+      plainPassword: INTEGRATION_TEST_PLAIN_PASSWORD,
+    });
+    const { authHeaders: headersB } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'food-log-owner-b@example.com',
+      displayName: 'Owner B',
+      role: 'owner',
+      status: 'active',
+      plainPassword: INTEGRATION_TEST_PLAIN_PASSWORD,
+    });
+    const food = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: ownerA.id,
+      itemType: 'food',
+      name: 'Secret Snack',
+      iconKey: 'food_bowl',
+      metadata: {
+        kind: 'food',
+        baseAmountGrams: 100,
+        nutrients: {
+          calories: 200,
+          protein: 5,
+          fat: 8,
+          carbohydrates: 28,
+        },
+      },
+    });
+
+    const app = await buildApp();
+    try {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: { ...headersA, 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          consumedAt: '2026-08-10T09:00:00.000Z',
+          consumedDate: '2026-08-10',
+          entries: [{ pantryItemId: food.id, quantity: 1, servingOption: { kind: 'base' } }],
+        }),
+      });
+      expect(createRes.statusCode).toBe(201);
+
+      const bListRes = await app.inject({
+        method: 'GET',
+        url: '/food-log/entries?date=2026-08-10',
+        headers: headersB,
+      });
+      expect(bListRes.statusCode).toBe(200);
+      expect(JSON.parse(bListRes.payload)).toEqual({ entries: [] });
+
+      const aListRes = await app.inject({
+        method: 'GET',
+        url: '/food-log/entries?date=2026-08-10',
+        headers: headersA,
+      });
+      expect(aListRes.statusCode).toBe(200);
+      const aBody = JSON.parse(aListRes.payload) as { entries: Array<{ displayName: string }> };
+      expect(aBody.entries).toHaveLength(1);
+      expect(aBody.entries[0]!.displayName).toBe('Secret Snack');
+    } finally {
+      await app.close();
+    }
+  });
+
   it('rejects mismatched serving option for foods with servings', async () => {
     const { user, authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
       email: 'food-log-wrong-unit@example.com',
