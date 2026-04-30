@@ -19,6 +19,7 @@ class PantryCatalogItem {
     this.carbohydratesGramsPerBase,
     this.fatGramsPerBase,
     this.servingDescriptor,
+    this.ingredientIconKeys = const <String>[],
   });
 
   final String id;
@@ -31,6 +32,10 @@ class PantryCatalogItem {
   final double? carbohydratesGramsPerBase;
   final double? fatGramsPerBase;
   final String? servingDescriptor;
+
+  /// Recipe list metadata: icons derived from ingredients; when empty, use
+  /// [iconKey] for the leading tile icon.
+  final List<String> ingredientIconKeys;
 }
 
 PantryCatalogItem? parsePantryCatalogItem(dynamic e) {
@@ -68,6 +73,7 @@ PantryCatalogItem? parsePantryCatalogItem(dynamic e) {
   double? carbohydrates;
   double? fat;
   String? servingDescriptor;
+  var ingredientKeys = const <String>[];
   if (parsedType == PantryCatalogItemType.food) {
     cal = foodListCaloriesFromMetadata(metaMap);
     protein = foodNutrientGramsFromMetadata(metaMap, 'protein');
@@ -76,6 +82,11 @@ PantryCatalogItem? parsePantryCatalogItem(dynamic e) {
     servingDescriptor = foodServingDescriptorFromMetadata(metaMap);
   } else {
     cal = recipeListCaloriesPerServingFromMetadata(metaMap);
+    protein = recipeNutrientGramsFromMetadata(metaMap, 'protein');
+    carbohydrates = recipeNutrientGramsFromMetadata(metaMap, 'carbohydrates');
+    fat = recipeNutrientGramsFromMetadata(metaMap, 'fat');
+    servingDescriptor = recipeServingDescriptorFromMetadata(metaMap);
+    ingredientKeys = ingredientIconKeysFromRecipeMetadata(metaMap);
   }
 
   return PantryCatalogItem(
@@ -83,11 +94,14 @@ PantryCatalogItem? parsePantryCatalogItem(dynamic e) {
     name: name,
     iconKey: iconKey,
     itemType: parsedType,
-    brand: pantryBrandFromMetadata(metaMap),
+    brand: parsedType == PantryCatalogItemType.food
+        ? pantryBrandFromMetadata(metaMap)
+        : null,
     caloriesPerBase: cal,
     proteinGramsPerBase: protein,
     carbohydratesGramsPerBase: carbohydrates,
     fatGramsPerBase: fat,
     servingDescriptor: servingDescriptor,
+    ingredientIconKeys: ingredientKeys,
   );
 }

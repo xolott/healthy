@@ -21,10 +21,17 @@ String _caloriesLabel(double? cal) {
   return '${cal.round()} kcal';
 }
 
-/// Material 3 pantry row for Food catalog results: Hugeicons leading tile,
-/// macros, optional brand, and optional trailing add affordance.
-class PantryFoodCatalogListTile extends StatelessWidget {
-  const PantryFoodCatalogListTile({
+String _leadingIconWireKey(PantryCatalogItem item) {
+  if (item.ingredientIconKeys.isNotEmpty) {
+    return item.ingredientIconKeys.first;
+  }
+  return item.iconKey;
+}
+
+/// Material 3 pantry catalog row: Hugeicons leading tile, highlighted calories,
+/// P/C/F macros, optional brand (food only), optional trailing add (food).
+class PantryCatalogListTile extends StatelessWidget {
+  const PantryCatalogListTile({
     super.key,
     required this.item,
     required this.onTap,
@@ -46,7 +53,7 @@ class PantryFoodCatalogListTile extends StatelessWidget {
         'F ${_formatMacroGrams(item.fatGramsPerBase)}';
 
     return Material(
-      key: ValueKey<String>('pantry-food-row-${item.id}'),
+      key: ValueKey<String>('pantry-catalog-row-${item.id}'),
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
@@ -65,7 +72,7 @@ class PantryFoodCatalogListTile extends StatelessWidget {
                   height: 48,
                   child: Center(
                     child: HugeIcon(
-                      icon: pantryHugeIconStrokeData(item.iconKey),
+                      icon: pantryHugeIconStrokeData(_leadingIconWireKey(item)),
                       size: 26,
                       color: scheme.onSurfaceVariant,
                     ),
@@ -126,7 +133,7 @@ class PantryFoodCatalogListTile extends StatelessWidget {
               ),
               if (onTrailingAddPressed != null) ...<Widget>[
                 IconButton.filledTonal(
-                  key: ValueKey<String>('pantry-food-row-add-${item.id}'),
+                  key: ValueKey<String>('pantry-catalog-row-add-${item.id}'),
                   onPressed: onTrailingAddPressed,
                   tooltip: 'Add',
                   icon: const Icon(Icons.add),

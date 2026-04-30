@@ -5,12 +5,11 @@ import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
 
 import 'pantry_catalog_helpers.dart';
 import 'pantry_catalog_item.dart';
-import 'pantry_food_catalog_list_tile.dart';
+import 'pantry_catalog_list_tile.dart';
 import 'pantry_http.dart';
 
 typedef PantryItemTap =
     void Function(BuildContext context, PantryCatalogItem item);
-typedef PantryItemSuffix = String? Function(PantryCatalogItem item);
 
 class PantryInfiniteCatalogList extends StatefulWidget {
   const PantryInfiniteCatalogList({
@@ -21,7 +20,6 @@ class PantryInfiniteCatalogList extends StatefulWidget {
     required this.noMatchesMessage,
     required this.searchFieldKey,
     required this.onTapItem,
-    required this.suffixForItem,
     this.reloadSignal,
     this.onFoodTrailingAdd,
   });
@@ -32,7 +30,6 @@ class PantryInfiniteCatalogList extends StatefulWidget {
   final String noMatchesMessage;
   final Key searchFieldKey;
   final PantryItemTap onTapItem;
-  final PantryItemSuffix suffixForItem;
 
   /// When incremented (e.g. after creating an item), this tab reloads from the server.
   final ValueNotifier<int>? reloadSignal;
@@ -357,28 +354,14 @@ class _PantryInfiniteCatalogListState extends State<PantryInfiniteCatalogList> {
             );
           }
           final item = shown[index];
-          if (widget.itemType == PantryCatalogItemType.food) {
-            return PantryFoodCatalogListTile(
-              item: item,
-              onTap: () => widget.onTapItem(context, item),
-              onTrailingAddPressed: widget.onFoodTrailingAdd != null
-                  ? () => widget.onFoodTrailingAdd!(item)
-                  : null,
-            );
-          }
-          final parts = <String>[item.iconKey];
-          final suffix = widget.suffixForItem(item);
-          if (suffix != null && suffix.isNotEmpty) {
-            parts.add(suffix);
-          }
-          return ListTile(
-            dense: true,
-            title: Text(item.name),
-            subtitle: Text(
-              parts.join(' · '),
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
-            ),
+          return PantryCatalogListTile(
+            item: item,
             onTap: () => widget.onTapItem(context, item),
+            onTrailingAddPressed:
+                widget.itemType == PantryCatalogItemType.food &&
+                    widget.onFoodTrailingAdd != null
+                ? () => widget.onFoodTrailingAdd!(item)
+                : null,
           );
         }, childCount: shown.length + extra),
       ),

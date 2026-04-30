@@ -17,6 +17,34 @@ import 'package:http/testing.dart';
 /// Full device integration against Postgres/API is not wired in CI for this app;
 /// admin Playwright uses the real stack (`pnpm --filter admin test:e2e`).
 
+Map<String, dynamic> pantryWireRecipeItem(
+  String id,
+  String name, {
+  List<String>? ingredientIconKeys,
+}) {
+  final meta = <String, dynamic>{
+    'kind': 'recipe',
+    'servings': 1,
+    'servingLabel': 'serving',
+    'nutrientsPerServing': <String, dynamic>{
+      'calories': 212,
+      'protein': 12,
+      'fat': 8,
+      'carbohydrates': 20,
+    },
+  };
+  if (ingredientIconKeys != null) {
+    meta['ingredientIconKeys'] = ingredientIconKeys;
+  }
+  return <String, dynamic>{
+    'id': id,
+    'name': name,
+    'iconKey': 'recipe_pot',
+    'itemType': 'recipe',
+    'metadata': meta,
+  };
+}
+
 Map<String, dynamic> pantryWireFoodItem(
   String id,
   String name,
@@ -333,5 +361,74 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('detail:tap-nav-food-id'), findsOneWidget);
+  });
+
+  testWidgets('Pantry recipe catalog row opens recipe route with M3 row', (
+    tester,
+  ) async {
+    PantryHttp.client = MockClient((request) async {
+      final path = request.url.path;
+      if (path.endsWith('/pantry/reference')) {
+        return http.Response(
+          jsonEncode(<String, dynamic>{'iconKeys': <String>[]}),
+          200,
+        );
+      }
+      if (path.endsWith('/pantry/items')) {
+        final type = request.url.queryParameters['itemType'];
+        if (type == 'recipe') {
+          return http.Response(
+            jsonEncode(<String, dynamic>{
+              'items': <dynamic>[
+                pantryWireRecipeItem(
+                  'recipe-tap-id',
+                  'Tappable stew',
+                  ingredientIconKeys: const <String>[],
+                ),
+              ],
+            }),
+            200,
+          );
+        }
+        return http.Response(
+          jsonEncode(<String, dynamic>{'items': <dynamic>[]}),
+          200,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+
+    final router = GoRouter(
+      initialLocation: '/pantry',
+      routes: [
+        GoRoute(
+          path: '/pantry',
+          builder: (_, _) => const MealsPantryCatalogScreen(),
+          routes: [
+            GoRoute(
+              path: 'recipe/:itemId',
+              builder: (_, state) => Scaffold(
+                body: Text('recipe-detail:${state.pathParameters['itemId']}'),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(MaterialApp.router(routerConfig: router));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('pantry-tab-recipe-top')));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('212 kcal'), findsOneWidget);
+    expect(find.textContaining('P 12g'), findsOneWidget);
+    expect(find.text('1 serving'), findsOneWidget);
+
+    await tester.tap(find.text('Tappable stew'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('recipe-detail:recipe-tap-id'), findsOneWidget);
   });
 }

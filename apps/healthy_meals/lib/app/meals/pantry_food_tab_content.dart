@@ -18,7 +18,6 @@ class PantryFoodTabContent extends StatelessWidget {
       searchHint: 'Search foods by name or brand...',
       emptyMessage: 'No foods yet. Saved items appear here once you add them.',
       noMatchesMessage: 'No foods match your search.',
-      suffixForItem: (_) => null,
       onTapItem: (ctx, item) {
         ctx.push('/pantry/food/${item.id}');
       },

@@ -19,12 +19,6 @@ class PantryRecipeTabContent extends StatelessWidget {
       emptyMessage:
           'No recipes yet. Saved items appear here once you add them.',
       noMatchesMessage: 'No recipes match your search.',
-      suffixForItem: (item) {
-        if (item.caloriesPerBase == null) {
-          return null;
-        }
-        return '${item.caloriesPerBase!.toStringAsFixed(0)} kcal/serving';
-      },
       onTapItem: (ctx, item) {
         ctx.push('/pantry/recipe/${item.id}');
       },

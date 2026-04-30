@@ -116,4 +116,72 @@ void main() {
       isNull,
     );
   });
+
+  test('recipeNutrientGramsFromMetadata reads nutrientsPerServing', () {
+    final meta = <String, dynamic>{
+      'kind': 'recipe',
+      'nutrientsPerServing': <String, dynamic>{
+        'protein': 9,
+        'carbohydrates': 12.5,
+        'fat': 4,
+      },
+    };
+    expect(recipeNutrientGramsFromMetadata(meta, 'protein'), 9);
+    expect(
+      recipeNutrientGramsFromMetadata(meta, 'carbohydrates'),
+      closeTo(12.5, 0.001),
+    );
+    expect(recipeNutrientGramsFromMetadata(meta, 'fat'), 4);
+    expect(
+      recipeNutrientGramsFromMetadata(<String, dynamic>{
+        'kind': 'food',
+      }, 'protein'),
+      isNull,
+    );
+  });
+
+  test('recipeServingDescriptorFromMetadata formats yield line', () {
+    expect(
+      recipeServingDescriptorFromMetadata(<String, dynamic>{
+        'kind': 'recipe',
+        'servings': 1,
+        'servingLabel': 'plate',
+      }),
+      '1 plate',
+    );
+    expect(
+      recipeServingDescriptorFromMetadata(<String, dynamic>{
+        'kind': 'recipe',
+        'servings': 2,
+        'servingLabel': 'serving',
+      }),
+      '2 servings',
+    );
+    expect(
+      recipeServingDescriptorFromMetadata(<String, dynamic>{
+        'kind': 'recipe',
+        'servings': 1.5,
+        'servingLabel': 'portion',
+      }),
+      '1.5 portions',
+    );
+    expect(
+      recipeServingDescriptorFromMetadata(<String, dynamic>{'kind': 'food'}),
+      isNull,
+    );
+  });
+
+  test('ingredientIconKeysFromRecipeMetadata filters empty strings', () {
+    expect(
+      ingredientIconKeysFromRecipeMetadata(<String, dynamic>{
+        'kind': 'recipe',
+        'ingredientIconKeys': <dynamic>['food_bowl', '', '  ', 'food_egg'],
+      }),
+      <String>['food_bowl', 'food_egg'],
+    );
+    expect(
+      ingredientIconKeysFromRecipeMetadata(<String, dynamic>{'kind': 'recipe'}),
+      isEmpty,
+    );
+  });
 }

@@ -1,4 +1,5 @@
-// Pure helpers for Pantry catalog search and Food row fields from list API metadata.
+// Pure helpers for Pantry catalog search and Food / Recipe row fields from
+// list API metadata.
 
 bool pantrySearchMatches(String query, {required String name, String? brand}) {
   final q = query.trim().toLowerCase();
@@ -106,4 +107,59 @@ double? recipeListCaloriesPerServingFromMetadata(
     return cal.toDouble();
   }
   return null;
+}
+
+double? recipeNutrientGramsFromMetadata(
+  Map<String, dynamic>? metadata,
+  String nutrientWireKey,
+) {
+  if (metadata == null || metadata['kind'] != 'recipe') {
+    return null;
+  }
+  final nps = metadata['nutrientsPerServing'];
+  if (nps is! Map<String, dynamic>) {
+    return null;
+  }
+  final v = nps[nutrientWireKey];
+  if (v is num) {
+    return v.toDouble();
+  }
+  return null;
+}
+
+/// Recipe yield line for catalog rows, e.g. `1 serving` or `2 servings`.
+String? recipeServingDescriptorFromMetadata(Map<String, dynamic>? metadata) {
+  if (metadata == null || metadata['kind'] != 'recipe') {
+    return null;
+  }
+  final raw = metadata['servings'];
+  if (raw is! num) {
+    return null;
+  }
+  final count = raw.toDouble();
+  final labelRaw = metadata['servingLabel'];
+  final label = labelRaw is String && labelRaw.trim().isNotEmpty
+      ? labelRaw.trim()
+      : 'serving';
+  final countStr = count % 1 == 0 ? count.toInt().toString() : count.toString();
+  final labelWithPlural = count == 1 ? label : '${label}s';
+  return '$countStr $labelWithPlural';
+}
+
+/// Optional ingredient icon keys from list metadata (recipe rows).
+List<String> ingredientIconKeysFromRecipeMetadata(
+  Map<String, dynamic>? metadata,
+) {
+  if (metadata == null || metadata['kind'] != 'recipe') {
+    return const <String>[];
+  }
+  final raw = metadata['ingredientIconKeys'];
+  if (raw is! List<dynamic>) {
+    return const <String>[];
+  }
+  return raw
+      .whereType<String>()
+      .map((s) => s.trim())
+      .where((s) => s.isNotEmpty)
+      .toList();
 }
