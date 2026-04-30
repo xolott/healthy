@@ -76,14 +76,14 @@ String? foodServingDescriptorFromMetadata(Map<String, dynamic>? metadata) {
     if (rawV is num && unitRaw is String && unitRaw.trim().isNotEmpty) {
       final unit = unitRaw.trim();
       final vStr = rawV % 1 == 0 ? rawV.toInt().toString() : rawV.toString();
-      return 'Per $vStr $unit';
+      return '$vStr $unit';
     }
   }
   final grams = metadata['baseAmountGrams'];
   if (grams is num) {
     final g = grams.toDouble();
     final gStr = g % 1 == 0 ? g.toInt().toString() : g.toString();
-    return 'Per $gStr g';
+    return '$gStr g';
   }
   return null;
 }
@@ -175,4 +175,30 @@ List<String> ingredientIconKeysFromRecipeMetadata(
     }
   }
   return out;
+}
+
+/// Scales per-base food nutrients to a total consumed gram amount (matches API
+/// nutrient scaling for one food log line).
+({double cal, double protein, double carbs, double fat})?
+foodLogNutrientsForConsumedGrams({
+  required double baseAmountGrams,
+  required double caloriesPerBase,
+  required double proteinPerBase,
+  required double carbohydratesPerBase,
+  required double fatPerBase,
+  required double consumedGramsTotal,
+}) {
+  if (!(baseAmountGrams > 0) || !(consumedGramsTotal > 0)) {
+    return null;
+  }
+  final factor = consumedGramsTotal / baseAmountGrams;
+  if (!factor.isFinite) {
+    return null;
+  }
+  return (
+    cal: caloriesPerBase * factor,
+    protein: proteinPerBase * factor,
+    carbs: carbohydratesPerBase * factor,
+    fat: fatPerBase * factor,
+  );
 }

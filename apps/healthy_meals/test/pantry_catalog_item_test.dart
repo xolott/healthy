@@ -58,4 +58,48 @@ void main() {
     expect(item.iconKey, 'recipe_soup');
     expect(item.servingDescriptor, '2 servings');
   });
+
+  test(
+    'parsePantryCatalogItem reads food servingOptions and baseAmountGrams',
+    () {
+      final item = parsePantryCatalogItem(<String, dynamic>{
+        'id': 'f-bread',
+        'name': 'Bread',
+        'iconKey': 'food_bowl',
+        'itemType': 'food',
+        'metadata': <String, dynamic>{
+          'kind': 'food',
+          'nutrients': <String, dynamic>{
+            'calories': 250,
+            'protein': 9,
+            'fat': 3,
+            'carbohydrates': 45,
+          },
+          'baseAmountGrams': 100,
+          'servingOptions': <Map<String, dynamic>>[
+            {'kind': 'unit', 'unit': 'slice', 'grams': 50},
+            {'kind': 'custom', 'label': 'half loaf', 'grams': 200},
+          ],
+        },
+      });
+
+      expect(item, isNotNull);
+      expect(item!.baseAmountGrams, 100);
+      expect(item.foodServingOptions, hasLength(2));
+      expect(item.foodServingOptions[0], isA<FoodServingUnitPick>());
+      expect(
+        (item.foodServingOptions[0] as FoodServingUnitPick).unitKey,
+        'slice',
+      );
+      expect(
+        (item.foodServingOptions[0] as FoodServingUnitPick).gramsPerServing,
+        50,
+      );
+      expect(item.foodServingOptions[1], isA<FoodServingCustomPick>());
+      expect(
+        (item.foodServingOptions[1] as FoodServingCustomPick).customLabel,
+        'half loaf',
+      );
+    },
+  );
 }

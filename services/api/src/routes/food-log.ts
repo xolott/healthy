@@ -36,6 +36,17 @@ const badRequestBody = {
   },
 } as const;
 
+const foodLogServingOptionResponseSchema = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['kind'],
+  properties: {
+    kind: { type: 'string', enum: ['base', 'unit', 'custom'] },
+    unit: { type: 'string' },
+    label: { type: 'string' },
+  },
+} as const;
+
 const foodLogEntryItemResponse = {
   type: 'object',
   additionalProperties: false,
@@ -48,6 +59,8 @@ const foodLogEntryItemResponse = {
     'fatGrams',
     'carbohydratesGrams',
     'consumedDate',
+    'quantity',
+    'servingOption',
   ],
   properties: {
     id: { type: 'string' },
@@ -58,6 +71,8 @@ const foodLogEntryItemResponse = {
     fatGrams: { type: 'number' },
     carbohydratesGrams: { type: 'number' },
     consumedDate: { type: 'string' },
+    quantity: { type: 'number' },
+    servingOption: foodLogServingOptionResponseSchema,
   },
 } as const;
 

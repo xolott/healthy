@@ -10,20 +10,27 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 
 void main() {
-  test('FoodLogEntryListItem.tryParse accepts list wire shape', () {
-    final row = FoodLogEntryListItem.tryParse({
-      'id': 'a',
-      'displayName': 'Oats',
-      'calories': 150.0,
-      'proteinGrams': 5,
-      'fatGrams': 2.5,
-      'carbohydratesGrams': 27,
-      'consumedDate': '2026-04-29',
-    });
-    expect(row, isNotNull);
-    expect(row!.displayName, 'Oats');
-    expect(row.calories, 150.0);
-  });
+  test(
+    'FoodLogEntryListItem.tryParse accepts entries with snapshot fields',
+    () {
+      final row = FoodLogEntryListItem.tryParse(<String, dynamic>{
+        'id': 'a',
+        'displayName': 'Oats',
+        'calories': 150.0,
+        'proteinGrams': 5,
+        'fatGrams': 2.5,
+        'carbohydratesGrams': 27,
+        'consumedDate': '2026-04-29',
+        'quantity': 1.5,
+        'servingOption': <String, dynamic>{'kind': 'unit', 'unit': 'cup'},
+      });
+      expect(row, isNotNull);
+      expect(row!.displayName, 'Oats');
+      expect(row.calories, 150.0);
+      expect(row.quantity, 1.5);
+      expect(row.consumedServingSummaryLine, '1.5 × cup');
+    },
+  );
 
   testWidgets('composer POSTs batch with base serving and pops on 201', (
     WidgetTester tester,
@@ -79,6 +86,8 @@ void main() {
                 'fatGrams': 2,
                 'carbohydratesGrams': 40,
                 'consumedDate': '2026-04-29',
+                'quantity': 2,
+                'servingOption': {'kind': 'base'},
               },
             ],
           }),
@@ -126,4 +135,116 @@ void main() {
     expect(e0['quantity'], 2);
     expect(e0['servingOption'], {'kind': 'base'});
   });
+
+  testWidgets(
+    'composer POSTs predefined unit serving when food has servingOptions',
+    (WidgetTester tester) async {
+      FlutterSecureStorage.setMockInitialValues({
+        'healthy_session_token': 'composer-test',
+        'healthy_api_base_url': 'https://composer.test',
+      });
+      addTearDown(() {
+        PantryHttp.client = http.Client();
+      });
+
+      String? capturedBody;
+      PantryHttp.client = MockClient((request) async {
+        if (request.url.path.endsWith('/pantry/items') &&
+            request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {
+                  'id': 'food-opt-1',
+                  'name': 'Sliced Bread',
+                  'iconKey': 'food_bowl',
+                  'itemType': 'food',
+                  'metadata': {
+                    'kind': 'food',
+                    'nutrients': {
+                      'calories': 200,
+                      'protein': 8,
+                      'carbohydrates': 38,
+                      'fat': 2,
+                    },
+                    'baseAmountGrams': 100,
+                    'servingOptions': [
+                      {'kind': 'unit', 'unit': 'slice', 'grams': 40},
+                      {'kind': 'custom', 'label': 'heel', 'grams': 35},
+                    ],
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        if (request.url.path.endsWith('/food-log/entries/batch') &&
+            request.method == 'POST') {
+          capturedBody = request.body;
+          return http.Response(
+            jsonEncode({
+              'entries': [
+                {
+                  'id': 'log-2',
+                  'pantryItemId': 'food-opt-1',
+                  'displayName': 'Sliced Bread',
+                  'calories': 100,
+                  'proteinGrams': 4,
+                  'fatGrams': 1,
+                  'carbohydratesGrams': 19,
+                  'consumedDate': '2026-04-29',
+                  'quantity': 3,
+                  'servingOption': {'kind': 'unit', 'unit': 'slice'},
+                },
+              ],
+            }),
+            201,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+
+      var done = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MealsFoodLogEntryComposerScreen(onDone: () => done = true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Food'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Sliced Bread'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('food-log-composer-serving')),
+        findsOneWidget,
+      );
+      await tester.enterText(
+        find.byKey(const Key('food-log-composer-quantity')),
+        '',
+      );
+      await tester.pump();
+      await tester.enterText(
+        find.byKey(const Key('food-log-composer-quantity')),
+        '3',
+      );
+      await tester.pump();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(done, isTrue);
+      expect(capturedBody, isNotNull);
+      final decoded = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      final entries = decoded['entries'] as List<dynamic>;
+      final e0 = entries.first as Map<String, dynamic>;
+      expect(e0['pantryItemId'], 'food-opt-1');
+      expect(e0['quantity'], 3);
+      expect(e0['servingOption'], {'kind': 'unit', 'unit': 'slice'});
+    },
+  );
 }

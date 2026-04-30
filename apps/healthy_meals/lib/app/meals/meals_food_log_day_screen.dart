@@ -19,6 +19,10 @@ class FoodLogEntryListItem {
     required this.fatGrams,
     required this.carbohydratesGrams,
     required this.consumedDate,
+    required this.quantity,
+    required this.servingKind,
+    this.servingUnit,
+    this.servingCustomLabel,
   });
 
   final String id;
@@ -28,6 +32,23 @@ class FoodLogEntryListItem {
   final double fatGrams;
   final double carbohydratesGrams;
   final String consumedDate;
+  final double quantity;
+  final String servingKind;
+  final String? servingUnit;
+  final String? servingCustomLabel;
+
+  /// Line such as `2 × slice` describing how this entry was counted.
+  String get consumedServingSummaryLine {
+    final q = quantity;
+    final qStr = q == q.roundToDouble() ? '${q.toInt()}' : q.toStringAsFixed(1);
+    final servingLabel = switch (servingKind) {
+      'base' => 'base serving',
+      'unit' => servingUnit ?? 'unit',
+      'custom' => servingCustomLabel ?? 'serving',
+      final k => k,
+    };
+    return '$qStr × $servingLabel';
+  }
 
   static FoodLogEntryListItem? tryParse(dynamic e) {
     if (e is! Map<String, dynamic>) {
@@ -40,13 +61,45 @@ class FoodLogEntryListItem {
     final f = e['fatGrams'];
     final c = e['carbohydratesGrams'];
     final d = e['consumedDate'];
+    final qty = e['quantity'];
+    Map<String, dynamic>? soRaw;
+    final soDyn = e['servingOption'];
+    if (soDyn is Map<String, dynamic>) {
+      soRaw = soDyn;
+    } else if (soDyn is Map) {
+      soRaw = Map<String, dynamic>.from(soDyn);
+    }
     if (id is! String ||
         name is! String ||
         cal is! num ||
         p is! num ||
         f is! num ||
         c is! num ||
-        d is! String) {
+        d is! String ||
+        qty is! num ||
+        soRaw == null) {
+      return null;
+    }
+    final kind = soRaw['kind'];
+    if (kind is! String || kind.trim().isEmpty) {
+      return null;
+    }
+    final k = kind.trim();
+    final unitRaw = soRaw['unit'];
+    final lblRaw = soRaw['label'];
+    String? servingUnitParsed;
+    String? servingCustomParsed;
+    if (k == 'unit') {
+      if (unitRaw is! String || unitRaw.trim().isEmpty) {
+        return null;
+      }
+      servingUnitParsed = unitRaw.trim();
+    } else if (k == 'custom') {
+      if (lblRaw is! String || lblRaw.trim().isEmpty) {
+        return null;
+      }
+      servingCustomParsed = lblRaw.trim();
+    } else if (k != 'base') {
       return null;
     }
     return FoodLogEntryListItem(
@@ -57,6 +110,10 @@ class FoodLogEntryListItem {
       fatGrams: f.toDouble(),
       carbohydratesGrams: c.toDouble(),
       consumedDate: d,
+      quantity: qty.toDouble(),
+      servingKind: k,
+      servingUnit: servingUnitParsed,
+      servingCustomLabel: servingCustomParsed,
     );
   }
 }
@@ -271,8 +328,7 @@ class _MealsFoodLogDayScreenState extends State<MealsFoodLogDayScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             sliver: SliverList.separated(
               itemCount: _entries.length,
-              separatorBuilder: (context, index) =>
-                  const SizedBox(height: 8),
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
               itemBuilder: (context, i) {
                 final e = _entries[i];
                 return _FoodLogEntryCard(entry: e);
@@ -319,6 +375,13 @@ class _FoodLogEntryCard extends StatelessWidget {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              entry.consumedServingSummaryLine,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onSurfaceVariant,
+              ),
             ),
             const SizedBox(height: 8),
             Text(

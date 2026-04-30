@@ -128,6 +128,8 @@ describe('Food Log routes (integration)', () => {
           fatGrams: number;
           carbohydratesGrams: number;
           consumedDate: string;
+          quantity: number;
+          servingOption: { kind: string; unit?: string; label?: string };
         }>;
       };
       expect(createBody.entries).toHaveLength(1);
@@ -139,6 +141,8 @@ describe('Food Log routes (integration)', () => {
         fatGrams: 8,
         carbohydratesGrams: 16,
         consumedDate: '2026-04-30',
+        quantity: 2,
+        servingOption: { kind: 'base' },
       });
 
       const listRes = await app.inject({
@@ -150,6 +154,223 @@ describe('Food Log routes (integration)', () => {
       expect(listRes.statusCode).toBe(200);
       const listBody = JSON.parse(listRes.payload) as typeof createBody;
       expect(listBody.entries).toEqual(createBody.entries);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects base serving for food that defines serving options', async () => {
+    const { user, authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'food-log-opt@example.com',
+      displayName: 'Option Logger',
+      role: 'owner',
+      status: 'active',
+      plainPassword: INTEGRATION_TEST_PLAIN_PASSWORD,
+    });
+    const food = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: user.id,
+      itemType: 'food',
+      name: 'Toast',
+      iconKey: 'food_bowl',
+      metadata: {
+        kind: 'food',
+        baseAmountGrams: 100,
+        nutrients: {
+          calories: 260,
+          protein: 9,
+          fat: 4,
+          carbohydrates: 48,
+        },
+        servingOptions: [{ kind: 'unit', unit: 'slice', grams: 33 }],
+      },
+    });
+
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: {
+          ...authHeaders,
+          'content-type': 'application/json',
+        },
+        payload: JSON.stringify({
+          consumedAt: '2026-05-01T12:00:00.000Z',
+          consumedDate: '2026-05-01',
+          entries: [{ pantryItemId: food.id, quantity: 1, servingOption: { kind: 'base' } }],
+        }),
+      });
+      expect(res.statusCode).toBe(400);
+      expect(JSON.parse(res.payload)).toMatchObject({ error: 'invalid_input', field: expect.any(String) });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('accepts predefined unit servings, snapshots totals, and returns quantity + servingOption', async () => {
+    const { user, authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'food-log-unit@example.com',
+      displayName: 'Unit Logger',
+      role: 'owner',
+      status: 'active',
+      plainPassword: INTEGRATION_TEST_PLAIN_PASSWORD,
+    });
+    const food = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: user.id,
+      itemType: 'food',
+      name: 'Toast',
+      iconKey: 'food_bowl',
+      metadata: {
+        kind: 'food',
+        baseAmountGrams: 100,
+        nutrients: {
+          calories: 100,
+          protein: 4,
+          fat: 2,
+          carbohydrates: 16,
+        },
+        servingOptions: [{ kind: 'unit', unit: 'slice', grams: 40 }],
+      },
+    });
+
+    const app = await buildApp();
+    try {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: {
+          ...authHeaders,
+          'content-type': 'application/json',
+        },
+        payload: JSON.stringify({
+          consumedAt: '2026-05-02T14:30:00.000Z',
+          consumedDate: '2026-05-02',
+          entries: [{ pantryItemId: food.id, quantity: 2, servingOption: { kind: 'unit', unit: 'slice' } }],
+        }),
+      });
+      expect(createRes.statusCode).toBe(201);
+      const createBody = JSON.parse(createRes.payload) as {
+        entries: Array<{
+          calories: number;
+          proteinGrams: number;
+          fatGrams: number;
+          carbohydratesGrams: number;
+          quantity: number;
+          servingOption: { kind: string; unit?: string };
+        }>;
+      };
+      expect(createBody.entries[0]).toMatchObject({
+        quantity: 2,
+        servingOption: { kind: 'unit', unit: 'slice' },
+      });
+      const sliceEntry = createBody.entries[0]!;
+      expect(sliceEntry.calories).toBeCloseTo(80, 5);
+      expect(sliceEntry.proteinGrams).toBeCloseTo(3.2, 5);
+      expect(sliceEntry.fatGrams).toBeCloseTo(1.6, 5);
+      expect(sliceEntry.carbohydratesGrams).toBeCloseTo(12.8, 5);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('accepts custom label servings matching metadata', async () => {
+    const { user, authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'food-log-custom@example.com',
+      displayName: 'Custom Logger',
+      role: 'owner',
+      status: 'active',
+      plainPassword: INTEGRATION_TEST_PLAIN_PASSWORD,
+    });
+    const food = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: user.id,
+      itemType: 'food',
+      name: 'Pizza',
+      iconKey: 'food_bowl',
+      metadata: {
+        kind: 'food',
+        baseAmountGrams: 100,
+        nutrients: {
+          calories: 300,
+          protein: 12,
+          fat: 10,
+          carbohydrates: 36,
+        },
+        servingOptions: [{ kind: 'custom', label: 'Corner piece', grams: 80 }],
+      },
+    });
+
+    const app = await buildApp();
+    try {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: {
+          ...authHeaders,
+          'content-type': 'application/json',
+        },
+        payload: JSON.stringify({
+          consumedAt: '2026-05-03T18:00:00.000Z',
+          consumedDate: '2026-05-03',
+          entries: [
+            { pantryItemId: food.id, quantity: 1, servingOption: { kind: 'custom', label: 'Corner piece' } },
+          ],
+        }),
+      });
+      expect(createRes.statusCode).toBe(201);
+      const createBody = JSON.parse(createRes.payload) as {
+        entries: Array<{ calories: number; servingOption: { kind: string; label?: string } }>;
+      };
+      expect(createBody.entries[0]).toMatchObject({
+        calories: 240,
+        servingOption: { kind: 'custom', label: 'Corner piece' },
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('rejects mismatched serving option for foods with servings', async () => {
+    const { user, authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'food-log-wrong-unit@example.com',
+      displayName: 'Mismatch Logger',
+      role: 'owner',
+      status: 'active',
+      plainPassword: INTEGRATION_TEST_PLAIN_PASSWORD,
+    });
+    const food = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: user.id,
+      itemType: 'food',
+      name: 'Rice cake',
+      iconKey: 'food_bowl',
+      metadata: {
+        kind: 'food',
+        baseAmountGrams: 50,
+        nutrients: {
+          calories: 60,
+          protein: 1,
+          fat: 1,
+          carbohydrates: 12,
+        },
+        servingOptions: [{ kind: 'unit', unit: 'cake', grams: 25 }],
+      },
+    });
+
+    const app = await buildApp();
+    try {
+      const res = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: {
+          ...authHeaders,
+          'content-type': 'application/json',
+        },
+        payload: JSON.stringify({
+          consumedAt: '2026-05-04T09:00:00.000Z',
+          consumedDate: '2026-05-04',
+          entries: [{ pantryItemId: food.id, quantity: 1, servingOption: { kind: 'unit', unit: 'slice' } }],
+        }),
+      });
+      expect(res.statusCode).toBe(400);
     } finally {
       await app.close();
     }

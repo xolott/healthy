@@ -7,6 +7,54 @@ extension PantryCatalogItemTypeWire on PantryCatalogItemType {
       this == PantryCatalogItemType.food ? 'food' : 'recipe';
 }
 
+/// A selectable predefined or custom pantry serving for Food logging/composer UI.
+sealed class FoodServingOptionPick {
+  const FoodServingOptionPick({required this.gramsPerServing});
+
+  final double gramsPerServing;
+
+  Map<String, dynamic> toServingOptionWire();
+
+  /// Short label shown in serving dropdowns (unit key or custom label).
+  String get pickerDisplayLabel;
+}
+
+final class FoodServingUnitPick extends FoodServingOptionPick {
+  const FoodServingUnitPick({
+    required super.gramsPerServing,
+    required this.unitKey,
+  });
+
+  final String unitKey;
+
+  @override
+  Map<String, dynamic> toServingOptionWire() => <String, dynamic>{
+    'kind': 'unit',
+    'unit': unitKey,
+  };
+
+  @override
+  String get pickerDisplayLabel => unitKey;
+}
+
+final class FoodServingCustomPick extends FoodServingOptionPick {
+  const FoodServingCustomPick({
+    required super.gramsPerServing,
+    required this.customLabel,
+  });
+
+  final String customLabel;
+
+  @override
+  Map<String, dynamic> toServingOptionWire() => <String, dynamic>{
+    'kind': 'custom',
+    'label': customLabel,
+  };
+
+  @override
+  String get pickerDisplayLabel => customLabel;
+}
+
 class PantryCatalogItem {
   const PantryCatalogItem({
     required this.id,
@@ -19,7 +67,9 @@ class PantryCatalogItem {
     this.carbohydratesGramsPerBase,
     this.fatGramsPerBase,
     this.servingDescriptor,
+    this.baseAmountGrams,
     this.ingredientIconKeys = const <String>[],
+    this.foodServingOptions = const <FoodServingOptionPick>[],
   });
 
   final String id;
@@ -33,9 +83,71 @@ class PantryCatalogItem {
   final double? fatGramsPerBase;
   final String? servingDescriptor;
 
+  /// Food metadata [baseAmountGrams]; used to scale nutrients for serving picks.
+  final double? baseAmountGrams;
+
   /// Recipe list metadata: icons derived from ingredients; when empty, use
   /// [iconKey] for the leading tile icon.
   final List<String> ingredientIconKeys;
+
+  /// Non-empty when this food defines optional serving sizes (unit/custom).
+  final List<FoodServingOptionPick> foodServingOptions;
+}
+
+List<FoodServingOptionPick> _foodServingPicksFromMetadata(
+  Map<String, dynamic>? metadata,
+) {
+  if (metadata == null || metadata['kind'] != 'food') {
+    return const <FoodServingOptionPick>[];
+  }
+  final raw = metadata['servingOptions'];
+  if (raw is! List<dynamic>) {
+    return const <FoodServingOptionPick>[];
+  }
+  final out = <FoodServingOptionPick>[];
+  for (final e in raw) {
+    if (e is! Map) {
+      continue;
+    }
+    final x = Map<String, dynamic>.from(e);
+    final kind = x['kind'];
+    final grams = x['grams'];
+    if (grams is! num) {
+      continue;
+    }
+    final g = grams.toDouble();
+    if (g <= 0 || !g.isFinite) {
+      continue;
+    }
+    if (kind == 'unit' && x['unit'] is String) {
+      final u = (x['unit'] as String).trim();
+      if (u.isEmpty) {
+        continue;
+      }
+      out.add(FoodServingUnitPick(gramsPerServing: g, unitKey: u));
+    } else if (kind == 'custom' && x['label'] is String) {
+      final l = (x['label'] as String).trim();
+      if (l.isEmpty) {
+        continue;
+      }
+      out.add(FoodServingCustomPick(gramsPerServing: g, customLabel: l));
+    }
+  }
+  return out;
+}
+
+double? _foodBaseAmountGramsFromMetadata(Map<String, dynamic>? metadata) {
+  if (metadata == null || metadata['kind'] != 'food') {
+    return null;
+  }
+  final g = metadata['baseAmountGrams'];
+  if (g is num) {
+    final v = g.toDouble();
+    if (v > 0 && v.isFinite) {
+      return v;
+    }
+  }
+  return null;
 }
 
 PantryCatalogItem? parsePantryCatalogItem(dynamic e) {
@@ -74,12 +186,16 @@ PantryCatalogItem? parsePantryCatalogItem(dynamic e) {
   double? fat;
   String? servingDescriptor;
   var ingredientKeys = const <String>[];
+  double? baseAmountGrams;
+  var foodServings = const <FoodServingOptionPick>[];
   if (parsedType == PantryCatalogItemType.food) {
     cal = foodListCaloriesFromMetadata(metaMap);
     protein = foodNutrientGramsFromMetadata(metaMap, 'protein');
     carbohydrates = foodNutrientGramsFromMetadata(metaMap, 'carbohydrates');
     fat = foodNutrientGramsFromMetadata(metaMap, 'fat');
     servingDescriptor = foodServingDescriptorFromMetadata(metaMap);
+    baseAmountGrams = _foodBaseAmountGramsFromMetadata(metaMap);
+    foodServings = _foodServingPicksFromMetadata(metaMap);
   } else {
     cal = recipeListCaloriesPerServingFromMetadata(metaMap);
     protein = recipeNutrientGramsFromMetadata(metaMap, 'protein');
@@ -102,6 +218,8 @@ PantryCatalogItem? parsePantryCatalogItem(dynamic e) {
     carbohydratesGramsPerBase: carbohydrates,
     fatGramsPerBase: fat,
     servingDescriptor: servingDescriptor,
+    baseAmountGrams: baseAmountGrams,
     ingredientIconKeys: ingredientKeys,
+    foodServingOptions: foodServings,
   );
 }

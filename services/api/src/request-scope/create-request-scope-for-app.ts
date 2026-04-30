@@ -36,6 +36,7 @@ import {
 } from '@healthy/db/schema';
 
 import type {
+  FoodLogEntryServingWire,
   FoodLogEntryWire,
   PantryItemDetailWire,
   PantryItemWire,
@@ -55,6 +56,16 @@ function mapPantryRowToWire(row: PantryItemRow): PantryItemWire {
   };
 }
 
+function servingOptionFoodLogWireFromPersisted(row: FoodLogEntryRow): FoodLogEntryServingWire {
+  if (row.servingKind === 'base') {
+    return { kind: 'base' };
+  }
+  if (row.servingKind === 'unit') {
+    return { kind: 'unit', unit: row.servingUnitKey ?? '' };
+  }
+  return { kind: 'custom', label: row.servingCustomLabel ?? '' };
+}
+
 function mapFoodLogRowToWire(row: FoodLogEntryRow): FoodLogEntryWire {
   return {
     id: row.id,
@@ -65,6 +76,8 @@ function mapFoodLogRowToWire(row: FoodLogEntryRow): FoodLogEntryWire {
     fatGrams: row.fatGrams,
     carbohydratesGrams: row.carbohydratesGrams,
     consumedDate: row.consumedDate,
+    quantity: row.quantity,
+    servingOption: servingOptionFoodLogWireFromPersisted(row),
   };
 }
 

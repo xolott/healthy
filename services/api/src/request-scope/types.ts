@@ -159,6 +159,12 @@ export type RequestScopePantryCapability = {
   createRecipeForOwner(ownerUserId: string, rawBody: unknown): Promise<PublicCreateRecipeOutcome>;
 };
 
+/** Serving choice persisted with a Food Log Entry (snapshot of what was consumed). */
+export type FoodLogEntryServingWire =
+  | { kind: 'base' }
+  | { kind: 'unit'; unit: string }
+  | { kind: 'custom'; label: string };
+
 /** One logged consumption row as returned by Food Log HTTP (snapshot fields). */
 export type FoodLogEntryWire = {
   id: string;
@@ -169,6 +175,8 @@ export type FoodLogEntryWire = {
   fatGrams: number;
   carbohydratesGrams: number;
   consumedDate: string;
+  quantity: number;
+  servingOption: FoodLogEntryServingWire;
 };
 
 export type PublicFoodLogListOutcome =

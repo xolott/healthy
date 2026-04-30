@@ -1,4 +1,5 @@
 export type {
+  FoodLogEntryServingWire,
   FoodLogEntryWire,
   NutrientCatalogEntry,
   PantryItemDetailWire,

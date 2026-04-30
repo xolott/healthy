@@ -43,7 +43,13 @@ function parseLocalDateString(
   if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
     return { field, message: 'Must be a local date in YYYY-MM-DD form.' };
   }
-  const [y, m, d] = raw.split('-').map((x) => Number(x));
+  const parts = raw.split('-').map((x) => Number(x));
+  if (parts.length !== 3) {
+    return { field, message: 'Must be a valid calendar date.' };
+  }
+  const y = parts[0]!;
+  const m = parts[1]!;
+  const d = parts[2]!;
   if (
     !Number.isInteger(y) ||
     !Number.isInteger(m) ||
