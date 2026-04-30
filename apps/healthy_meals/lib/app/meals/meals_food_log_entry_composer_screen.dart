@@ -10,8 +10,7 @@ import 'pantry_catalog_item.dart';
 import 'pantry_http.dart';
 import 'pantry_infinite_catalog_list.dart';
 
-/// Composer: log one Pantry Food as a Food Log Entry (base foods or foods with
-/// predefined/custom serving options).
+/// Composer: log Pantry Foods or Recipes as Food Log Entries (serving-aware).
 class MealsFoodLogEntryComposerScreen extends StatefulWidget {
   const MealsFoodLogEntryComposerScreen({super.key, required this.onDone});
 
@@ -28,7 +27,7 @@ class _MealsFoodLogEntryComposerScreenState
   final TextEditingController _quantityController = TextEditingController(
     text: '1',
   );
-  PantryCatalogItem? _food;
+  PantryCatalogItem? _item;
   int _selectedServingIndex = 0;
   bool _saving = false;
 
@@ -62,36 +61,72 @@ class _MealsFoodLogEntryComposerScreenState
     return v;
   }
 
-  bool _hasValidServingSelection(PantryCatalogItem food) {
-    final opts = food.foodServingOptions;
+  bool _hasValidServingSelection(PantryCatalogItem item) {
+    if (item.itemType == PantryCatalogItemType.recipe) {
+      return _selectedServingIndex >= 0 && _selectedServingIndex <= 1;
+    }
+    final opts = item.foodServingOptions;
     if (opts.isEmpty) {
       return true;
     }
     return _selectedServingIndex >= 0 && _selectedServingIndex < opts.length;
   }
 
-  Map<String, dynamic>? _servingOptionWire(PantryCatalogItem food) {
-    final opts = food.foodServingOptions;
+  Map<String, dynamic>? _servingOptionWire(PantryCatalogItem item) {
+    if (item.itemType == PantryCatalogItemType.recipe) {
+      if (_selectedServingIndex == 0) {
+        return <String, dynamic>{'kind': 'base'};
+      }
+      if (_selectedServingIndex == 1) {
+        return <String, dynamic>{'kind': 'unit', 'unit': 'serving'};
+      }
+      return null;
+    }
+    final opts = item.foodServingOptions;
     if (opts.isEmpty) {
       return <String, dynamic>{'kind': 'base'};
     }
-    if (!_hasValidServingSelection(food)) {
+    if (!_hasValidServingSelection(item)) {
       return null;
     }
     return opts[_selectedServingIndex].toServingOptionWire();
   }
 
   ({double cal, double protein, double carbs, double fat})? _draftTotals() {
-    final f = _food;
+    final item = _item;
     final q = _parseQuantity();
-    if (f == null || q == null) {
+    if (item == null || q == null) {
       return null;
     }
-    final baseG = f.baseAmountGrams;
-    final c = f.caloriesPerBase;
-    final p = f.proteinGramsPerBase;
-    final carb = f.carbohydratesGramsPerBase;
-    final fat = f.fatGramsPerBase;
+    if (item.itemType == PantryCatalogItemType.recipe) {
+      if (!_hasValidServingSelection(item)) {
+        return null;
+      }
+      if (_selectedServingIndex == 0) {
+        final c = item.recipeYieldCalories;
+        final p = item.recipeYieldProteinGrams;
+        final carb = item.recipeYieldCarbohydratesGrams;
+        final f = item.recipeYieldFatGrams;
+        if (c == null || p == null || carb == null || f == null) {
+          return null;
+        }
+        return (cal: c * q, protein: p * q, carbs: carb * q, fat: f * q);
+      }
+      final c = item.caloriesPerBase;
+      final p = item.proteinGramsPerBase;
+      final carb = item.carbohydratesGramsPerBase;
+      final f = item.fatGramsPerBase;
+      if (c == null || p == null || carb == null || f == null) {
+        return null;
+      }
+      return (cal: c * q, protein: p * q, carbs: carb * q, fat: f * q);
+    }
+
+    final baseG = item.baseAmountGrams;
+    final c = item.caloriesPerBase;
+    final p = item.proteinGramsPerBase;
+    final carb = item.carbohydratesGramsPerBase;
+    final fat = item.fatGramsPerBase;
     if (baseG == null ||
         c == null ||
         p == null ||
@@ -101,11 +136,11 @@ class _MealsFoodLogEntryComposerScreenState
     }
 
     final double consumedGramsTotal;
-    final opts = f.foodServingOptions;
+    final opts = item.foodServingOptions;
     if (opts.isEmpty) {
       consumedGramsTotal = baseG * q;
     } else {
-      if (!_hasValidServingSelection(f)) {
+      if (!_hasValidServingSelection(item)) {
         return null;
       }
       consumedGramsTotal = opts[_selectedServingIndex].gramsPerServing * q;
@@ -153,31 +188,31 @@ class _MealsFoodLogEntryComposerScreenState
 
   DateTime _dateOnly(DateTime x) => DateTime(x.year, x.month, x.day);
 
-  Future<void> _openFoodPicker() async {
+  Future<void> _openPantryPicker() async {
     final picked = await Navigator.of(context).push<PantryCatalogItem>(
       MaterialPageRoute(
         fullscreenDialog: true,
-        builder: (ctx) => const _FoodLogPantryFoodPickerPage(),
+        builder: (ctx) => const _FoodLogPantryPickerPage(),
       ),
     );
     if (picked != null && mounted) {
       setState(() {
-        _food = picked;
+        _item = picked;
         _selectedServingIndex = 0;
       });
     }
   }
 
   Future<void> _save() async {
-    final food = _food;
+    final item = _item;
     final qty = _parseQuantity();
-    if (food == null ||
+    if (item == null ||
         qty == null ||
         _saving ||
-        !_hasValidServingSelection(food)) {
+        !_hasValidServingSelection(item)) {
       return;
     }
-    final serving = _servingOptionWire(food);
+    final serving = _servingOptionWire(item);
     if (serving == null) {
       return;
     }
@@ -204,7 +239,7 @@ class _MealsFoodLogEntryComposerScreenState
       'consumedAt': _consumedAt.toIso8601String(),
       'consumedDate': DateFormat('yyyy-MM-dd').format(_consumedAt),
       'entries': <Map<String, dynamic>>[
-        {'pantryItemId': food.id, 'quantity': qty, 'servingOption': serving},
+        {'pantryItemId': item.id, 'quantity': qty, 'servingOption': serving},
       ],
     };
     try {
@@ -271,17 +306,32 @@ class _MealsFoodLogEntryComposerScreenState
     return v.toStringAsFixed(1);
   }
 
+  String _quantityFieldLabel(PantryCatalogItem? item) {
+    if (item == null) {
+      return 'Quantity';
+    }
+    if (item.itemType == PantryCatalogItemType.recipe) {
+      return _selectedServingIndex == 0
+          ? 'Quantity (full recipes)'
+          : 'Quantity (servings)';
+    }
+    if (item.foodServingOptions.isNotEmpty) {
+      return 'Quantity (servings)';
+    }
+    return 'Quantity (base servings)';
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final food = _food;
+    final item = _item;
     final totals = _draftTotals();
     final canSave =
-        food != null &&
+        item != null &&
         _parseQuantity() != null &&
         !_saving &&
-        _hasValidServingSelection(food) &&
+        _hasValidServingSelection(item) &&
         totals != null;
 
     return Scaffold(
@@ -316,18 +366,58 @@ class _MealsFoodLogEntryComposerScreenState
           const Divider(),
           ListTile(
             contentPadding: EdgeInsets.zero,
-            title: const Text('Food'),
+            title: const Text('Food or recipe'),
             subtitle: Text(
-              food == null
+              item == null
                   ? 'Choose from your Pantry'
-                  : food.brand != null && food.brand!.isNotEmpty
-                  ? '${food.name} · ${food.brand}'
-                  : food.name,
+                  : item.itemType == PantryCatalogItemType.food &&
+                        item.brand != null &&
+                        item.brand!.isNotEmpty
+                  ? '${item.name} · ${item.brand}'
+                  : item.name,
             ),
             trailing: const Icon(Icons.chevron_right),
-            onTap: _openFoodPicker,
+            onTap: _openPantryPicker,
           ),
-          if (food != null && food.foodServingOptions.isNotEmpty) ...[
+          if (item != null &&
+              item.itemType == PantryCatalogItemType.recipe) ...[
+            const SizedBox(height: 16),
+            Text('Serving', style: theme.textTheme.titleSmall),
+            const SizedBox(height: 8),
+            InputDecorator(
+              key: const Key('food-log-composer-serving'),
+              decoration: const InputDecoration(border: OutlineInputBorder()),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  isExpanded: true,
+                  menuMaxHeight: 320,
+                  value: _selectedServingIndex.clamp(0, 1),
+                  items: [
+                    DropdownMenuItem<int>(
+                      value: 0,
+                      child: Text(
+                        item.servingDescriptor != null
+                            ? 'Full recipe (${item.servingDescriptor})'
+                            : 'Full recipe',
+                      ),
+                    ),
+                    DropdownMenuItem<int>(
+                      value: 1,
+                      child: Text(
+                        'Per ${item.recipeServingLabel ?? 'serving'}',
+                      ),
+                    ),
+                  ],
+                  onChanged: (v) {
+                    if (v == null) {
+                      return;
+                    }
+                    setState(() => _selectedServingIndex = v);
+                  },
+                ),
+              ),
+            ),
+          ] else if (item != null && item.foodServingOptions.isNotEmpty) ...[
             const SizedBox(height: 16),
             Text('Serving', style: theme.textTheme.titleSmall),
             const SizedBox(height: 8),
@@ -340,14 +430,14 @@ class _MealsFoodLogEntryComposerScreenState
                   menuMaxHeight: 320,
                   value: _selectedServingIndex.clamp(
                     0,
-                    food.foodServingOptions.length - 1,
+                    item.foodServingOptions.length - 1,
                   ),
                   items: [
-                    for (var i = 0; i < food.foodServingOptions.length; i++)
+                    for (var i = 0; i < item.foodServingOptions.length; i++)
                       DropdownMenuItem<int>(
                         value: i,
                         child: Text(
-                          food.foodServingOptions[i].pickerDisplayLabel,
+                          item.foodServingOptions[i].pickerDisplayLabel,
                         ),
                       ),
                   ],
@@ -367,9 +457,7 @@ class _MealsFoodLogEntryComposerScreenState
             controller: _quantityController,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
             decoration: InputDecoration(
-              labelText: food != null && food.foodServingOptions.isNotEmpty
-                  ? 'Quantity (servings)'
-                  : 'Quantity (base servings)',
+              labelText: _quantityFieldLabel(item),
               border: const OutlineInputBorder(),
             ),
             onChanged: (_) => setState(() {}),
@@ -377,28 +465,73 @@ class _MealsFoodLogEntryComposerScreenState
           const SizedBox(height: 24),
           Text('Summary', style: theme.textTheme.titleMedium),
           const SizedBox(height: 8),
-          if (food == null)
+          if (item == null)
             Text(
-              'Select a food to see nutrition.',
+              'Select a food or recipe to see nutrition.',
               style: theme.textTheme.bodyMedium?.copyWith(
                 color: scheme.onSurfaceVariant,
               ),
             )
           else ...[
-            if (!_hasValidServingSelection(food))
+            if (!_hasValidServingSelection(item))
               Text(
                 'Choose a valid serving.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: scheme.error,
                 ),
               )
-            else if (food.servingDescriptor != null)
+            else if (item.itemType == PantryCatalogItemType.recipe) ...[
+              if (_selectedServingIndex == 0 &&
+                  (item.recipeYieldCalories == null ||
+                      item.recipeYieldProteinGrams == null ||
+                      item.recipeYieldCarbohydratesGrams == null ||
+                      item.recipeYieldFatGrams == null))
+                Text(
+                  'Full-yield nutrition is missing for this recipe.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.error,
+                  ),
+                )
+              else if (_selectedServingIndex == 1 &&
+                  (item.caloriesPerBase == null ||
+                      item.proteinGramsPerBase == null ||
+                      item.carbohydratesGramsPerBase == null ||
+                      item.fatGramsPerBase == null))
+                Text(
+                  'Per-serving nutrition is incomplete for this recipe.',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: scheme.error,
+                  ),
+                )
+              else if (_selectedServingIndex == 0)
+                Text(
+                  'One full recipe: '
+                  '${_fmtNut(item.recipeYieldCalories)} kcal · '
+                  'P ${_fmtNut(item.recipeYieldProteinGrams)} g · '
+                  'C ${_fmtNut(item.recipeYieldCarbohydratesGrams)} g · '
+                  'F ${_fmtNut(item.recipeYieldFatGrams)} g',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                )
+              else
+                Text(
+                  'Per ${item.recipeServingLabel ?? 'serving'}: '
+                  '${_fmtNut(item.caloriesPerBase)} kcal · '
+                  'P ${_fmtNut(item.proteinGramsPerBase)} g · '
+                  'C ${_fmtNut(item.carbohydratesGramsPerBase)} g · '
+                  'F ${_fmtNut(item.fatGramsPerBase)} g',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+            ] else if (item.servingDescriptor != null)
               Text(
-                'Per ${food.servingDescriptor}: '
-                '${_fmtNut(food.caloriesPerBase)} kcal · '
-                'P ${_fmtNut(food.proteinGramsPerBase)} g · '
-                'C ${_fmtNut(food.carbohydratesGramsPerBase)} g · '
-                'F ${_fmtNut(food.fatGramsPerBase)} g',
+                'Per ${item.servingDescriptor}: '
+                '${_fmtNut(item.caloriesPerBase)} kcal · '
+                'P ${_fmtNut(item.proteinGramsPerBase)} g · '
+                'C ${_fmtNut(item.carbohydratesGramsPerBase)} g · '
+                'F ${_fmtNut(item.fatGramsPerBase)} g',
                 style: theme.textTheme.bodySmall?.copyWith(
                   color: scheme.onSurfaceVariant,
                 ),
@@ -406,9 +539,8 @@ class _MealsFoodLogEntryComposerScreenState
             const SizedBox(height: 12),
             if (totals != null) ...[
               Text(
-                'Totals for '
-                '${_formatQuantityForSummary(_quantityController.text)} '
-                '${food.foodServingOptions.isEmpty ? 'base serving(s)' : 'serving unit(s)'}, '
+                'Totals for ${_formatQuantityForSummary(_quantityController.text)} '
+                '${item.itemType == PantryCatalogItemType.recipe ? (_selectedServingIndex == 0 ? 'full recipe(s)' : 'serving(s)') : (item.foodServingOptions.isEmpty ? 'base serving(s)' : 'serving unit(s)')}, '
                 'scaled by your choice.',
                 style: theme.textTheme.labelLarge,
               ),
@@ -426,9 +558,13 @@ class _MealsFoodLogEntryComposerScreenState
                 'Fat ${_fmtNut(totals.fat)} g',
                 style: theme.textTheme.bodyLarge,
               ),
-            ] else
+            ] else if (item.itemType != PantryCatalogItemType.recipe ||
+                ((_selectedServingIndex == 0 &&
+                        item.recipeYieldCalories != null) ||
+                    (_selectedServingIndex == 1 &&
+                        item.caloriesPerBase != null)))
               Text(
-                'Nutrition data is incomplete for this food.',
+                'Nutrition data is incomplete for this item.',
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: scheme.error,
                 ),
@@ -440,32 +576,59 @@ class _MealsFoodLogEntryComposerScreenState
   }
 }
 
-class _FoodLogPantryFoodPickerPage extends StatelessWidget {
-  const _FoodLogPantryFoodPickerPage();
+class _FoodLogPantryPickerPage extends StatelessWidget {
+  const _FoodLogPantryPickerPage();
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      key: const Key('food-log-food-picker'),
-      appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.close),
-          onPressed: () => Navigator.of(context).pop(),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        key: const Key('food-log-food-picker'),
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.close),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+          title: const Text('Choose item'),
+          bottom: const TabBar(
+            tabs: <Widget>[
+              Tab(text: 'Foods', key: Key('food-log-picker-tab-foods')),
+              Tab(text: 'Recipes', key: Key('food-log-picker-tab-recipes')),
+            ],
+          ),
         ),
-        title: const Text('Choose food'),
-      ),
-      body: SafeArea(
-        child: PantryInfiniteCatalogList(
-          itemType: PantryCatalogItemType.food,
-          searchFieldKey: const Key('food-log-picker-search'),
-          searchHint: 'Search foods by name or brand...',
-          emptyMessage: 'No foods yet. Add foods in Pantry before logging.',
-          noMatchesMessage: 'No foods match your search.',
-          onTapItem: (ctx, item) {
-            Navigator.of(ctx).pop(item);
-          },
+        body: const TabBarView(
+          children: <Widget>[
+            SafeArea(
+              child: PantryInfiniteCatalogList(
+                itemType: PantryCatalogItemType.food,
+                searchFieldKey: Key('food-log-picker-search-food'),
+                searchHint: 'Search foods by name or brand...',
+                emptyMessage:
+                    'No foods yet. Add foods in Pantry before logging.',
+                noMatchesMessage: 'No foods match your search.',
+                onTapItem: _popWithItem,
+              ),
+            ),
+            SafeArea(
+              child: PantryInfiniteCatalogList(
+                itemType: PantryCatalogItemType.recipe,
+                searchFieldKey: Key('food-log-picker-search-recipe'),
+                searchHint: 'Search recipes by name...',
+                emptyMessage:
+                    'No recipes yet. Add recipes in Pantry before logging.',
+                noMatchesMessage: 'No recipes match your search.',
+                onTapItem: _popWithItem,
+              ),
+            ),
+          ],
         ),
       ),
     );
+  }
+
+  static void _popWithItem(BuildContext context, PantryCatalogItem item) {
+    Navigator.of(context).pop(item);
   }
 }

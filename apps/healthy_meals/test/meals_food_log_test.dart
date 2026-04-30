@@ -47,6 +47,10 @@ void main() {
     PantryHttp.client = MockClient((request) async {
       if (request.url.path.endsWith('/pantry/items') &&
           request.method == 'GET') {
+        final t = request.url.queryParameters['itemType'];
+        if (t == 'recipe') {
+          return http.Response(jsonEncode({'items': <dynamic>[]}), 200);
+        }
         return http.Response(
           jsonEncode({
             'items': [
@@ -105,7 +109,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Food'));
+    await tester.tap(find.text('Food or recipe'));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('food-log-food-picker')), findsOneWidget);
@@ -151,6 +155,10 @@ void main() {
       PantryHttp.client = MockClient((request) async {
         if (request.url.path.endsWith('/pantry/items') &&
             request.method == 'GET') {
+          final t = request.url.queryParameters['itemType'];
+          if (t == 'recipe') {
+            return http.Response(jsonEncode({'items': <dynamic>[]}), 200);
+          }
           return http.Response(
             jsonEncode({
               'items': [
@@ -213,7 +221,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Food'));
+      await tester.tap(find.text('Food or recipe'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sliced Bread'));
       await tester.pumpAndSettle();
@@ -245,6 +253,116 @@ void main() {
       expect(e0['pantryItemId'], 'food-opt-1');
       expect(e0['quantity'], 3);
       expect(e0['servingOption'], {'kind': 'unit', 'unit': 'slice'});
+    },
+  );
+
+  testWidgets(
+    'composer logs recipe with full-yield serving and POSTs base serving',
+    (WidgetTester tester) async {
+      FlutterSecureStorage.setMockInitialValues({
+        'healthy_session_token': 'composer-test',
+        'healthy_api_base_url': 'https://composer.test',
+      });
+      addTearDown(() {
+        PantryHttp.client = http.Client();
+      });
+
+      String? capturedBody;
+      PantryHttp.client = MockClient((request) async {
+        if (request.url.path.endsWith('/pantry/items') &&
+            request.method == 'GET') {
+          final t = request.url.queryParameters['itemType'];
+          if (t == 'recipe') {
+            return http.Response(
+              jsonEncode({
+                'items': [
+                  {
+                    'id': 'recipe-uuid-1',
+                    'name': 'Chili',
+                    'iconKey': 'food_bowl',
+                    'itemType': 'recipe',
+                    'metadata': {
+                      'kind': 'recipe',
+                      'servings': 2,
+                      'servingLabel': 'bowl',
+                      'nutrients': {
+                        'calories': 400,
+                        'protein': 20,
+                        'fat': 10,
+                        'carbohydrates': 40,
+                      },
+                      'nutrientsPerServing': {
+                        'calories': 200,
+                        'protein': 10,
+                        'fat': 5,
+                        'carbohydrates': 20,
+                      },
+                    },
+                  },
+                ],
+              }),
+              200,
+            );
+          }
+          return http.Response(jsonEncode({'items': <dynamic>[]}), 200);
+        }
+        if (request.url.path.endsWith('/food-log/entries/batch') &&
+            request.method == 'POST') {
+          capturedBody = request.body;
+          return http.Response(
+            jsonEncode({
+              'entries': [
+                {
+                  'id': 'log-r1',
+                  'pantryItemId': 'recipe-uuid-1',
+                  'displayName': 'Chili',
+                  'calories': 400,
+                  'proteinGrams': 20,
+                  'fatGrams': 10,
+                  'carbohydratesGrams': 40,
+                  'consumedDate': '2026-04-29',
+                  'quantity': 1,
+                  'servingOption': {'kind': 'base'},
+                },
+              ],
+            }),
+            201,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+
+      var done = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MealsFoodLogEntryComposerScreen(onDone: () => done = true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Food or recipe'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Recipes'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Chili'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('food-log-composer-serving')),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(done, isTrue);
+      expect(capturedBody, isNotNull);
+      final decoded = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      final entries = decoded['entries'] as List<dynamic>;
+      final e0 = entries.first as Map<String, dynamic>;
+      expect(e0['pantryItemId'], 'recipe-uuid-1');
+      expect(e0['quantity'], 1);
+      expect(e0['servingOption'], {'kind': 'base'});
     },
   );
 }

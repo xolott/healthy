@@ -70,6 +70,11 @@ class PantryCatalogItem {
     this.baseAmountGrams,
     this.ingredientIconKeys = const <String>[],
     this.foodServingOptions = const <FoodServingOptionPick>[],
+    this.recipeYieldCalories,
+    this.recipeYieldProteinGrams,
+    this.recipeYieldCarbohydratesGrams,
+    this.recipeYieldFatGrams,
+    this.recipeServingLabel,
   });
 
   final String id;
@@ -92,6 +97,50 @@ class PantryCatalogItem {
 
   /// Non-empty when this food defines optional serving sizes (unit/custom).
   final List<FoodServingOptionPick> foodServingOptions;
+
+  /// Recipe full-yield totals from `metadata.nutrients` (one batch).
+  final double? recipeYieldCalories;
+  final double? recipeYieldProteinGrams;
+  final double? recipeYieldCarbohydratesGrams;
+  final double? recipeYieldFatGrams;
+
+  /// Recipe `metadata.servingLabel`, e.g. bowlful; defaults in wire data to "serving".
+  final String? recipeServingLabel;
+}
+
+({double cal, double protein, double carbs, double fat})?
+_recipeYieldNutrientsFromMetadata(Map<String, dynamic>? metadata) {
+  if (metadata == null || metadata['kind'] != 'recipe') {
+    return null;
+  }
+  final nutrients = metadata['nutrients'];
+  if (nutrients is! Map<String, dynamic>) {
+    return null;
+  }
+  final cal = nutrients['calories'];
+  final protein = nutrients['protein'];
+  final fat = nutrients['fat'];
+  final carb = nutrients['carbohydrates'];
+  if (cal is! num || protein is! num || fat is! num || carb is! num) {
+    return null;
+  }
+  return (
+    cal: cal.toDouble(),
+    protein: protein.toDouble(),
+    carbs: carb.toDouble(),
+    fat: fat.toDouble(),
+  );
+}
+
+String? _recipeServingLabelFromMetadata(Map<String, dynamic>? metadata) {
+  if (metadata == null || metadata['kind'] != 'recipe') {
+    return null;
+  }
+  final raw = metadata['servingLabel'];
+  if (raw is String && raw.trim().isNotEmpty) {
+    return raw.trim();
+  }
+  return 'serving';
 }
 
 List<FoodServingOptionPick> _foodServingPicksFromMetadata(
@@ -188,6 +237,11 @@ PantryCatalogItem? parsePantryCatalogItem(dynamic e) {
   var ingredientKeys = const <String>[];
   double? baseAmountGrams;
   var foodServings = const <FoodServingOptionPick>[];
+  double? recipeYieldCal;
+  double? recipeYieldProtein;
+  double? recipeYieldCarbs;
+  double? recipeYieldFat;
+  String? recipeServingLabel;
   if (parsedType == PantryCatalogItemType.food) {
     cal = foodListCaloriesFromMetadata(metaMap);
     protein = foodNutrientGramsFromMetadata(metaMap, 'protein');
@@ -203,6 +257,14 @@ PantryCatalogItem? parsePantryCatalogItem(dynamic e) {
     fat = recipeNutrientGramsFromMetadata(metaMap, 'fat');
     servingDescriptor = recipeServingDescriptorFromMetadata(metaMap);
     ingredientKeys = ingredientIconKeysFromRecipeMetadata(metaMap);
+    final y = _recipeYieldNutrientsFromMetadata(metaMap);
+    if (y != null) {
+      recipeYieldCal = y.cal;
+      recipeYieldProtein = y.protein;
+      recipeYieldCarbs = y.carbs;
+      recipeYieldFat = y.fat;
+    }
+    recipeServingLabel = _recipeServingLabelFromMetadata(metaMap);
   }
 
   return PantryCatalogItem(
@@ -221,5 +283,10 @@ PantryCatalogItem? parsePantryCatalogItem(dynamic e) {
     baseAmountGrams: baseAmountGrams,
     ingredientIconKeys: ingredientKeys,
     foodServingOptions: foodServings,
+    recipeYieldCalories: recipeYieldCal,
+    recipeYieldProteinGrams: recipeYieldProtein,
+    recipeYieldCarbohydratesGrams: recipeYieldCarbs,
+    recipeYieldFatGrams: recipeYieldFat,
+    recipeServingLabel: recipeServingLabel,
   );
 }

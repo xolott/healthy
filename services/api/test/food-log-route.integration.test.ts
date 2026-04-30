@@ -329,6 +329,90 @@ describe('Food Log routes (integration)', () => {
     }
   });
 
+  it('saves Food Log Entries for pantry recipes (full yield and per serving)', async () => {
+    const { user, authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'food-log-recipe@example.com',
+      displayName: 'Recipe Logger',
+      role: 'owner',
+      status: 'active',
+      plainPassword: INTEGRATION_TEST_PLAIN_PASSWORD,
+    });
+    const recipe = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: user.id,
+      itemType: 'recipe',
+      name: 'Chili',
+      iconKey: 'recipe_pot',
+      metadata: {
+        kind: 'recipe',
+        servings: 2,
+        servingLabel: 'bowl',
+        nutrients: {
+          calories: 400,
+          protein: 20,
+          fat: 10,
+          carbohydrates: 40,
+        },
+        nutrientsPerServing: {
+          calories: 200,
+          protein: 10,
+          fat: 5,
+          carbohydrates: 20,
+        },
+      },
+    });
+
+    const app = await buildApp();
+    try {
+      const fullRes = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: {
+          ...authHeaders,
+          'content-type': 'application/json',
+        },
+        payload: JSON.stringify({
+          consumedAt: '2026-05-10T12:00:00.000Z',
+          consumedDate: '2026-05-10',
+          entries: [{ pantryItemId: recipe.id, quantity: 1, servingOption: { kind: 'base' } }],
+        }),
+      });
+      expect(fullRes.statusCode).toBe(201);
+      const fullBody = JSON.parse(fullRes.payload) as {
+        entries: Array<{ calories: number; servingOption: { kind: string } }>;
+      };
+      expect(fullBody.entries[0]).toMatchObject({
+        calories: 400,
+        servingOption: { kind: 'base' },
+      });
+
+      const perRes = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: {
+          ...authHeaders,
+          'content-type': 'application/json',
+        },
+        payload: JSON.stringify({
+          consumedAt: '2026-05-10T13:00:00.000Z',
+          consumedDate: '2026-05-10',
+          entries: [
+            { pantryItemId: recipe.id, quantity: 2, servingOption: { kind: 'unit', unit: 'serving' } },
+          ],
+        }),
+      });
+      expect(perRes.statusCode).toBe(201);
+      const perBody = JSON.parse(perRes.payload) as {
+        entries: Array<{ calories: number; servingOption: { kind: string; unit?: string } }>;
+      };
+      expect(perBody.entries[0]).toMatchObject({
+        calories: 400,
+        servingOption: { kind: 'unit', unit: 'serving' },
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
   it('rejects mismatched serving option for foods with servings', async () => {
     const { user, authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
       email: 'food-log-wrong-unit@example.com',

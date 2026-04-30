@@ -12,6 +12,12 @@ void main() {
         'kind': 'recipe',
         'servings': 1,
         'servingLabel': 'plate',
+        'nutrients': <String, dynamic>{
+          'calories': 300,
+          'protein': 20,
+          'fat': 12,
+          'carbohydrates': 18,
+        },
         'nutrientsPerServing': <String, dynamic>{
           'calories': 300,
           'protein': 20,
@@ -32,6 +38,8 @@ void main() {
     expect(item.carbohydratesGramsPerBase, 18);
     expect(item.servingDescriptor, '1 plate');
     expect(item.ingredientIconKeys, <String>['food_bowl', 'food_egg']);
+    expect(item.recipeYieldCalories, 300);
+    expect(item.recipeServingLabel, 'plate');
   });
 
   test('parsePantryCatalogItem recipe tolerates empty ingredientIconKeys', () {
@@ -44,6 +52,12 @@ void main() {
         'kind': 'recipe',
         'servings': 2,
         'servingLabel': 'serving',
+        'nutrients': <String, dynamic>{
+          'calories': 200,
+          'protein': 10,
+          'fat': 4,
+          'carbohydrates': 20,
+        },
         'nutrientsPerServing': <String, dynamic>{
           'calories': 100,
           'protein': 5,
@@ -57,6 +71,8 @@ void main() {
     expect(item!.ingredientIconKeys, isEmpty);
     expect(item.iconKey, 'recipe_soup');
     expect(item.servingDescriptor, '2 servings');
+    expect(item.recipeYieldCalories, 200);
+    expect(item.recipeServingLabel, 'serving');
   });
 
   test(
