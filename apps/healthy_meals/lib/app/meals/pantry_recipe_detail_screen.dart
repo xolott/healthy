@@ -222,7 +222,7 @@ class _MealsPantryRecipeDetailScreenState extends State<MealsPantryRecipeDetailS
                 Text('Carbs: ${_nutrientsTotal!['carbohydrates']!.toStringAsFixed(1)} g'),
               ],
               const SizedBox(height: 12),
-              Text('Per $_servingLabel', style: const TextStyle(fontWeight: FontWeight.w600)),
+              Text('$_servingLabel', style: const TextStyle(fontWeight: FontWeight.w600)),
               if (_nutrientsPerServing != null) ...[
                 Text('Calories: ${_nutrientsPerServing!['calories']!.toStringAsFixed(0)} kcal'),
                 Text('Protein: ${_nutrientsPerServing!['protein']!.toStringAsFixed(1)} g'),

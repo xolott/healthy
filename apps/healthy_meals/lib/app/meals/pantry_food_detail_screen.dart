@@ -224,7 +224,7 @@ class _MealsPantryFoodDetailScreenState extends State<MealsPantryFoodDetailScree
                   ],
                   const SizedBox(height: 16),
                   Text(
-                    'Per ${_baseGrams!.toStringAsFixed(0)} g (base)',
+                    '${_baseGrams!.toStringAsFixed(0)} g (base)',
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 8),

@@ -55,12 +55,14 @@ void main() {
       ),
     );
 
-    expect(find.text('Morning Oats'), findsOneWidget);
-    expect(find.text('Test Mill'), findsOneWidget);
-    expect(find.textContaining('190 kcal'), findsOneWidget);
-    expect(find.textContaining('P 7g · C 32g · F 3.5g'), findsOneWidget);
+    expect(find.textContaining('Morning Oats by Test Mill'), findsOneWidget);
+    expect(find.text('190'), findsOneWidget);
+    expect(find.text('7g P'), findsOneWidget);
+    expect(find.text('32g C'), findsOneWidget);
+    expect(find.text('3.5g F'), findsOneWidget);
     expect(find.text('Per 50 g'), findsOneWidget);
     expect(find.byType(HugeIcon), findsOneWidget);
+    expect(find.byIcon(Icons.local_fire_department_outlined), findsOneWidget);
     expect(find.byIcon(Icons.add), findsNothing);
   });
 
@@ -90,22 +92,28 @@ void main() {
     expect(rowTaps, 0);
     expect(addTaps, 1);
 
-    await tester.tap(find.text('Morning Oats'));
+    await tester.tap(find.textContaining('Morning Oats by Test Mill'));
     await tester.pump();
     expect(rowTaps, 1);
     expect(addTaps, 1);
   });
 
-  testWidgets('Fallback HugeIcon renders for unrecognized wire icon keys', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('Headline preserves source casing', (WidgetTester tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: PantryCatalogListTile(
-            item: _sampleFood(
-              'row-c',
-              iconKey: '__unknown_stable_key_for_tests__',
+            item: PantryCatalogItem(
+              id: 'row-c',
+              name: 'Greek yogurt',
+              iconKey: 'food_bowl',
+              itemType: PantryCatalogItemType.food,
+              brand: 'Chobani',
+              caloriesPerBase: 120,
+              proteinGramsPerBase: 12,
+              carbohydratesGramsPerBase: 4,
+              fatGramsPerBase: 0,
+              servingDescriptor: '170g cup',
             ),
             onTap: () {},
           ),
@@ -114,117 +122,33 @@ void main() {
     );
 
     await tester.pump();
-    expect(find.byType(HugeIcon), findsOneWidget);
-    expect(find.text('Morning Oats'), findsOneWidget);
+    expect(find.textContaining('Greek yogurt by Chobani'), findsOneWidget);
+    expect(find.textContaining('GREEK YOGURT'), findsNothing);
   });
 
-  testWidgets(
-    'Recipe row uses recipe iconKey when ingredientIconKeys is empty',
-    (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: PantryCatalogListTile(
-                item: _sampleRecipe(id: 'rec-a', iconKey: 'recipe_pot'),
-                onTap: () {},
-              ),
+  testWidgets('Recipe row shows nutrition without food brand', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: PantryCatalogListTile(
+              item: _sampleRecipe(id: 'rec-a', iconKey: 'recipe_pot'),
+              onTap: () {},
             ),
           ),
         ),
-      );
+      ),
+    );
 
-      expect(find.text('Chili bowl'), findsOneWidget);
-      expect(find.textContaining('420 kcal'), findsOneWidget);
-      expect(find.textContaining('P 28g'), findsOneWidget);
-      expect(find.text('1 plate'), findsOneWidget);
-      expect(find.text('Test Mill'), findsNothing);
-      final icon = tester.widget<HugeIcon>(find.byType(HugeIcon));
-      expect(icon.icon, HugeIcons.strokeRoundedPot01);
-    },
-  );
-
-  testWidgets(
-    'Recipe row uses leading ingredient icon when one ingredientIconKeys entry',
-    (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: PantryCatalogListTile(
-                item: _sampleRecipe(
-                  id: 'rec-b',
-                  iconKey: 'recipe_pot',
-                  ingredientIconKeys: const <String>['food_bowl'],
-                ),
-                onTap: () {},
-              ),
-            ),
-          ),
-        ),
-      );
-
-      expect(find.byType(HugeIcon), findsOneWidget);
-      final icon = tester.widget<HugeIcon>(find.byType(HugeIcon));
-      expect(icon.icon, HugeIcons.strokeRoundedRiceBowl01);
-    },
-  );
-
-  testWidgets(
-    'Recipe row overlaps two Hugeicons when ingredientIconKeys has two entries',
-    (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: PantryCatalogListTile(
-                item: _sampleRecipe(
-                  id: 'rec-c',
-                  iconKey: 'recipe_pot',
-                  ingredientIconKeys: const <String>['food_bowl', 'food_egg'],
-                ),
-                onTap: () {},
-              ),
-            ),
-          ),
-        ),
-      );
-
-      expect(find.byType(HugeIcon), findsNWidgets(2));
-      final icons = tester
-          .widgetList<HugeIcon>(find.byType(HugeIcon))
-          .map((h) => h.icon)
-          .toSet();
-      expect(icons.contains(HugeIcons.strokeRoundedRiceBowl01), isTrue);
-      expect(icons.contains(HugeIcons.strokeRoundedEgg), isTrue);
-    },
-  );
-
-  testWidgets(
-    'Recipe row overlaps three Hugeicons when ingredientIconKeys has three entries',
-    (WidgetTester tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: PantryCatalogListTile(
-                item: _sampleRecipe(
-                  id: 'rec-d',
-                  iconKey: 'recipe_pot',
-                  ingredientIconKeys: const <String>[
-                    'food_bowl',
-                    'food_egg',
-                    'food_banana',
-                  ],
-                ),
-                onTap: () {},
-              ),
-            ),
-          ),
-        ),
-      );
-
-      expect(find.byType(HugeIcon), findsNWidgets(3));
-    },
-  );
+    expect(find.text('Chili bowl'), findsOneWidget);
+    expect(find.text('420'), findsOneWidget);
+    expect(find.text('28g P'), findsOneWidget);
+    expect(find.text('40g C'), findsOneWidget);
+    expect(find.text('14g F'), findsOneWidget);
+    expect(find.text('1 plate'), findsOneWidget);
+    expect(find.textContaining('by Test Mill'), findsNothing);
+    expect(find.byType(HugeIcon), findsOneWidget);
+  });
 }

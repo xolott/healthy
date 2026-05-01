@@ -54,10 +54,12 @@ const foodLogEntryItemResponse = {
     'id',
     'pantryItemId',
     'displayName',
+    'iconKey',
     'calories',
     'proteinGrams',
     'fatGrams',
     'carbohydratesGrams',
+    'consumedAt',
     'consumedDate',
     'quantity',
     'servingOption',
@@ -66,10 +68,12 @@ const foodLogEntryItemResponse = {
     id: { type: 'string' },
     pantryItemId: { type: 'string' },
     displayName: { type: 'string' },
+    iconKey: { type: 'string' },
     calories: { type: 'number' },
     proteinGrams: { type: 'number' },
     fatGrams: { type: 'number' },
     carbohydratesGrams: { type: 'number' },
+    consumedAt: { type: 'string' },
     consumedDate: { type: 'string' },
     quantity: { type: 'number' },
     servingOption: foodLogServingOptionResponseSchema,
@@ -137,8 +141,7 @@ function sendFoodLogListOutcome(reply: FastifyReply, outcome: PublicFoodLogListO
     case 'ok':
       return reply.status(200).send({ entries: outcome.entries });
     default: {
-      const _: never = outcome;
-      return _;
+      return outcome;
     }
   }
 }
@@ -157,8 +160,7 @@ function sendFoodLogBatchCreateOutcome(reply: FastifyReply, outcome: PublicFoodL
     case 'ok':
       return reply.status(201).send({ entries: outcome.entries });
     default: {
-      const _: never = outcome;
-      return _;
+      return outcome;
     }
   }
 }

@@ -51,6 +51,22 @@ serving options that convert to that base. Serving options use common predefined
 units or user-defined serving labels. Food mass is normalized to grams.
 Foods require values for Calories, Protein, Fat, and Carbohydrates.
 
+### Reference Food
+
+A source-owned nutrition catalog record imported from an external food database,
+such as USDA, for search and direct meal logging.
+
+Reference Foods are not Pantry Items and are not owned by a user. Each Reference
+Food is uniquely identified by its source and the source's stable food identifier.
+Food Log Entries may link to a Reference Food while still snapshotting display
+metadata and nutrients at log time.
+
+Reference Foods normalize the app-supported nutrients needed for logging while
+preserving source nutrient data for future nutrient expansion. Branded products
+may include a brand; generic ingredient records are valid without one.
+Active Reference Foods are searchable. Inactive Reference Foods are hidden from
+search but kept so historical Food Log Entries can resolve their source link.
+
 ### Recipe
 
 A reusable Pantry item composed from one or more Foods or Recipes and a declared
@@ -187,13 +203,13 @@ and mobile clients may carry it as a Bearer token.
 
 ### Food Log Entry
 
-A durable record of **one** logged consumption of a Pantry Item on behalf of the
-authenticated owner. Each Food Log Entry **snapshots** display metadata (name,
-icon) and scaled nutrients for the chosen serving and quantity at log time, and
-is indexed by **local calendar date** (`consumed_date`, YYYY-MM-DD) for day
-views. Persistence: `food_log_entries` in `@healthy/db`; list and create flows
-go through authenticated HTTP and Request Scope (`foodLog` capability), not
-direct repository calls from clients.
+A durable record of **one** logged consumption of a Pantry Item or Reference Food
+on behalf of the authenticated owner. Each Food Log Entry **snapshots** display
+metadata (name, icon) and scaled nutrients for the chosen serving and quantity at
+log time, and is indexed by **local calendar date** (`consumed_date`, YYYY-MM-DD)
+for day views. Persistence: `food_log_entries` in `@healthy/db`; list and create
+flows go through authenticated HTTP and Request Scope (`foodLog` capability),
+not direct repository calls from clients.
 
 Row shape is **ready for future** per-entry time tweaks (`consumed_at` with the
 calendar key), quantity and serving edits (`quantity`, serving fields, snapshot

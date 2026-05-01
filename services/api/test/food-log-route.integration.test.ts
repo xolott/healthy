@@ -123,10 +123,12 @@ describe('Food Log routes (integration)', () => {
           id: string;
           pantryItemId: string;
           displayName: string;
+          iconKey: string;
           calories: number;
           proteinGrams: number;
           fatGrams: number;
           carbohydratesGrams: number;
+          consumedAt: string;
           consumedDate: string;
           quantity: number;
           servingOption: { kind: string; unit?: string; label?: string };
@@ -136,10 +138,12 @@ describe('Food Log routes (integration)', () => {
       expect(createBody.entries[0]).toMatchObject({
         pantryItemId: food.id,
         displayName: 'Greek Yogurt',
+        iconKey: 'food_bowl',
         calories: 240,
         proteinGrams: 20,
         fatGrams: 8,
         carbohydratesGrams: 16,
+        consumedAt: '2026-04-30T02:44:00.000Z',
         consumedDate: '2026-04-30',
         quantity: 2,
         servingOption: { kind: 'base' },

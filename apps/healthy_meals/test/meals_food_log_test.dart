@@ -18,21 +18,76 @@ void main() {
       final row = FoodLogEntryListItem.tryParse(<String, dynamic>{
         'id': 'a',
         'displayName': 'Oats',
+        'iconKey': 'food_bowl',
         'calories': 150.0,
         'proteinGrams': 5,
         'fatGrams': 2.5,
         'carbohydratesGrams': 27,
+        'consumedAt': '2026-04-29T14:30:00.000Z',
         'consumedDate': '2026-04-29',
         'quantity': 1.5,
         'servingOption': <String, dynamic>{'kind': 'unit', 'unit': 'cup'},
       });
       expect(row, isNotNull);
       expect(row!.displayName, 'Oats');
+      expect(row.iconKey, 'food_bowl');
       expect(row.calories, 150.0);
       expect(row.quantity, 1.5);
       expect(row.consumedServingSummaryLine, '1.5 × cup');
     },
   );
+
+  testWidgets('Food Log day screen renders entries on hourly timeline', (
+    WidgetTester tester,
+  ) async {
+    FlutterSecureStorage.setMockInitialValues({
+      'healthy_session_token': 'timeline-test',
+      'healthy_api_base_url': 'https://foodlog.example',
+    });
+    addTearDown(() {
+      PantryHttp.client = http.Client();
+    });
+
+    PantryHttp.client = MockClient((request) async {
+      if (request.method == 'GET' &&
+          request.url.path.endsWith('/food-log/entries')) {
+        return http.Response(
+          jsonEncode({
+            'entries': [
+              {
+                'id': 'entry-1',
+                'displayName': 'Greek Yogurt',
+                'iconKey': 'food_bowl',
+                'calories': 240,
+                'proteinGrams': 20,
+                'fatGrams': 8,
+                'carbohydratesGrams': 16,
+                'consumedAt': '2026-04-29T07:23:00.000Z',
+                'consumedDate': '2026-04-29',
+                'quantity': 2,
+                'servingOption': {'kind': 'base'},
+              },
+            ],
+          }),
+          200,
+        );
+      }
+      return http.Response('not found', 404);
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(body: MealsFoodLogDayScreen(syncFabDay: false)),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Greek Yogurt'), findsOneWidget);
+    expect(find.text('240'), findsOneWidget);
+    expect(find.text('20P'), findsOneWidget);
+    expect(find.text('16C'), findsOneWidget);
+    expect(find.text('8F'), findsOneWidget);
+  });
 
   testWidgets('composer POSTs batch with base serving and pops on 201', (
     WidgetTester tester,
@@ -477,7 +532,7 @@ void main() {
   });
 
   testWidgets(
-    'Food Log day screen refetches with local date when moving to adjacent day',
+    'Food Log day screen refetches when selecting a day and returning today',
     (WidgetTester tester) async {
       DateTime dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -515,16 +570,14 @@ void main() {
       final today = dateOnly(DateTime.now());
       expect(requestedDates.single, DateFormat('yyyy-MM-dd').format(today));
 
-      await tester.tap(find.byTooltip('Next day'));
+      final tomorrow = today.add(const Duration(days: 1));
+      await tester.tap(find.text('${tomorrow.day}').first);
       await tester.pumpAndSettle();
 
       expect(requestedDates, hasLength(2));
-      expect(
-        requestedDates[1],
-        DateFormat('yyyy-MM-dd').format(today.add(const Duration(days: 1))),
-      );
+      expect(requestedDates[1], DateFormat('yyyy-MM-dd').format(tomorrow));
 
-      await tester.tap(find.byTooltip('Previous day'));
+      await tester.tap(find.text('Today'));
       await tester.pumpAndSettle();
 
       expect(requestedDates, hasLength(3));

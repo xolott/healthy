@@ -9,16 +9,16 @@ String _formatMacroGrams(double? v) {
     return '—';
   }
   if (v == v.roundToDouble()) {
-    return '${v.toInt()}g';
+    return '${v.toInt()}';
   }
-  return '${v.toStringAsFixed(1)}g';
+  return v.toStringAsFixed(1);
 }
 
 String _caloriesLabel(double? cal) {
   if (cal == null) {
-    return '— kcal';
+    return '—';
   }
-  return '${cal.round()} kcal';
+  return '${cal.round()}';
 }
 
 String _singleLeadingWireKey(PantryCatalogItem item) {
@@ -41,7 +41,7 @@ class _IngredientIconBadge extends StatelessWidget {
   final Color borderColor;
   final Color iconColor;
 
-  static const double diameter = 26;
+  static const double diameter = 24;
 
   @override
   Widget build(BuildContext context) {
@@ -51,13 +51,12 @@ class _IngredientIconBadge extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: borderColor),
       ),
-      child: SizedBox(
-        width: diameter,
-        height: diameter,
+      child: SizedBox.square(
+        dimension: diameter,
         child: Center(
           child: HugeIcon(
             icon: pantryHugeIconStrokeData(wireIconKey),
-            size: 14,
+            size: 13,
             color: iconColor,
           ),
         ),
@@ -71,8 +70,8 @@ class _PantryLeadingVisual extends StatelessWidget {
 
   final PantryCatalogItem item;
 
-  static const double _slotSize = 48;
-  static const double _overlapStep = 14;
+  static const double _slotSize = 42;
+  static const double _overlapStep = 13;
 
   @override
   Widget build(BuildContext context) {
@@ -110,19 +109,17 @@ class _PantryLeadingVisual extends StatelessWidget {
       );
     }
 
-    final wire = _singleLeadingWireKey(item);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: scheme.surfaceContainerHighest,
         shape: BoxShape.circle,
       ),
-      child: SizedBox(
-        width: _slotSize,
-        height: _slotSize,
+      child: SizedBox.square(
+        dimension: _slotSize,
         child: Center(
           child: HugeIcon(
-            icon: pantryHugeIconStrokeData(wire),
-            size: 26,
+            icon: pantryHugeIconStrokeData(_singleLeadingWireKey(item)),
+            size: 23,
             color: scheme.onSurfaceVariant,
           ),
         ),
@@ -131,8 +128,7 @@ class _PantryLeadingVisual extends StatelessWidget {
   }
 }
 
-/// Material 3 pantry catalog row: Hugeicons leading tile, highlighted calories,
-/// P/C/F macros, optional brand (food only), optional trailing add (food).
+/// Material 3 pantry catalog row with a compact nutrition summary.
 class PantryCatalogListTile extends StatelessWidget {
   const PantryCatalogListTile({
     super.key,
@@ -150,86 +146,161 @@ class PantryCatalogListTile extends StatelessWidget {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
     final text = theme.textTheme;
-    final macros =
-        'P ${_formatMacroGrams(item.proteinGramsPerBase)} · '
-        'C ${_formatMacroGrams(item.carbohydratesGramsPerBase)} · '
-        'F ${_formatMacroGrams(item.fatGramsPerBase)}';
+    final brand = item.brand?.trim();
+    final servingDescriptor = item.servingDescriptor?.trim();
 
     return Material(
       key: ValueKey<String>('pantry-catalog-row-${item.id}'),
       color: Colors.transparent,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: <Widget>[
-              _PantryLeadingVisual(item: item),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: <Widget>[
-                    Text(
-                      item.name,
-                      style: text.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (item.brand != null && item.brand!.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        item.brand!,
-                        style: text.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: scheme.outlineVariant.withValues(alpha: 0.7),
+              ),
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: <Widget>[
+                _PantryLeadingVisual(item: item),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: <Widget>[
+                      Text.rich(
+                        TextSpan(
+                          children: <InlineSpan>[
+                            TextSpan(text: item.name),
+                            if (brand != null && brand.isNotEmpty)
+                              TextSpan(
+                                text: ' by $brand',
+                                style: TextStyle(
+                                  color: scheme.onSurfaceVariant.withValues(
+                                    alpha: 0.68,
+                                  ),
+                                  fontWeight: FontWeight.w400,
+                                ),
+                              ),
+                          ],
+                        ),
+                        style: text.titleLarge?.copyWith(
+                          color: scheme.onSurface,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w400,
+                          height: 1.1,
+                          letterSpacing: 0.1,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
-                    ],
-                    const SizedBox(height: 6),
-                    Text(
-                      _caloriesLabel(item.caloriesPerBase),
-                      style: text.titleSmall?.copyWith(
-                        color: scheme.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      macros,
-                      style: text.bodySmall?.copyWith(
-                        color: scheme.onSurfaceVariant,
-                      ),
-                    ),
-                    if (item.servingDescriptor != null &&
-                        item.servingDescriptor!.isNotEmpty) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        item.servingDescriptor!,
-                        style: text.bodySmall?.copyWith(
-                          color: scheme.onSurfaceVariant,
+                      const SizedBox(height: 8),
+                      _NutritionLine(
+                        calories: _caloriesLabel(item.caloriesPerBase),
+                        protein: _formatMacroGrams(item.proteinGramsPerBase),
+                        carbohydrates: _formatMacroGrams(
+                          item.carbohydratesGramsPerBase,
                         ),
+                        fat: _formatMacroGrams(item.fatGramsPerBase),
+                        servingDescriptor:
+                            servingDescriptor != null &&
+                                servingDescriptor.isNotEmpty
+                            ? servingDescriptor
+                            : null,
                       ),
                     ],
-                  ],
+                  ),
                 ),
-              ),
-              if (onTrailingAddPressed != null) ...<Widget>[
-                IconButton.filledTonal(
-                  key: ValueKey<String>('pantry-catalog-row-add-${item.id}'),
-                  onPressed: onTrailingAddPressed,
-                  tooltip: 'Add',
-                  icon: const Icon(Icons.add),
-                  visualDensity: VisualDensity.compact,
-                ),
+                if (onTrailingAddPressed != null) ...<Widget>[
+                  const SizedBox(width: 12),
+                  IconButton.filledTonal(
+                    key: ValueKey<String>('pantry-catalog-row-add-${item.id}'),
+                    onPressed: onTrailingAddPressed,
+                    tooltip: 'Add',
+                    icon: const Icon(Icons.add),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
               ],
-            ],
+            ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _NutritionLine extends StatelessWidget {
+  const _NutritionLine({
+    required this.calories,
+    required this.protein,
+    required this.carbohydrates,
+    required this.fat,
+    this.servingDescriptor,
+  });
+
+  final String calories;
+  final String protein;
+  final String carbohydrates;
+  final String fat;
+  final String? servingDescriptor;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final baseStyle = theme.textTheme.titleMedium?.copyWith(
+      color: scheme.onSurfaceVariant,
+      fontSize: 14,
+      fontWeight: FontWeight.w400,
+      height: 1,
+    );
+    final calorieStyle = baseStyle?.copyWith(
+      color: scheme.primary,
+      fontWeight: FontWeight.w400,
+    );
+    final servingStyle = baseStyle?.copyWith(
+      color: scheme.onSurfaceVariant.withValues(alpha: 0.82),
+      fontStyle: FontStyle.italic,
+    );
+    final gap = 8.0;
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: <Widget>[
+          Icon(
+            Icons.local_fire_department_outlined,
+            color: scheme.primary,
+            size: 18,
+          ),
+
+          Text(calories, style: calorieStyle),
+          SizedBox(width: gap),
+          Text('${protein}P', style: baseStyle),
+          SizedBox(width: gap),
+          Text('${carbohydrates}C', style: baseStyle),
+          SizedBox(width: gap),
+          Text('${fat}F', style: baseStyle),
+          if (servingDescriptor != null) ...<Widget>[
+            SizedBox(width: gap),
+            SizedBox(
+              height: 18,
+              child: VerticalDivider(
+                color: scheme.outlineVariant,
+                thickness: 1.5,
+                width: 2,
+              ),
+            ),
+            SizedBox(width: gap),
+            Text(servingDescriptor!, style: servingStyle),
+          ],
+        ],
       ),
     );
   }

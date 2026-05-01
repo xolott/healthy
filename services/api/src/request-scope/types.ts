@@ -170,10 +170,12 @@ export type FoodLogEntryWire = {
   id: string;
   pantryItemId: string;
   displayName: string;
+  iconKey: string;
   calories: number;
   proteinGrams: number;
   fatGrams: number;
   carbohydratesGrams: number;
+  consumedAt: string;
   consumedDate: string;
   quantity: number;
   servingOption: FoodLogEntryServingWire;
