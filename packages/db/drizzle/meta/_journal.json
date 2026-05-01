@@ -43,6 +43,13 @@
       "when": 1777518000000,
       "tag": "0005_food_log_entries",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777612418138,
+      "tag": "0006_flippant_serpent_society",
+      "breakpoints": true
     }
   ]
 }

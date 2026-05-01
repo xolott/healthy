@@ -10,7 +10,16 @@ import type { Database } from '@healthy/db';
 import { canonicalizeAuthEmailForPersistence } from '../../src/auth/auth-persistence.js';
 import { hashPasswordArgon2id } from '../../src/auth/hash-password.js';
 import { generateSessionToken } from '../../src/auth/session-token.js';
-import { pantryItems, sessions, users, type PantryItemRow, type SessionRow, type UserRow } from '@healthy/db/schema';
+import {
+  pantryItems,
+  referenceFoods,
+  sessions,
+  users,
+  type PantryItemRow,
+  type ReferenceFoodRow,
+  type SessionRow,
+  type UserRow,
+} from '@healthy/db/schema';
 
 export type PersistedUserInsertInput = {
   email: string;
@@ -177,5 +186,47 @@ export async function insertPersistedPantryItem(db: Database, input: PersistedPa
 
 export async function persistedFindPantryItemById(db: Database, id: string): Promise<PantryItemRow | undefined> {
   const [row] = await db.select().from(pantryItems).where(eq(pantryItems.id, id)).limit(1);
+  return row;
+}
+
+export type PersistedReferenceFoodInsertInput = {
+  source: string;
+  sourceFoodId: string;
+  displayName: string;
+  brand?: string | null;
+  baseAmountGrams: number;
+  calories: number;
+  proteinGrams: number;
+  fatGrams: number;
+  carbohydratesGrams: number;
+  iconKey?: string;
+  isActive?: boolean;
+};
+
+export async function insertPersistedReferenceFood(
+  db: Database,
+  input: PersistedReferenceFoodInsertInput,
+): Promise<ReferenceFoodRow> {
+  const now = new Date();
+  const [row] = await db
+    .insert(referenceFoods)
+    .values({
+      source: input.source,
+      sourceFoodId: input.sourceFoodId,
+      displayName: input.displayName,
+      brand: input.brand ?? null,
+      baseAmountGrams: input.baseAmountGrams,
+      calories: input.calories,
+      proteinGrams: input.proteinGrams,
+      fatGrams: input.fatGrams,
+      carbohydratesGrams: input.carbohydratesGrams,
+      iconKey: input.iconKey ?? 'food_bowl',
+      isActive: input.isActive ?? true,
+      updatedAt: now,
+    })
+    .returning();
+  if (row === undefined) {
+    throw new Error('insertPersistedReferenceFood did not return a row');
+  }
   return row;
 }

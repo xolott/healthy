@@ -1,5 +1,4 @@
-import type { NewFoodLogEntryRow } from '@healthy/db/schema';
-import type { PantryItemRow } from '@healthy/db/schema';
+import type { NewFoodLogEntryRow, PantryItemRow, ReferenceFoodRow } from '@healthy/db/schema';
 
 import { scaleNutrientsToGrams } from '../pantry/create-food-payload.js';
 import {
@@ -80,13 +79,13 @@ function parseConsumedAtIso(raw: unknown): Date | { field: string; message: stri
 }
 
 /**
- * Validates batch shape enough to resolve Pantry rows, returning distinct pantry ids in order.
+ * Validates batch shape enough to resolve Pantry and Reference Food rows.
  */
-export function collectFoodLogBatchPantryIds(
+export function collectFoodLogBatchResolutionIds(
   rawBody: unknown,
 ):
   | { kind: 'invalid_input'; field: string; message: string }
-  | { kind: 'ok'; ids: string[] } {
+  | { kind: 'ok'; pantryIds: string[]; referenceIds: string[] } {
   if (rawBody === null || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
     return { kind: 'invalid_input', field: 'body', message: 'Expected a JSON object.' };
   }
@@ -113,8 +112,11 @@ export function collectFoodLogBatchPantryIds(
     return { kind: 'invalid_input', field: 'entries', message: 'Must have at most 64 entries.' };
   }
 
-  const ids: string[] = [];
-  const seen = new Set<string>();
+  const pantryIds: string[] = [];
+  const pantrySeen = new Set<string>();
+  const referenceIds: string[] = [];
+  const referenceSeen = new Set<string>();
+
   for (let i = 0; i < entriesRaw.length; i++) {
     const fp = `entries[${i}]`;
     const entry = entriesRaw[i];
@@ -122,16 +124,43 @@ export function collectFoodLogBatchPantryIds(
       return { kind: 'invalid_input', field: fp, message: 'Must be an object.' };
     }
     const o = entry as Record<string, unknown>;
-    const idRes = parseUuid(o['pantryItemId'], `${fp}.pantryItemId`);
+    const hasPantry = 'pantryItemId' in o && o['pantryItemId'] !== undefined && o['pantryItemId'] !== null;
+    const hasRef = 'referenceFoodId' in o && o['referenceFoodId'] !== undefined && o['referenceFoodId'] !== null;
+    if (hasPantry && hasRef) {
+      return {
+        kind: 'invalid_input',
+        field: fp,
+        message: 'Each entry must specify either pantryItemId or referenceFoodId, not both.',
+      };
+    }
+    if (!hasPantry && !hasRef) {
+      return {
+        kind: 'invalid_input',
+        field: fp,
+        message: 'Each entry must include pantryItemId or referenceFoodId.',
+      };
+    }
+    if (hasPantry) {
+      const idRes = parseUuid(o['pantryItemId'], `${fp}.pantryItemId`);
+      if (typeof idRes !== 'string') {
+        return { kind: 'invalid_input', field: idRes.field, message: idRes.message };
+      }
+      if (!pantrySeen.has(idRes)) {
+        pantrySeen.add(idRes);
+        pantryIds.push(idRes);
+      }
+      continue;
+    }
+    const idRes = parseUuid(o['referenceFoodId'], `${fp}.referenceFoodId`);
     if (typeof idRes !== 'string') {
       return { kind: 'invalid_input', field: idRes.field, message: idRes.message };
     }
-    if (!seen.has(idRes)) {
-      seen.add(idRes);
-      ids.push(idRes);
+    if (!referenceSeen.has(idRes)) {
+      referenceSeen.add(idRes);
+      referenceIds.push(idRes);
     }
   }
-  return { kind: 'ok', ids };
+  return { kind: 'ok', pantryIds, referenceIds };
 }
 
 export function parseFoodLogLocalDateQuery(raw: unknown): string | null {
@@ -143,12 +172,13 @@ export function parseFoodLogLocalDateQuery(raw: unknown): string | null {
 }
 
 /**
- * Builds insert rows for a Food Log batch from parsed JSON and owner Pantry rows.
+ * Builds insert rows for a Food Log batch from parsed JSON and resolved Pantry / Reference rows.
  */
 export function planFoodLogBatch(
   ownerUserId: string,
   rawBody: unknown,
   pantryById: Map<string, PantryItemRow>,
+  referenceById: Map<string, ReferenceFoodRow>,
   now: Date,
 ): PlanFoodLogBatchResult {
   if (rawBody === null || typeof rawBody !== 'object' || Array.isArray(rawBody)) {
@@ -191,6 +221,75 @@ export function planFoodLogBatch(
       return { kind: 'invalid_input', field: fp, message: 'Must be an object.' };
     }
     const o = entry as Record<string, unknown>;
+    const hasPantry = 'pantryItemId' in o && o['pantryItemId'] !== undefined && o['pantryItemId'] !== null;
+    const hasRef = 'referenceFoodId' in o && o['referenceFoodId'] !== undefined && o['referenceFoodId'] !== null;
+
+    if (hasRef) {
+      const refIdRes = parseUuid(o['referenceFoodId'], `${fp}.referenceFoodId`);
+      if (typeof refIdRes !== 'string') {
+        return { kind: 'invalid_input', field: refIdRes.field, message: refIdRes.message };
+      }
+      const refRow = referenceById.get(refIdRes);
+      if (refRow === undefined) {
+        return {
+          kind: 'invalid_input',
+          field: `${fp}.referenceFoodId`,
+          message: 'Reference Food not found.',
+        };
+      }
+      if (o['quantity'] !== undefined || o['servingOption'] !== undefined) {
+        return {
+          kind: 'invalid_input',
+          field: fp,
+          message: 'Reference Food entries must use grams only (no quantity or servingOption).',
+        };
+      }
+      const gramsRes = parseQuantity(o['grams'], `${fp}.grams`);
+      if (typeof gramsRes !== 'number') {
+        return { kind: 'invalid_input', field: gramsRes.field, message: gramsRes.message };
+      }
+      const scaled = scaleNutrientsToGrams(
+        {
+          calories: refRow.calories,
+          protein: refRow.proteinGrams,
+          fat: refRow.fatGrams,
+          carbohydrates: refRow.carbohydratesGrams,
+        },
+        refRow.baseAmountGrams,
+        gramsRes,
+      );
+      if (scaled === null) {
+        return {
+          kind: 'invalid_input',
+          field: fp,
+          message: 'Could not scale nutrients for the requested grams.',
+        };
+      }
+      rows.push({
+        ownerUserId,
+        itemSource: 'reference_food',
+        pantryItemId: null,
+        pantryItemType: null,
+        referenceFoodId: refRow.id,
+        referenceFoodSource: refRow.source,
+        referenceSourceFoodId: refRow.sourceFoodId,
+        displayName: refRow.displayName,
+        iconKey: refRow.iconKey,
+        consumedAt,
+        consumedDate,
+        quantity: gramsRes,
+        calories: scaled.calories,
+        proteinGrams: scaled.protein,
+        fatGrams: scaled.fat,
+        carbohydratesGrams: scaled.carbohydrates,
+        updatedAt,
+        servingKind: 'custom',
+        servingUnitKey: null,
+        servingCustomLabel: 'g',
+      });
+      continue;
+    }
+
     const idRes = parseUuid(o['pantryItemId'], `${fp}.pantryItemId`);
     if (typeof idRes !== 'string') {
       return { kind: 'invalid_input', field: idRes.field, message: idRes.message };
@@ -201,6 +300,14 @@ export function planFoodLogBatch(
         kind: 'invalid_input',
         field: `${fp}.pantryItemId`,
         message: 'Pantry item not found for this owner.',
+      };
+    }
+
+    if (o['grams'] !== undefined) {
+      return {
+        kind: 'invalid_input',
+        field: fp,
+        message: 'Pantry entries must not include grams; use quantity and servingOption.',
       };
     }
 
@@ -240,8 +347,12 @@ export function planFoodLogBatch(
       }
       rows.push({
         ownerUserId,
+        itemSource: 'pantry',
         pantryItemId: pantryRow.id,
         pantryItemType: 'food',
+        referenceFoodId: null,
+        referenceFoodSource: null,
+        referenceSourceFoodId: null,
         displayName: pantryRow.name,
         iconKey: pantryRow.iconKey,
         consumedAt,
@@ -271,8 +382,12 @@ export function planFoodLogBatch(
     }
     rows.push({
       ownerUserId,
+      itemSource: 'pantry',
       pantryItemId: pantryRow.id,
       pantryItemType: 'recipe',
+      referenceFoodId: null,
+      referenceFoodSource: null,
+      referenceSourceFoodId: null,
       displayName: pantryRow.name,
       iconKey: pantryRow.iconKey,
       consumedAt,

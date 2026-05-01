@@ -1,12 +1,12 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { foodLogEntries, users } from '@healthy/db/schema';
+import { foodLogEntries, pantryItems, users } from '@healthy/db/schema';
 import { startPostgresTestDatabase, type PostgresTestDatabase } from '@healthy/db/test';
 
 import { hashPasswordArgon2id } from '../src/auth/hash-password.js';
 import { listFoodLogEntriesForOwnerDate } from '../src/food-log/food-log-persistence.js';
-import { insertPersistedUser } from './helpers/persisted-builders.js';
+import { insertPersistedPantryItem, insertPersistedUser } from './helpers/persisted-builders.js';
 
 describe('listFoodLogEntriesForOwnerDate', () => {
   let harness: PostgresTestDatabase;
@@ -21,6 +21,7 @@ describe('listFoodLogEntriesForOwnerDate', () => {
 
   beforeEach(async () => {
     await harness.db.delete(foodLogEntries);
+    await harness.db.delete(pantryItems);
     await harness.db.delete(users);
   });
 
@@ -33,11 +34,37 @@ describe('listFoodLogEntriesForOwnerDate', () => {
       role: 'owner',
       status: 'active',
     });
+    const apple = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: user.id,
+      itemType: 'food',
+      name: 'Apple',
+      iconKey: 'food_apple',
+      metadata: {
+        kind: 'food',
+        baseAmountGrams: 100,
+        nutrients: { calories: 50, protein: 0, fat: 0, carbohydrates: 14 },
+      },
+    });
+    const banana = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: user.id,
+      itemType: 'food',
+      name: 'Banana',
+      iconKey: 'food_banana',
+      metadata: {
+        kind: 'food',
+        baseAmountGrams: 100,
+        nutrients: { calories: 90, protein: 1, fat: 0, carbohydrates: 23 },
+      },
+    });
 
     await harness.db.insert(foodLogEntries).values({
       ownerUserId: user.id,
-      pantryItemId: null,
+      itemSource: 'pantry',
+      pantryItemId: apple.id,
       pantryItemType: 'food',
+      referenceFoodId: null,
+      referenceFoodSource: null,
+      referenceSourceFoodId: null,
       displayName: 'Apple',
       iconKey: 'food_apple',
       consumedAt: now,
@@ -56,8 +83,12 @@ describe('listFoodLogEntriesForOwnerDate', () => {
 
     await harness.db.insert(foodLogEntries).values({
       ownerUserId: user.id,
-      pantryItemId: null,
+      itemSource: 'pantry',
+      pantryItemId: banana.id,
       pantryItemType: 'food',
+      referenceFoodId: null,
+      referenceFoodSource: null,
+      referenceSourceFoodId: null,
       displayName: 'Banana',
       iconKey: 'food_banana',
       consumedAt: now,

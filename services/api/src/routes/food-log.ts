@@ -52,7 +52,7 @@ const foodLogEntryItemResponse = {
   additionalProperties: false,
   required: [
     'id',
-    'pantryItemId',
+    'itemSource',
     'displayName',
     'iconKey',
     'calories',
@@ -66,7 +66,11 @@ const foodLogEntryItemResponse = {
   ],
   properties: {
     id: { type: 'string' },
+    itemSource: { type: 'string', enum: ['pantry', 'reference_food'] },
     pantryItemId: { type: 'string' },
+    referenceFoodId: { type: 'string' },
+    referenceFoodSource: { type: 'string' },
+    referenceSourceFoodId: { type: 'string' },
     displayName: { type: 'string' },
     iconKey: { type: 'string' },
     calories: { type: 'number' },
@@ -114,10 +118,11 @@ const foodLogBatchBodySchema = {
       items: {
         type: 'object',
         additionalProperties: false,
-        required: ['pantryItemId', 'quantity', 'servingOption'],
         properties: {
           pantryItemId: { type: 'string', format: 'uuid' },
+          referenceFoodId: { type: 'string', format: 'uuid' },
           quantity: { type: 'number' },
+          grams: { type: 'number' },
           servingOption: recipeServingOptionBodySchema,
         },
       },

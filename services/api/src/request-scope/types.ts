@@ -166,20 +166,39 @@ export type FoodLogEntryServingWire =
   | { kind: 'custom'; label: string };
 
 /** One logged consumption row as returned by Food Log HTTP (snapshot fields). */
-export type FoodLogEntryWire = {
-  id: string;
-  pantryItemId: string;
-  displayName: string;
-  iconKey: string;
-  calories: number;
-  proteinGrams: number;
-  fatGrams: number;
-  carbohydratesGrams: number;
-  consumedAt: string;
-  consumedDate: string;
-  quantity: number;
-  servingOption: FoodLogEntryServingWire;
-};
+export type FoodLogEntryWire =
+  | {
+      id: string;
+      itemSource: 'pantry';
+      pantryItemId: string;
+      displayName: string;
+      iconKey: string;
+      calories: number;
+      proteinGrams: number;
+      fatGrams: number;
+      carbohydratesGrams: number;
+      consumedAt: string;
+      consumedDate: string;
+      quantity: number;
+      servingOption: FoodLogEntryServingWire;
+    }
+  | {
+      id: string;
+      itemSource: 'reference_food';
+      referenceFoodId?: string;
+      referenceFoodSource?: string;
+      referenceSourceFoodId?: string;
+      displayName: string;
+      iconKey: string;
+      calories: number;
+      proteinGrams: number;
+      fatGrams: number;
+      carbohydratesGrams: number;
+      consumedAt: string;
+      consumedDate: string;
+      quantity: number;
+      servingOption: FoodLogEntryServingWire;
+    };
 
 export type PublicFoodLogListOutcome =
   | { kind: 'persistence_not_configured' }

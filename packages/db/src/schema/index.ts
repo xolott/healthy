@@ -4,6 +4,7 @@
  */
 import { isNull, sql } from 'drizzle-orm';
 import {
+  boolean,
   date,
   doublePrecision,
   index,
@@ -13,6 +14,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from 'drizzle-orm/pg-core';
 
@@ -97,6 +99,12 @@ export type NewAuditLogRow = typeof auditLogs.$inferInsert;
 
 export const pantryItemTypeEnum = pgEnum('pantry_item_type', ['food', 'recipe']);
 
+/** Whether a Food Log Entry links to a Pantry Item or a catalog Reference Food. */
+export const foodLogEntryItemSourceEnum = pgEnum('food_log_entry_item_source', [
+  'pantry',
+  'reference_food',
+]);
+
 /**
  * App-wide nutrient catalog (seeded in migrations). Amounts recorded per Food use these keys and units.
  * Primary key `key` is the stable lowercase wire identifier.
@@ -166,6 +174,34 @@ export type RecipeIngredientRow = typeof recipeIngredients.$inferSelect;
 export type NewRecipeIngredientRow = typeof recipeIngredients.$inferInsert;
 
 /**
+ * Source-owned catalog row (e.g. USDA), not a user Pantry Item.
+ * Uniqueness is `(source, sourceFoodId)` per external stable identifiers.
+ */
+export const referenceFoods = pgTable(
+  'reference_foods',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    source: text('source').notNull(),
+    sourceFoodId: text('source_food_id').notNull(),
+    displayName: text('display_name').notNull(),
+    brand: text('brand'),
+    baseAmountGrams: doublePrecision('base_amount_grams').notNull(),
+    calories: doublePrecision('calories').notNull(),
+    proteinGrams: doublePrecision('protein_grams').notNull(),
+    fatGrams: doublePrecision('fat_grams').notNull(),
+    carbohydratesGrams: doublePrecision('carbohydrates_grams').notNull(),
+    iconKey: text('icon_key').notNull().default('food_bowl'),
+    isActive: boolean('is_active').notNull().default(true),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull(),
+  },
+  (t) => [uniqueIndex('reference_foods_source_source_food_id_uidx').on(t.source, t.sourceFoodId)],
+);
+
+export type ReferenceFoodRow = typeof referenceFoods.$inferSelect;
+export type NewReferenceFoodRow = typeof referenceFoods.$inferInsert;
+
+/**
  * One logged consumption of a Pantry Item, snapshotting display and nutrition facts.
  *
  * **Future-ready fields (edit/delete/move without migrating shape):**
@@ -186,8 +222,16 @@ export const foodLogEntries = pgTable(
     ownerUserId: uuid('owner_user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    itemSource: foodLogEntryItemSourceEnum('item_source').notNull().default('pantry'),
     pantryItemId: uuid('pantry_item_id').references(() => pantryItems.id, { onDelete: 'set null' }),
-    pantryItemType: pantryItemTypeEnum('pantry_item_type').notNull(),
+    pantryItemType: pantryItemTypeEnum('pantry_item_type'),
+    referenceFoodId: uuid('reference_food_id').references(() => referenceFoods.id, {
+      onDelete: 'restrict',
+    }),
+    /** Snapshot of catalog source key at log time (immutable). */
+    referenceFoodSource: text('reference_food_source'),
+    /** Snapshot of provider stable food id at log time (immutable). */
+    referenceSourceFoodId: text('reference_source_food_id'),
     displayName: text('display_name').notNull(),
     iconKey: text('icon_key').notNull(),
     consumedAt: timestamp('consumed_at', { withTimezone: true }).notNull(),
@@ -216,4 +260,13 @@ export type FoodLogEntryRow = typeof foodLogEntries.$inferSelect;
 export type NewFoodLogEntryRow = typeof foodLogEntries.$inferInsert;
 
 /** Relational schema map passed to `drizzle({ schema })`. */
-export const schema = { users, sessions, auditLogs, nutrients, pantryItems, recipeIngredients, foodLogEntries };
+export const schema = {
+  users,
+  sessions,
+  auditLogs,
+  nutrients,
+  pantryItems,
+  recipeIngredients,
+  referenceFoods,
+  foodLogEntries,
+};

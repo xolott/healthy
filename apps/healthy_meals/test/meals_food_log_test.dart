@@ -83,10 +83,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Greek Yogurt'), findsOneWidget);
-    expect(find.text('240'), findsOneWidget);
-    expect(find.text('20P'), findsOneWidget);
-    expect(find.text('16C'), findsOneWidget);
-    expect(find.text('8F'), findsOneWidget);
+    expect(find.text('240'), findsNWidgets(2));
+    expect(find.text('20P'), findsNWidgets(2));
+    expect(find.text('16C'), findsNWidgets(2));
+    expect(find.text('8F'), findsNWidgets(2));
   });
 
   testWidgets('composer POSTs batch with base serving and pops on 201', (

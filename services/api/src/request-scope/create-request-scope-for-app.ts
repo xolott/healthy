@@ -20,11 +20,12 @@ import {
   loadNutrientsCatalog,
   listPantryItemsForOwner,
 } from '../pantry/pantry-persistence.js';
+import { insertFoodLogEntries, listFoodLogEntriesForOwnerDate } from '../food-log/food-log-persistence.js';
 import {
-  collectFoodLogBatchPantryIds,
+  collectFoodLogBatchResolutionIds,
   planFoodLogBatch,
 } from '../food-log/plan-food-log-batch.js';
-import { insertFoodLogEntries, listFoodLogEntriesForOwnerDate } from '../food-log/food-log-persistence.js';
+import { findReferenceFoodsByIds } from '../food-log/reference-food-persistence.js';
 import { PREDEFINED_SERVING_UNIT_ENTRIES } from '../pantry/predefined-serving-units.js';
 
 import type { Database } from '@healthy/db/client';
@@ -67,8 +68,28 @@ function servingOptionFoodLogWireFromPersisted(row: FoodLogEntryRow): FoodLogEnt
 }
 
 function mapFoodLogRowToWire(row: FoodLogEntryRow): FoodLogEntryWire {
+  if (row.itemSource === 'reference_food') {
+    return {
+      id: row.id,
+      itemSource: 'reference_food',
+      referenceFoodId: row.referenceFoodId ?? undefined,
+      referenceFoodSource: row.referenceFoodSource ?? undefined,
+      referenceSourceFoodId: row.referenceSourceFoodId ?? undefined,
+      displayName: row.displayName,
+      iconKey: row.iconKey,
+      calories: row.calories,
+      proteinGrams: row.proteinGrams,
+      fatGrams: row.fatGrams,
+      carbohydratesGrams: row.carbohydratesGrams,
+      consumedAt: row.consumedAt.toISOString(),
+      consumedDate: row.consumedDate,
+      quantity: row.quantity,
+      servingOption: servingOptionFoodLogWireFromPersisted(row),
+    };
+  }
   return {
     id: row.id,
+    itemSource: 'pantry',
     pantryItemId: row.pantryItemId ?? '',
     displayName: row.displayName,
     iconKey: row.iconKey,
@@ -365,7 +386,7 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
         if (adapter === null) {
           return { kind: 'persistence_not_configured' };
         }
-        const idsRes = collectFoodLogBatchPantryIds(rawBody);
+        const idsRes = collectFoodLogBatchResolutionIds(rawBody);
         if (idsRes.kind === 'invalid_input') {
           return {
             kind: 'invalid_input',
@@ -374,10 +395,10 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
           };
         }
         try {
-          const pantryRows = await findPantryItemsForOwnerByIds(adapter.db, ownerUserId, idsRes.ids);
-          const map = new Map(pantryRows.map((r) => [r.id, r]));
-          for (const id of idsRes.ids) {
-            if (!map.has(id)) {
+          const pantryRows = await findPantryItemsForOwnerByIds(adapter.db, ownerUserId, idsRes.pantryIds);
+          const pantryMap = new Map(pantryRows.map((r) => [r.id, r]));
+          for (const id of idsRes.pantryIds) {
+            if (!pantryMap.has(id)) {
               return {
                 kind: 'invalid_input',
                 field: 'entries',
@@ -385,7 +406,26 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
               };
             }
           }
-          const planned = planFoodLogBatch(ownerUserId, rawBody, map, new Date());
+          const referenceRows = await findReferenceFoodsByIds(adapter.db, idsRes.referenceIds);
+          const referenceMap = new Map(referenceRows.map((r) => [r.id, r]));
+          for (const id of idsRes.referenceIds) {
+            const rf = referenceMap.get(id);
+            if (rf === undefined) {
+              return {
+                kind: 'invalid_input',
+                field: 'entries',
+                message: 'One or more Reference Food identifiers were not found.',
+              };
+            }
+            if (!rf.isActive) {
+              return {
+                kind: 'invalid_input',
+                field: 'entries',
+                message: 'One or more Reference Foods are inactive and cannot be logged.',
+              };
+            }
+          }
+          const planned = planFoodLogBatch(ownerUserId, rawBody, pantryMap, referenceMap, new Date());
           if (planned.kind === 'invalid_input') {
             return planned;
           }
