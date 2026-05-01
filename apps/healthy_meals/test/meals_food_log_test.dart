@@ -7,11 +7,21 @@ import 'package:healthy_meals/app/meals/meals_food_log_day_screen.dart';
 import 'package:healthy_meals/app/meals/meals_food_log_entry_composer_screen.dart';
 import 'package:healthy_meals/app/meals/meals_food_log_shell_sync.dart';
 import 'package:healthy_meals/app/meals/pantry_http.dart';
+import 'package:healthy_meals/app/meals/reference_food_log_wire.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:intl/intl.dart';
 
 void main() {
+  test('ReferenceFoodDetailForLog.tryParseFood parses API-shaped JSON', () {
+    const body =
+        '{"food":{"id":"550e8400-e29b-41d4-a716-446655440001","source":"usda","sourceFoodId":"sr-1","displayName":"Rolled Oats","brand":"Test Mills","foodClass":"Cereal","iconKey":"food_bowl","baseAmountGrams":100,"calories":380,"proteinGrams":12,"fatGrams":6,"carbohydratesGrams":68,"servings":[{"label":"cup","gramWeight":80}],"rawNutrients":[],"rawPayload":{}}}';
+    final decodedRaw = jsonDecode(body);
+    final decoded = Map<String, dynamic>.from(decodedRaw as Map);
+    final food = Map<String, dynamic>.from(decoded['food']! as Map);
+    expect(ReferenceFoodDetailForLog.tryParseFood(food), isNotNull);
+  });
+
   test(
     'FoodLogEntryListItem.tryParse accepts entries with snapshot fields',
     () {
@@ -280,7 +290,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Food or recipe'));
+    await tester.tap(find.text('Food, recipe, or catalog'));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('food-log-food-picker')), findsOneWidget);
@@ -392,7 +402,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Food or recipe'));
+      await tester.tap(find.text('Food, recipe, or catalog'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Sliced Bread'));
       await tester.pumpAndSettle();
@@ -511,7 +521,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Food or recipe'));
+      await tester.tap(find.text('Food, recipe, or catalog'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Recipes'));
       await tester.pumpAndSettle();
@@ -620,7 +630,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Food or recipe'));
+    await tester.tap(find.text('Food, recipe, or catalog'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('First Food'));
     await tester.pumpAndSettle();
@@ -628,7 +638,7 @@ void main() {
     await tester.tap(find.byKey(const Key('food-log-composer-add-to-meal')));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Add food or recipe'));
+    await tester.tap(find.text('Add food, recipe, or catalog'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Second Food'));
     await tester.pumpAndSettle();
@@ -698,4 +708,311 @@ void main() {
       expect(requestedDates[2], DateFormat('yyyy-MM-dd').format(today));
     },
   );
+
+  testWidgets(
+    'composer Catalog tab searches reference foods and POSTs grams batch',
+    (WidgetTester tester) async {
+      const refId = '550e8400-e29b-41d4-a716-446655440001';
+      FlutterSecureStorage.setMockInitialValues({
+        'healthy_session_token': 'ref-catalog-test',
+        'healthy_api_base_url': 'https://composer.test',
+      });
+      addTearDown(() {
+        PantryHttp.client = http.Client();
+      });
+
+      String? capturedBody;
+      PantryHttp.client = MockClient((request) async {
+        if (request.url.path.endsWith('/pantry/items') &&
+            request.method == 'GET') {
+          final t = request.url.queryParameters['itemType'];
+          if (t == 'recipe') {
+            return http.Response(jsonEncode({'items': <dynamic>[]}), 200);
+          }
+          return http.Response(jsonEncode({'items': <dynamic>[]}), 200);
+        }
+        if (request.url.path.endsWith('/reference-foods/search') &&
+            request.method == 'GET') {
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {
+                  'id': refId,
+                  'source': 'usda',
+                  'sourceFoodId': 'sr-1',
+                  'displayName': 'Rolled Oats',
+                  'brand': 'Test Mills',
+                  'foodClass': 'Cereal',
+                  'servingPreview': {'label': 'cup', 'gramWeight': 80},
+                  'macros': {
+                    'baseAmountGrams': 100,
+                    'calories': 380,
+                    'proteinGrams': 12,
+                    'fatGrams': 6,
+                    'carbohydratesGrams': 68,
+                  },
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        if (request.method == 'GET' &&
+            request.url.pathSegments.length == 2 &&
+            request.url.pathSegments[0] == 'reference-foods' &&
+            request.url.pathSegments[1] == refId) {
+          return http.Response(
+            jsonEncode({
+              'food': {
+                'id': refId,
+                'source': 'usda',
+                'sourceFoodId': 'sr-1',
+                'displayName': 'Rolled Oats',
+                'brand': 'Test Mills',
+                'foodClass': 'Cereal',
+                'iconKey': 'food_bowl',
+                'baseAmountGrams': 100,
+                'calories': 380,
+                'proteinGrams': 12,
+                'fatGrams': 6,
+                'carbohydratesGrams': 68,
+                'servings': [
+                  {'label': 'cup', 'gramWeight': 80},
+                ],
+                'rawNutrients': <dynamic>[],
+                'rawPayload': <String, dynamic>{},
+              },
+            }),
+            200,
+          );
+        }
+        if (request.url.path.endsWith('/food-log/entries/batch') &&
+            request.method == 'POST') {
+          capturedBody = request.body;
+          return http.Response(
+            jsonEncode({
+              'entries': [
+                {
+                  'id': 'log-ref',
+                  'itemSource': 'reference_food',
+                  'referenceFoodId': refId,
+                  'displayName': 'Rolled Oats',
+                  'calories': 304,
+                  'proteinGrams': 9.6,
+                  'fatGrams': 4.8,
+                  'carbohydratesGrams': 54.4,
+                  'consumedDate': '2026-04-29',
+                  'quantity': 80,
+                  'servingOption': {'kind': 'custom', 'label': 'g'},
+                },
+              ],
+            }),
+            201,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+
+      var done = false;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: MealsFoodLogEntryComposerScreen(onDone: () => done = true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Food, recipe, or catalog'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('food-log-picker-tab-reference')));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.byKey(const Key('food-log-reference-search')),
+        'oat',
+      );
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(Key('food-log-reference-card-$refId')), findsOneWidget);
+      await tester.tap(find.byKey(Key('food-log-reference-card-$refId')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 600));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('food-log-reference-detail-use')));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Rolled Oats'), findsWidgets);
+
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+
+      expect(done, isTrue);
+      expect(capturedBody, isNotNull);
+      final decoded = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      final entries = decoded['entries'] as List<dynamic>;
+      expect(entries, hasLength(1));
+      final e0 = entries.first as Map<String, dynamic>;
+      expect(e0['referenceFoodId'], refId);
+      expect(e0['grams'], 80);
+      expect(e0.containsKey('pantryItemId'), isFalse);
+    },
+  );
+
+  testWidgets('composer batches pantry line and reference grams in one POST', (
+    WidgetTester tester,
+  ) async {
+    const refId = '650e8400-e29b-41d4-a716-446655440002';
+    FlutterSecureStorage.setMockInitialValues({
+      'healthy_session_token': 'mixed-batch-test',
+      'healthy_api_base_url': 'https://composer.test',
+    });
+    addTearDown(() {
+      PantryHttp.client = http.Client();
+    });
+
+    String? capturedBody;
+    PantryHttp.client = MockClient((request) async {
+      if (request.url.path.endsWith('/pantry/items') &&
+          request.method == 'GET') {
+        final t = request.url.queryParameters['itemType'];
+        if (t == 'recipe') {
+          return http.Response(jsonEncode({'items': <dynamic>[]}), 200);
+        }
+        return http.Response(
+          jsonEncode({
+            'items': [
+              {
+                'id': 'food-mix-1',
+                'name': 'Pantry Apple',
+                'iconKey': 'food_bowl',
+                'itemType': 'food',
+                'metadata': {
+                  'kind': 'food',
+                  'nutrients': {
+                    'calories': 50,
+                    'protein': 0,
+                    'carbohydrates': 14,
+                    'fat': 0,
+                  },
+                  'baseAmountGrams': 100,
+                },
+              },
+            ],
+          }),
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/reference-foods/search')) {
+        return http.Response(
+          jsonEncode({
+            'items': [
+              {
+                'id': refId,
+                'source': 'usda',
+                'sourceFoodId': 'b',
+                'displayName': 'Banana',
+                'brand': null,
+                'foodClass': 'Fruit',
+                'servingPreview': null,
+                'macros': {
+                  'baseAmountGrams': 100,
+                  'calories': 89,
+                  'proteinGrams': 1,
+                  'fatGrams': 0.3,
+                  'carbohydratesGrams': 23,
+                },
+              },
+            ],
+          }),
+          200,
+        );
+      }
+      if (request.method == 'GET' &&
+          request.url.pathSegments.length == 2 &&
+          request.url.pathSegments[0] == 'reference-foods' &&
+          request.url.pathSegments[1] == refId) {
+        return http.Response(
+          jsonEncode({
+            'food': {
+              'id': refId,
+              'source': 'usda',
+              'sourceFoodId': 'b',
+              'displayName': 'Banana',
+              'brand': null,
+              'foodClass': 'Fruit',
+              'iconKey': 'food_banana',
+              'baseAmountGrams': 100,
+              'calories': 89,
+              'proteinGrams': 1,
+              'fatGrams': 0.3,
+              'carbohydratesGrams': 23,
+              'servings': <dynamic>[],
+              'rawNutrients': <dynamic>[],
+              'rawPayload': <String, dynamic>{},
+            },
+          }),
+          200,
+        );
+      }
+      if (request.url.path.endsWith('/food-log/entries/batch') &&
+          request.method == 'POST') {
+        capturedBody = request.body;
+        return http.Response(jsonEncode({'entries': <dynamic>[]}), 201);
+      }
+      return http.Response('not found', 404);
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(home: MealsFoodLogEntryComposerScreen(onDone: () {})),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Food, recipe, or catalog'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pantry Apple'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('food-log-composer-add-to-meal')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Add food, recipe, or catalog'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('food-log-picker-tab-reference')));
+    await tester.pumpAndSettle();
+    await tester.enterText(
+      find.byKey(const Key('food-log-reference-search')),
+      'ban',
+    );
+    await tester.pump(const Duration(milliseconds: 400));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(Key('food-log-reference-card-$refId')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 600));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('food-log-reference-detail-use')));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const Key('food-log-composer-serving')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Grams (direct)').last);
+    await tester.pumpAndSettle();
+
+    await tester.enterText(
+      find.byKey(const Key('food-log-composer-quantity')),
+      '120',
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(capturedBody, isNotNull);
+    final decoded = jsonDecode(capturedBody!) as Map<String, dynamic>;
+    final entries = decoded['entries'] as List<dynamic>;
+    expect(entries, hasLength(2));
+    expect((entries[0] as Map<String, dynamic>)['pantryItemId'], 'food-mix-1');
+    expect((entries[1] as Map<String, dynamic>)['referenceFoodId'], refId);
+    expect((entries[1] as Map<String, dynamic>)['grams'], 120);
+  });
 }
