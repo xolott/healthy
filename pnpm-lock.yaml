@@ -212,6 +212,12 @@ importers:
       fastify:
         specifier: 5.8.5
         version: 5.8.5
+      stream-chain:
+        specifier: ^3.6.1
+        version: 3.6.1
+      stream-json:
+        specifier: ^2.1.0
+        version: 2.1.0
     devDependencies:
       '@healthy/eslint-config':
         specifier: workspace:*
@@ -5794,6 +5800,12 @@ packages:
   stdin-discarder@0.3.2:
     resolution: {integrity: sha512-eCPu1qRxPVkl5605OTWF8Wz40b4Mf45NY5LQmVPQ599knfs5QhASUm9GbJ5BDMDOXgrnh0wyEdvzmL//YMlw0A==}
     engines: {node: '>=18'}
+
+  stream-chain@3.6.1:
+    resolution: {integrity: sha512-M4BQpNPI71uumkVXjl4y+mIormQXdo4R0pSR23mcLbn6D+kpvu7Kx2g1hf0jRB76Zb1IT1M06OIGghMTAtZdyQ==}
+
+  stream-json@2.1.0:
+    resolution: {integrity: sha512-9gV/ywtebMn3DdKnNKYCb9iESvgR1dHbucNV+bRGvdvy+jV4c9FFgYKmENhpKv58jSwvs90Wk80RhfKk1KxHPg==}
 
   streamx@2.25.0:
     resolution: {integrity: sha512-0nQuG6jf1w+wddNEEXCF4nTg3LtufWINB5eFEN+5TNZW7KWJp6x87+JFL43vaAUPyCfH1wID+mNVyW6OHtFamg==}
@@ -12255,6 +12267,12 @@ snapshots:
   std-env@4.1.0: {}
 
   stdin-discarder@0.3.2: {}
+
+  stream-chain@3.6.1: {}
+
+  stream-json@2.1.0:
+    dependencies:
+      stream-chain: 3.6.1
 
   streamx@2.25.0:
     dependencies:

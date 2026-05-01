@@ -16,6 +16,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:migrate": "pnpm --filter @healthy/db db:migrate",
     "db:recreate": "tsx ./scripts/recreate-db.ts",
+    "reference-food:import-usda-json": "tsx ./scripts/import-usda-reference-food-json.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "clean": "node ../../tooling/scripts/clean-api-dist.mjs"
@@ -29,7 +30,9 @@
     "@healthy/db": "workspace:*",
     "argon2": "0.44.0",
     "drizzle-orm": "0.44.7",
-    "fastify": "5.8.5"
+    "fastify": "5.8.5",
+    "stream-chain": "^3.6.1",
+    "stream-json": "^2.1.0"
   },
   "devDependencies": {
     "@healthy/eslint-config": "workspace:*",

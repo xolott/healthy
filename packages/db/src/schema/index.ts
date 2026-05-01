@@ -12,6 +12,7 @@ import {
   jsonb,
   pgEnum,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   uniqueIndex,
@@ -173,6 +174,63 @@ export const recipeIngredients = pgTable(
 export type RecipeIngredientRow = typeof recipeIngredients.$inferSelect;
 export type NewRecipeIngredientRow = typeof recipeIngredients.$inferInsert;
 
+/** Operator import job lifecycle for Reference Food bulk loads. */
+export const referenceFoodImportRunStatusEnum = pgEnum('reference_food_import_run_status', [
+  'running',
+  'succeeded',
+  'failed',
+]);
+
+export const referenceFoodImportRuns = pgTable(
+  'reference_food_import_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    source: text('source').notNull(),
+    sourceVersion: text('source_version').notNull(),
+    fileHash: text('file_hash').notNull(),
+    /** Raw JSON objects yielded from the provider file before normalization. */
+    recordsRead: integer('records_read').notNull().default(0),
+    /** Rows successfully upserted into `reference_foods`. */
+    recordsUpserted: integer('records_upserted').notNull().default(0),
+    recordsSkippedInvalid: integer('records_skipped_invalid').notNull().default(0),
+    recordsDeactivated: integer('records_deactivated').notNull().default(0),
+    status: referenceFoodImportRunStatusEnum('status').notNull(),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp('finished_at', { withTimezone: true }),
+    errorSummary: text('error_summary'),
+  },
+  (t) => [index('reference_food_import_runs_source_started_at_idx').on(t.source, t.startedAt)],
+);
+
+export type ReferenceFoodImportRunRow = typeof referenceFoodImportRuns.$inferSelect;
+export type NewReferenceFoodImportRunRow = typeof referenceFoodImportRuns.$inferInsert;
+
+/**
+ * Snapshot membership for one import run: used to deactivate catalog rows missing
+ * from the latest successful snapshot without holding all ids in memory.
+ */
+export const referenceFoodImportKeys = pgTable(
+  'reference_food_import_keys',
+  {
+    importRunId: uuid('import_run_id')
+      .notNull()
+      .references(() => referenceFoodImportRuns.id, { onDelete: 'cascade' }),
+    sourceFoodId: text('source_food_id').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.importRunId, t.sourceFoodId] }),
+    index('reference_food_import_keys_import_run_id_idx').on(t.importRunId),
+  ],
+);
+
+export type ReferenceFoodImportKeyRow = typeof referenceFoodImportKeys.$inferSelect;
+export type NewReferenceFoodImportKeyRow = typeof referenceFoodImportKeys.$inferInsert;
+
+export type ReferenceFoodServingWire = {
+  label: string;
+  gramWeight: number | null;
+};
+
 /**
  * Source-owned catalog row (e.g. USDA), not a user Pantry Item.
  * Uniqueness is `(source, sourceFoodId)` per external stable identifiers.
@@ -185,11 +243,24 @@ export const referenceFoods = pgTable(
     sourceFoodId: text('source_food_id').notNull(),
     displayName: text('display_name').notNull(),
     brand: text('brand'),
+    foodClass: text('food_class'),
     baseAmountGrams: doublePrecision('base_amount_grams').notNull(),
     calories: doublePrecision('calories').notNull(),
     proteinGrams: doublePrecision('protein_grams').notNull(),
     fatGrams: doublePrecision('fat_grams').notNull(),
     carbohydratesGrams: doublePrecision('carbohydrates_grams').notNull(),
+    servings: jsonb('servings')
+      .$type<ReferenceFoodServingWire[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    rawNutrients: jsonb('raw_nutrients')
+      .$type<unknown[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    rawPayload: jsonb('raw_payload')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
     iconKey: text('icon_key').notNull().default('food_bowl'),
     isActive: boolean('is_active').notNull().default(true),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -267,6 +338,8 @@ export const schema = {
   nutrients,
   pantryItems,
   recipeIngredients,
+  referenceFoodImportRuns,
+  referenceFoodImportKeys,
   referenceFoods,
   foodLogEntries,
 };
