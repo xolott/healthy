@@ -17,11 +17,14 @@
     "db:migrate": "pnpm --filter @healthy/db db:migrate",
     "db:recreate": "tsx ./scripts/recreate-db.ts",
     "reference-food:import-usda-json": "tsx ./scripts/import-usda-reference-food-json.ts",
+    "reference-food:reindex-search": "tsx ./scripts/reindex-reference-foods-search.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "clean": "node ../../tooling/scripts/clean-api-dist.mjs"
   },
   "dependencies": {
+    "@opentelemetry/api": "1.9.1",
+    "@elastic/elasticsearch": "^9.3.4",
     "@fastify/cors": "11.2.0",
     "@fastify/env": "6.0.0",
     "@fastify/sensible": "6.0.4",
