@@ -217,6 +217,42 @@ describe('reindexReferenceFoodsFromPostgres', () => {
 
     expect(client.records.aliasActions.length).toBe(0);
   });
+
+  it('repairs search projection on retry after bulk errors (Postgres unchanged)', async () => {
+    const row = await insertPersistedReferenceFood(harness.db, {
+      source: 'usda_fdc',
+      sourceFoodId: 'repair-me',
+      displayName: 'Repair Me',
+      baseAmountGrams: 100,
+      calories: 10,
+      proteinGrams: 1,
+      fatGrams: 0,
+      carbohydratesGrams: 2,
+      isActive: true,
+    });
+
+    const failingClient = createRecordingIndexerClient({ bulkErrors: true });
+    await expect(
+      reindexReferenceFoodsFromPostgres({
+        db: harness.db,
+        client: failingClient,
+        newIndexName: 'reference_foods_search_v_broken',
+        batchSize: 10,
+      }),
+    ).rejects.toThrow(ReferenceFoodSearchReindexError);
+
+    const okClient = createRecordingIndexerClient({});
+    const summary = await reindexReferenceFoodsFromPostgres({
+      db: harness.db,
+      client: okClient,
+      newIndexName: 'reference_foods_search_v_repaired',
+      batchSize: 10,
+    });
+
+    expect(summary.indexedDocuments).toBe(1);
+    expect(okClient.records.indexedIds).toEqual([row.id]);
+    expect(okClient.records.aliasActions.some((a) => 'add' in a)).toBe(true);
+  });
 });
 
 describe('readElasticsearchAuthFromEnv', () => {

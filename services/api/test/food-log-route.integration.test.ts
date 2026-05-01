@@ -2,6 +2,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { foodLogEntries, pantryItems, referenceFoods, users } from '@healthy/db/schema';
 import { startPostgresTestDatabase, type PostgresTestDatabase } from '@healthy/db/test';
+import { eq } from 'drizzle-orm';
 
 import { buildApp } from '../src/app.js';
 import {
@@ -40,6 +41,55 @@ describe('Food Log routes (integration)', () => {
       });
       expect(res.statusCode).toBe(401);
       expect(JSON.parse(res.payload)).toEqual({ error: 'unauthorized' });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('lists Food Log days and accepts Pantry batches when ELASTICSEARCH_URL is unset', async () => {
+    const { user, authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'food-log-no-es@example.com',
+      displayName: 'No ES Logger',
+      role: 'owner',
+      status: 'active',
+      plainPassword: INTEGRATION_TEST_PLAIN_PASSWORD,
+    });
+    const food = await insertPersistedPantryItem(harness.db, {
+      ownerUserId: user.id,
+      itemType: 'food',
+      name: 'Milk',
+      iconKey: 'food_bowl',
+      metadata: {
+        kind: 'food',
+        baseAmountGrams: 100,
+        nutrients: { calories: 50, protein: 3, fat: 2, carbohydrates: 5 },
+      },
+    });
+
+    vi.stubEnv('ELASTICSEARCH_URL', '');
+    const app = await buildApp();
+    try {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: { ...authHeaders, 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          consumedAt: '2026-10-01T08:00:00.000Z',
+          consumedDate: '2026-10-01',
+          entries: [{ pantryItemId: food.id, quantity: 1, servingOption: { kind: 'base' } }],
+        }),
+      });
+      expect(createRes.statusCode).toBe(201);
+
+      const listRes = await app.inject({
+        method: 'GET',
+        url: '/food-log/entries?date=2026-10-01',
+        headers: authHeaders,
+      });
+      expect(listRes.statusCode).toBe(200);
+      const body = JSON.parse(listRes.payload) as { entries: Array<{ displayName: string }> };
+      expect(body.entries).toHaveLength(1);
+      expect(body.entries[0]?.displayName).toBe('Milk');
     } finally {
       await app.close();
     }
@@ -740,6 +790,61 @@ describe('Food Log routes (integration)', () => {
       });
       expect(listRes.statusCode).toBe(200);
       expect(JSON.parse(listRes.payload)).toEqual(body);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('still lists Reference Food log entries from snapshots after the catalog row becomes inactive', async () => {
+    const { authHeaders } = await insertPersistedUserWithBearerSession(harness.db, {
+      email: 'food-log-ref-hist@example.com',
+      displayName: 'Hist Logger',
+      role: 'owner',
+      status: 'active',
+      plainPassword: INTEGRATION_TEST_PLAIN_PASSWORD,
+    });
+    const ref = await insertPersistedReferenceFood(harness.db, {
+      source: 'usda_fdc',
+      sourceFoodId: 'hist-1',
+      displayName: 'Snapshot Name',
+      baseAmountGrams: 100,
+      calories: 100,
+      proteinGrams: 1,
+      fatGrams: 1,
+      carbohydratesGrams: 1,
+      iconKey: 'food_bowl',
+      isActive: true,
+    });
+
+    const app = await buildApp();
+    try {
+      const createRes = await app.inject({
+        method: 'POST',
+        url: '/food-log/entries/batch',
+        headers: { ...authHeaders, 'content-type': 'application/json' },
+        payload: JSON.stringify({
+          consumedAt: '2026-11-01T12:00:00.000Z',
+          consumedDate: '2026-11-01',
+          entries: [{ referenceFoodId: ref.id, grams: 100 }],
+        }),
+      });
+      expect(createRes.statusCode).toBe(201);
+      const saved = JSON.parse(createRes.payload) as {
+        entries: Array<{ displayName: string; referenceFoodId: string }>;
+      };
+
+      await harness.db
+        .update(referenceFoods)
+        .set({ isActive: false })
+        .where(eq(referenceFoods.id, ref.id));
+
+      const listRes = await app.inject({
+        method: 'GET',
+        url: '/food-log/entries?date=2026-11-01',
+        headers: authHeaders,
+      });
+      expect(listRes.statusCode).toBe(200);
+      expect(JSON.parse(listRes.payload)).toEqual(saved);
     } finally {
       await app.close();
     }
