@@ -9,11 +9,40 @@ import 'meals_food_log_shell_sync.dart';
 import 'pantry_catalog_icon_map.dart';
 import 'pantry_http.dart';
 
+/// How a Food Log row was sourced on the wire (`itemSource` on GET responses).
+enum FoodLogEntryItemSource { pantry, referenceFood }
+
+FoodLogEntryItemSource? _tryParseFoodLogItemSource(dynamic raw) {
+  if (raw == null) {
+    return FoodLogEntryItemSource.pantry;
+  }
+  if (raw is! String) {
+    return null;
+  }
+  switch (raw) {
+    case 'pantry':
+      return FoodLogEntryItemSource.pantry;
+    case 'reference_food':
+      return FoodLogEntryItemSource.referenceFood;
+    default:
+      return null;
+  }
+}
+
+String? _optionalNonEmptyWireString(dynamic v) {
+  if (v is! String) {
+    return null;
+  }
+  final s = v.trim();
+  return s.isEmpty ? null : s;
+}
+
 /// One Food Log Entry row as returned by GET `/food-log/entries`.
 @immutable
 class FoodLogEntryListItem {
   const FoodLogEntryListItem({
     required this.id,
+    required this.itemSource,
     required this.displayName,
     required this.iconKey,
     required this.calories,
@@ -24,11 +53,22 @@ class FoodLogEntryListItem {
     required this.consumedDate,
     required this.quantity,
     required this.servingKind,
+    this.pantryItemId,
+    this.referenceFoodId,
+    this.referenceFoodSource,
+    this.referenceSourceFoodId,
     this.servingUnit,
     this.servingCustomLabel,
   });
 
   final String id;
+  final FoodLogEntryItemSource itemSource;
+  final String? pantryItemId;
+  final String? referenceFoodId;
+  final String? referenceFoodSource;
+  final String? referenceSourceFoodId;
+
+  /// Display relies on snapshots; callers may omit live reference ids.
   final String displayName;
   final String iconKey;
   final double calories;
@@ -57,6 +97,10 @@ class FoodLogEntryListItem {
 
   static FoodLogEntryListItem? tryParse(dynamic e) {
     if (e is! Map<String, dynamic>) {
+      return null;
+    }
+    final sourceParsed = _tryParseFoodLogItemSource(e['itemSource']);
+    if (sourceParsed == null) {
       return null;
     }
     final id = e['id'];
@@ -117,6 +161,15 @@ class FoodLogEntryListItem {
     }
     return FoodLogEntryListItem(
       id: id,
+      itemSource: sourceParsed,
+      pantryItemId: _optionalNonEmptyWireString(e['pantryItemId']),
+      referenceFoodId: _optionalNonEmptyWireString(e['referenceFoodId']),
+      referenceFoodSource: _optionalNonEmptyWireString(
+        e['referenceFoodSource'],
+      ),
+      referenceSourceFoodId: _optionalNonEmptyWireString(
+        e['referenceSourceFoodId'],
+      ),
       displayName: name,
       iconKey: icon.trim().isEmpty ? 'food_bowl' : icon.trim(),
       calories: cal.toDouble(),
@@ -657,11 +710,7 @@ class _FoodLogTimelineEntry extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
-
-                      Icon(
-                        Icons.local_fire_department_outlined,
-                        size: 18,
-                      ),
+                      Icon(Icons.local_fire_department_outlined, size: 18),
                       Text(
                         '${totalMacros.calories.round()}',
                         style: theme.textTheme.labelLarge,

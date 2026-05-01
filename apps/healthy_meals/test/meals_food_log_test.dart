@@ -17,6 +17,8 @@ void main() {
     () {
       final row = FoodLogEntryListItem.tryParse(<String, dynamic>{
         'id': 'a',
+        'itemSource': 'pantry',
+        'pantryItemId': 'p1',
         'displayName': 'Oats',
         'iconKey': 'food_bowl',
         'calories': 150.0,
@@ -30,10 +32,39 @@ void main() {
       });
       expect(row, isNotNull);
       expect(row!.displayName, 'Oats');
+      expect(row.itemSource, FoodLogEntryItemSource.pantry);
+      expect(row.pantryItemId, 'p1');
       expect(row.iconKey, 'food_bowl');
       expect(row.calories, 150.0);
       expect(row.quantity, 1.5);
       expect(row.consumedServingSummaryLine, '1.5 × cup');
+    },
+  );
+
+  test(
+    'FoodLogEntryListItem.tryParse accepts reference snapshots without ids',
+    () {
+      final row = FoodLogEntryListItem.tryParse(<String, dynamic>{
+        'id': 'rf-1',
+        'itemSource': 'reference_food',
+        'displayName': 'Seeded Kale',
+        'iconKey': 'food_carrot',
+        'calories': 50,
+        'proteinGrams': 4,
+        'fatGrams': 0.5,
+        'carbohydratesGrams': 8,
+        'consumedAt': '2026-04-29T09:15:00.000Z',
+        'consumedDate': '2026-04-29',
+        'quantity': 120,
+        'servingOption': <String, dynamic>{'kind': 'base'},
+      });
+      expect(row, isNotNull);
+      expect(row!.itemSource, FoodLogEntryItemSource.referenceFood);
+      expect(row.referenceFoodId, isNull);
+      expect(row.referenceFoodSource, isNull);
+      expect(row.referenceSourceFoodId, isNull);
+      expect(row.displayName, 'Seeded Kale');
+      expect(row.consumedServingSummaryLine, '120 × base serving');
     },
   );
 
@@ -56,6 +87,7 @@ void main() {
             'entries': [
               {
                 'id': 'entry-1',
+                'itemSource': 'pantry',
                 'displayName': 'Greek Yogurt',
                 'iconKey': 'food_bowl',
                 'calories': 240,
@@ -88,6 +120,88 @@ void main() {
     expect(find.text('16C'), findsNWidgets(2));
     expect(find.text('8F'), findsNWidgets(2));
   });
+
+  testWidgets(
+    'Food Log day screen renders pantry and reference entries together',
+    (WidgetTester tester) async {
+      FlutterSecureStorage.setMockInitialValues({
+        'healthy_session_token': 'mix-test',
+        'healthy_api_base_url': 'https://foodlog.example',
+      });
+      addTearDown(() {
+        PantryHttp.client = http.Client();
+      });
+
+      PantryHttp.client = MockClient((request) async {
+        if (request.method == 'GET' &&
+            request.url.path.endsWith('/food-log/entries')) {
+          return http.Response(
+            jsonEncode({
+              'entries': [
+                {
+                  'id': 'pantry-1',
+                  'itemSource': 'pantry',
+                  'pantryItemId': 'food-item-uuid',
+                  'displayName': 'Granola Bowl',
+                  'iconKey': 'food_bowl',
+                  'calories': 280,
+                  'proteinGrams': 8,
+                  'fatGrams': 10,
+                  'carbohydratesGrams': 38,
+                  'consumedAt': '2026-04-29T07:05:00.000Z',
+                  'consumedDate': '2026-04-29',
+                  'quantity': 1,
+                  'servingOption': {'kind': 'custom', 'label': 'bowl'},
+                },
+                {
+                  'id': 'ref-1',
+                  'itemSource': 'reference_food',
+                  'referenceFoodId': 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+                  'referenceFoodSource': 'usda_sr_legacy',
+                  'referenceSourceFoodId': 'sr-99123',
+                  'displayName': 'Reference Banana',
+                  'iconKey': 'food_banana',
+                  'calories': 105,
+                  'proteinGrams': 1.3,
+                  'fatGrams': 0.4,
+                  'carbohydratesGrams': 27,
+                  'consumedAt': '2026-04-29T07:05:02.000Z',
+                  'consumedDate': '2026-04-29',
+                  'quantity': 1,
+                  'servingOption': {'kind': 'unit', 'unit': 'medium'},
+                },
+              ],
+            }),
+            200,
+          );
+        }
+        return http.Response('not found', 404);
+      });
+
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(body: MealsFoodLogDayScreen(syncFabDay: false)),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Granola Bowl'), findsOneWidget);
+      expect(find.text('Reference Banana'), findsOneWidget);
+      expect(find.textContaining('1 × bowl'), findsOneWidget);
+      expect(find.textContaining('1 × medium'), findsOneWidget);
+      expect(find.text('385'), findsOneWidget);
+      expect(find.text('280'), findsOneWidget);
+      expect(find.text('105'), findsOneWidget);
+      expect(find.text('9P'), findsOneWidget);
+      expect(find.text('8P'), findsOneWidget);
+      expect(find.text('1.3P'), findsOneWidget);
+      expect(find.text('65C'), findsOneWidget);
+      expect(find.text('38C'), findsOneWidget);
+      expect(find.text('27C'), findsOneWidget);
+      expect(find.text('10F'), findsNWidgets(2));
+      expect(find.text('0.4F'), findsOneWidget);
+    },
+  );
 
   testWidgets('composer POSTs batch with base serving and pops on 201', (
     WidgetTester tester,
