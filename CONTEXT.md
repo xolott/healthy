@@ -67,6 +67,11 @@ may include a brand; generic ingredient records are valid without one.
 Active Reference Foods are searchable. Inactive Reference Foods are hidden from
 search but kept so historical Food Log Entries can resolve their source link.
 
+Canonical Reference Food rows and lifecycle state live in **Postgres**; fast
+name and brand **search** use a **rebuildable projection** (see
+[ADR 0003 — Reference Food architecture](docs/adr/0003-reference-food-architecture.md))
+that operators can reindex from Postgres without re-importing provider files.
+
 ### Recipe
 
 A reusable Pantry item composed from one or more Foods or Recipes and a declared
@@ -203,13 +208,19 @@ and mobile clients may carry it as a Bearer token.
 
 ### Food Log Entry
 
-A durable record of **one** logged consumption of a Pantry Item or Reference Food
-on behalf of the authenticated owner. Each Food Log Entry **snapshots** display
-metadata (name, icon) and scaled nutrients for the chosen serving and quantity at
-log time, and is indexed by **local calendar date** (`consumed_date`, YYYY-MM-DD)
-for day views. Persistence: `food_log_entries` in `@healthy/db`; list and create
-flows go through authenticated HTTP and Request Scope (`foodLog` capability),
-not direct repository calls from clients.
+A durable record of **one** logged consumption on behalf of the authenticated
+owner. The entry **links** to **exactly one** logged source: either a **Pantry
+Item** or a **Reference Food**, never both. It **snapshots** display metadata
+(name, icon) and scaled nutrients for the chosen serving and quantity at log
+time, so past entries stay stable if the Pantry Item or Reference Food changes
+later. Entries are indexed by **local calendar date** (`consumed_date`,
+YYYY-MM-DD) for day views. Persistence: `food_log_entries` in `@healthy/db`;
+list and create flows go through authenticated HTTP and Request Scope
+(`foodLog` capability), not direct repository calls from clients.
+
+Reference-backed entries keep the same snapshot rule as Pantry-backed entries;
+authority and search projection split for Reference Foods are in
+[ADR 0003 — Reference Food architecture](docs/adr/0003-reference-food-architecture.md).
 
 Row shape is **ready for future** per-entry time tweaks (`consumed_at` with the
 calendar key), quantity and serving edits (`quantity`, serving fields, snapshot
