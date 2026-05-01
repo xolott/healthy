@@ -25,7 +25,17 @@ import {
   collectFoodLogBatchResolutionIds,
   planFoodLogBatch,
 } from '../food-log/plan-food-log-batch.js';
-import { findReferenceFoodsByIds } from '../food-log/reference-food-persistence.js';
+import {
+  findReferenceFoodById,
+  findReferenceFoodsByIds,
+} from '../food-log/reference-food-persistence.js';
+import {
+  mapOrderedIdsToSearchCards,
+  referenceFoodRowToDetailWire,
+} from '../reference-food/reference-food-public-wire.js';
+import { createElasticsearchClientFromEnv } from '../reference-food/search/create-elasticsearch-client.js';
+import { REFERENCE_FOOD_SEARCH_ALIAS_DEFAULT } from '../reference-food/search/reference-food-search-document.js';
+import { searchReferenceFoodIdsOrdered } from '../reference-food/search/search-reference-food-ids.js';
 import { PREDEFINED_SERVING_UNIT_ENTRIES } from '../pantry/predefined-serving-units.js';
 
 import type { Database } from '@healthy/db/client';
@@ -433,6 +443,87 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
           return { kind: 'ok', entries: inserted.map(mapFoodLogRowToWire) };
         } catch (err) {
           app.log.warn({ err }, 'food log batch create failed');
+          return { kind: 'persistence_unavailable' };
+        }
+      },
+    },
+    referenceFood: {
+      async searchActive(_ownerUserId: string, query: { q?: unknown; limit?: unknown }) {
+        const adapter = app.databaseAdapter;
+        if (adapter === null) {
+          return { kind: 'persistence_not_configured' };
+        }
+        const qRaw = query.q;
+        const q =
+          typeof qRaw === 'string'
+            ? qRaw.trim()
+            : qRaw !== undefined && qRaw !== null
+              ? String(qRaw).trim()
+              : '';
+        if (q.length < 2) {
+          return {
+            kind: 'invalid_input',
+            field: 'q',
+            message: 'Search text must be at least 2 characters.',
+          };
+        }
+        if (q.length > 200) {
+          return {
+            kind: 'invalid_input',
+            field: 'q',
+            message: 'Search text is too long.',
+          };
+        }
+        let limit = 25;
+        const limitRaw = query.limit;
+        if (limitRaw !== undefined && limitRaw !== null && String(limitRaw).length > 0) {
+          const n = typeof limitRaw === 'number' ? limitRaw : Number(String(limitRaw));
+          if (!Number.isFinite(n) || n < 1 || n > 50) {
+            return {
+              kind: 'invalid_input',
+              field: 'limit',
+              message: 'Limit must be between 1 and 50.',
+            };
+          }
+          limit = Math.floor(n);
+        }
+
+        const esUrl = process.env.ELASTICSEARCH_URL?.trim();
+        if (esUrl === undefined || esUrl.length === 0) {
+          return { kind: 'search_unavailable' };
+        }
+
+        try {
+          const client = createElasticsearchClientFromEnv();
+          const orderedIds = await searchReferenceFoodIdsOrdered(
+            client,
+            REFERENCE_FOOD_SEARCH_ALIAS_DEFAULT,
+            q,
+            limit,
+          );
+          const rows = await findReferenceFoodsByIds(adapter.db, orderedIds);
+          const byId = new Map(rows.map((r) => [r.id, r]));
+          const items = mapOrderedIdsToSearchCards(orderedIds, byId);
+          return { kind: 'ok', items };
+        } catch (err) {
+          app.log.warn({ err }, 'reference food elasticsearch search failed');
+          return { kind: 'search_unavailable' };
+        }
+      },
+
+      async getActiveDetail(_ownerUserId: string, id: string) {
+        const adapter = app.databaseAdapter;
+        if (adapter === null) {
+          return { kind: 'persistence_not_configured' };
+        }
+        try {
+          const row = await findReferenceFoodById(adapter.db, id);
+          if (row === undefined || !row.isActive) {
+            return { kind: 'not_found' };
+          }
+          return { kind: 'ok', food: referenceFoodRowToDetailWire(row) };
+        } catch (err) {
+          app.log.warn({ err }, 'reference food detail lookup failed');
           return { kind: 'persistence_unavailable' };
         }
       },

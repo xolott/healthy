@@ -11,6 +11,7 @@ import { registerAuthMeRoute } from './routes/auth-me.js';
 import { registerOwnerLoginRoute } from './routes/owner-login.js';
 import { registerFoodLogRoutes } from './routes/food-log.js';
 import { registerPantryRoutes } from './routes/pantry.js';
+import { registerReferenceFoodRoutes } from './routes/reference-foods.js';
 import type { RequestScope } from './request-scope/index.js';
 import { registerStatusRoutes } from './routes/status.js';
 import { summarizeLogger } from './utils/logger.js';
@@ -33,6 +34,7 @@ export async function buildApp(options?: BuildAppOptions) {
   await registerOwnerLoginRoute(app, options?.requestScope);
   await registerAuthMeRoute(app, options?.requestScope);
   await registerPantryRoutes(app, options?.requestScope);
+  await registerReferenceFoodRoutes(app, options?.requestScope);
   await registerFoodLogRoutes(app, options?.requestScope);
   await registerAuthLogoutRoute(app, options?.requestScope);
 

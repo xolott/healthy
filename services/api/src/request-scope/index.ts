@@ -16,7 +16,13 @@ export type {
   PublicPantryItemDetailOutcome,
   PublicPantryItemsListOutcome,
   PublicPantryReferenceOutcome,
+  PublicReferenceFoodDetailOutcome,
+  PublicReferenceFoodSearchOutcome,
   PublicSetupStatusOutcome,
+  ReferenceFoodDetailWire,
+  ReferenceFoodMacrosWire,
+  ReferenceFoodSearchCardWire,
+  ReferenceFoodServingPreviewWire,
   RequestScope,
   RequestScopeCurrentSessionCapability,
   RequestScopeFirstOwnerSetupCapability,
@@ -24,6 +30,7 @@ export type {
   RequestScopeLogoutCapability,
   RequestScopePantryCapability,
   RequestScopeOwnerLoginCapability,
+  RequestScopeReferenceFoodCapability,
   RequestScopeStatusCapability,
 } from './types.js';
 export { createRequestScopeForApp } from './create-request-scope-for-app.js';

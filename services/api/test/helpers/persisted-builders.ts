@@ -17,6 +17,7 @@ import {
   users,
   type PantryItemRow,
   type ReferenceFoodRow,
+  type ReferenceFoodServingWire,
   type SessionRow,
   type UserRow,
 } from '@healthy/db/schema';
@@ -194,6 +195,8 @@ export type PersistedReferenceFoodInsertInput = {
   sourceFoodId: string;
   displayName: string;
   brand?: string | null;
+  foodClass?: string | null;
+  servings?: ReferenceFoodServingWire[];
   baseAmountGrams: number;
   calories: number;
   proteinGrams: number;
@@ -215,6 +218,8 @@ export async function insertPersistedReferenceFood(
       sourceFoodId: input.sourceFoodId,
       displayName: input.displayName,
       brand: input.brand ?? null,
+      foodClass: input.foodClass ?? null,
+      servings: input.servings ?? [],
       baseAmountGrams: input.baseAmountGrams,
       calories: input.calories,
       proteinGrams: input.proteinGrams,

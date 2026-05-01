@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { unusedFoodLogCapability } from './helpers/unused-food-log-scope.js';
 import { unusedPantryCapability } from './helpers/unused-pantry-scope.js';
+import { unusedReferenceFoodCapability } from './helpers/unused-reference-food-scope.js';
 
 describe('POST /auth/logout (unit)', () => {
   afterEach(() => {
@@ -66,6 +67,7 @@ describe('POST /auth/logout (unit)', () => {
         },
         pantry: unusedPantryCapability(),
         foodLog: unusedFoodLogCapability(),
+        referenceFood: unusedReferenceFoodCapability(),
       },
     });
     try {

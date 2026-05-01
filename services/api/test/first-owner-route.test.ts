@@ -4,6 +4,7 @@ import { buildApp } from '../src/app.js';
 import { MIN_PASSWORD_LENGTH } from '../src/auth/password-policy.js';
 import { unusedFoodLogCapability } from './helpers/unused-food-log-scope.js';
 import { unusedPantryCapability } from './helpers/unused-pantry-scope.js';
+import { unusedReferenceFoodCapability } from './helpers/unused-reference-food-scope.js';
 
 describe('POST /setup/first-owner', () => {
   let app: Awaited<ReturnType<typeof buildApp>> | undefined;
@@ -82,6 +83,7 @@ describe('POST /setup/first-owner', () => {
         },
         pantry: unusedPantryCapability(),
         foodLog: unusedFoodLogCapability(),
+        referenceFood: unusedReferenceFoodCapability(),
       },
     });
     const res = await app.inject({
@@ -158,6 +160,7 @@ describe('GET /auth/me', () => {
         },
         pantry: unusedPantryCapability(),
         foodLog: unusedFoodLogCapability(),
+        referenceFood: unusedReferenceFoodCapability(),
       },
     });
     const res = await app.inject({
@@ -213,6 +216,7 @@ describe('GET /auth/me (Request Scope stub)', () => {
         },
         pantry: unusedPantryCapability(),
         foodLog: unusedFoodLogCapability(),
+        referenceFood: unusedReferenceFoodCapability(),
       },
     });
     const res = await app.inject({

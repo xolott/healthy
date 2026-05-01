@@ -219,6 +219,71 @@ export type RequestScopeFoodLogCapability = {
   createEntriesBatchForOwner(ownerUserId: string, rawBody: unknown): Promise<PublicFoodLogBatchCreateOutcome>;
 };
 
+export type ReferenceFoodServingPreviewWire = {
+  label: string;
+  gramWeight: number | null;
+};
+
+export type ReferenceFoodMacrosWire = {
+  baseAmountGrams: number;
+  calories: number;
+  proteinGrams: number;
+  fatGrams: number;
+  carbohydratesGrams: number;
+};
+
+/** Lightweight search hit hydrated from Postgres for picker UI. */
+export type ReferenceFoodSearchCardWire = {
+  id: string;
+  source: string;
+  sourceFoodId: string;
+  displayName: string;
+  brand: string | null;
+  foodClass: string | null;
+  servingPreview: ReferenceFoodServingPreviewWire | null;
+  macros: ReferenceFoodMacrosWire;
+};
+
+/** Full active Reference Food payload for serving selection and logging. */
+export type ReferenceFoodDetailWire = {
+  id: string;
+  source: string;
+  sourceFoodId: string;
+  displayName: string;
+  brand: string | null;
+  foodClass: string | null;
+  iconKey: string;
+  baseAmountGrams: number;
+  calories: number;
+  proteinGrams: number;
+  fatGrams: number;
+  carbohydratesGrams: number;
+  servings: ReferenceFoodServingPreviewWire[];
+  rawNutrients: unknown[];
+  rawPayload: Record<string, unknown>;
+};
+
+export type PublicReferenceFoodSearchOutcome =
+  | { kind: 'persistence_not_configured' }
+  | { kind: 'persistence_unavailable' }
+  | { kind: 'search_unavailable' }
+  | { kind: 'invalid_input'; field: string; message: string }
+  | { kind: 'ok'; items: ReferenceFoodSearchCardWire[] };
+
+export type PublicReferenceFoodDetailOutcome =
+  | { kind: 'persistence_not_configured' }
+  | { kind: 'persistence_unavailable' }
+  | { kind: 'not_found' }
+  | { kind: 'ok'; food: ReferenceFoodDetailWire };
+
+export type RequestScopeReferenceFoodCapability = {
+  searchActive(
+    ownerUserId: string,
+    query: { q?: unknown; limit?: unknown },
+  ): Promise<PublicReferenceFoodSearchOutcome>;
+  getActiveDetail(ownerUserId: string, id: string): Promise<PublicReferenceFoodDetailOutcome>;
+};
+
 export type RequestScope = {
   status: RequestScopeStatusCapability;
   currentSession: RequestScopeCurrentSessionCapability;
@@ -228,4 +293,5 @@ export type RequestScope = {
 
   pantry: RequestScopePantryCapability;
   foodLog: RequestScopeFoodLogCapability;
+  referenceFood: RequestScopeReferenceFoodCapability;
 };

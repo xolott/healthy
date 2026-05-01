@@ -4,6 +4,7 @@ import { buildApp } from '../src/app.js';
 import type { RequestScope } from '../src/request-scope/index.js';
 import { unusedFoodLogCapability } from './helpers/unused-food-log-scope.js';
 import { unusedPantryCapability } from './helpers/unused-pantry-scope.js';
+import { unusedReferenceFoodCapability } from './helpers/unused-reference-food-scope.js';
 
 function unusedCurrentSession(): RequestScope['currentSession'] {
   return {
@@ -63,6 +64,7 @@ describe('GET /status', () => {
         firstOwnerSetup: unusedFirstOwnerSetup(),
         pantry: unusedPantryCapability(),
         foodLog: unusedFoodLogCapability(),
+        referenceFood: unusedReferenceFoodCapability(),
       },
     });
 
@@ -93,6 +95,7 @@ describe('GET /status', () => {
         firstOwnerSetup: unusedFirstOwnerSetup(),
         pantry: unusedPantryCapability(),
         foodLog: unusedFoodLogCapability(),
+        referenceFood: unusedReferenceFoodCapability(),
       },
     });
 
@@ -133,6 +136,7 @@ describe('GET /status', () => {
         firstOwnerSetup: unusedFirstOwnerSetup(),
         pantry: unusedPantryCapability(),
         foodLog: unusedFoodLogCapability(),
+        referenceFood: unusedReferenceFoodCapability(),
       },
     });
 
