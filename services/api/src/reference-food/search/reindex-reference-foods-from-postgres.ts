@@ -90,12 +90,15 @@ export async function reindexReferenceFoodsFromPostgres(options: {
   const newIndexName =
     options.newIndexName ?? newVersionedReferenceFoodSearchIndexName();
 
+  console.log(`get indice alias ${aliasName}`);
   const previousIndices = await options.client.indicesGetAlias({ name: aliasName });
 
+  console.log(`create new index ${newIndexName} with mappings`);
   await options.client.indicesCreate({
     index: newIndexName,
     mappings: { properties: referenceFoodSearchIndexMappingsProperties() },
   });
+  console.log('reindex reference foods');
 
   let indexedDocuments = 0;
   for await (const batch of batchesOfActiveReferenceFoods(options.db, batchSize)) {

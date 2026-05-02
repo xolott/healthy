@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:healthy_mobile_auth/healthy_mobile_auth.dart';
@@ -235,6 +236,15 @@ Future<String> referenceFoodLogResolveBaseUrl() async {
   return base?.trim().replaceAll(RegExp(r'/+$'), '') ?? '';
 }
 
+String _referenceFoodSearchBodySnippet(String body) {
+  const maxLen = 400;
+  final t = body.trim();
+  if (t.length <= maxLen) {
+    return t;
+  }
+  return '${t.substring(0, maxLen)}…';
+}
+
 /// GET `/reference-foods/search?q=`. Returns items, or `null` on hard failure.
 Future<List<ReferenceFoodSearchCard>?> fetchReferenceFoodSearch({
   required String baseUrl,
@@ -248,33 +258,72 @@ Future<List<ReferenceFoodSearchCard>?> fetchReferenceFoodSearch({
   final uri = Uri.parse(
     '$baseUrl/reference-foods/search',
   ).replace(queryParameters: <String, String>{'q': q});
-  final res = await PantryHttp.get(
-    uri,
-    headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
-  );
-  if (res.statusCode == 503) {
+  try {
+    final res = await PantryHttp.get(
+      uri,
+      headers: {'Authorization': 'Bearer $token', 'Accept': 'application/json'},
+    );
+    if (res.statusCode == 503) {
+      developer.log(
+        'Reference food search failed: service unavailable (HTTP 503)',
+        name: 'reference_food.search',
+      );
+      return null;
+    }
+    if (res.statusCode != 200) {
+      developer.log(
+        'Reference food search failed: HTTP ${res.statusCode}',
+        name: 'reference_food.search',
+        error: _referenceFoodSearchBodySnippet(res.body),
+      );
+      return [];
+    }
+    dynamic decodedRaw;
+    try {
+      decodedRaw = jsonDecode(res.body);
+    } catch (e, s) {
+      developer.log(
+        'Reference food search failed: response was not valid JSON',
+        name: 'reference_food.search',
+        error: e,
+        stackTrace: s,
+      );
+      return [];
+    }
+    if (decodedRaw is! Map) {
+      developer.log(
+        'Reference food search failed: expected JSON object, got '
+        '${decodedRaw.runtimeType}',
+        name: 'reference_food.search',
+      );
+      return [];
+    }
+    final decoded = Map<String, dynamic>.from(decodedRaw);
+    final items = decoded['items'];
+    if (items is! List) {
+      developer.log(
+        'Reference food search failed: "items" missing or not a list',
+        name: 'reference_food.search',
+      );
+      return [];
+    }
+    final out = <ReferenceFoodSearchCard>[];
+    for (final e in items) {
+      final c = ReferenceFoodSearchCard.tryParse(e);
+      if (c != null) {
+        out.add(c);
+      }
+    }
+    return out;
+  } catch (e, s) {
+    developer.log(
+      'Reference food search failed: network or transport error',
+      name: 'reference_food.search',
+      error: e,
+      stackTrace: s,
+    );
     return null;
   }
-  if (res.statusCode != 200) {
-    return [];
-  }
-  final decodedRaw = jsonDecode(res.body);
-  if (decodedRaw is! Map) {
-    return [];
-  }
-  final decoded = Map<String, dynamic>.from(decodedRaw);
-  final items = decoded['items'];
-  if (items is! List) {
-    return [];
-  }
-  final out = <ReferenceFoodSearchCard>[];
-  for (final e in items) {
-    final c = ReferenceFoodSearchCard.tryParse(e);
-    if (c != null) {
-      out.add(c);
-    }
-  }
-  return out;
 }
 
 /// GET `/reference-foods/:id`. Returns detail or `null` if unavailable / not found.

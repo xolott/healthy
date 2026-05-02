@@ -489,7 +489,15 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
         }
 
         const esUrl = process.env.ELASTICSEARCH_URL?.trim();
+
         if (esUrl === undefined || esUrl.length === 0) {
+          app.log.warn(
+            {
+              referenceFoodSearchFailure: 'search_unavailable',
+              cause: 'elasticsearch_url_not_configured',
+            },
+            'reference food search failed',
+          );
           return { kind: 'search_unavailable' };
         }
 
@@ -506,7 +514,14 @@ export function createRequestScopeForApp(app: FastifyInstance): RequestScope {
           const items = mapOrderedIdsToSearchCards(orderedIds, byId);
           return { kind: 'ok', items };
         } catch (err) {
-          app.log.warn({ err }, 'reference food elasticsearch search failed');
+          app.log.warn(
+            {
+              err,
+              referenceFoodSearchFailure: 'search_unavailable',
+              cause: 'elasticsearch_search_error',
+            },
+            'reference food elasticsearch search failed',
+          );
           return { kind: 'search_unavailable' };
         }
       },

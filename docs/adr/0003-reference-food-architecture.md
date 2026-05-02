@@ -65,29 +65,28 @@ oversight.
 
 Domain terms (**Reference Food**, **Pantry Item**, **Food Log Entry**,
 active/inactive lifecycle, snapshot semantics) stay canonical in
-[`CONTEXT.md`](../../CONTEXT.md). This ADR states **ownership and authority**
+`[CONTEXT.md](../../CONTEXT.md)`. This ADR states **ownership and authority**
 rules those terms rely on; it does not introduce new user-facing product names
 beyond what the PRD already uses.
 
 ## Rejected alternatives
 
 - **Treating Elasticsearch as source of truth for nutrients or lifecycle**:
-  Would make search outages or reindex mistakes corrupt logging truth; conflicts
-  with idempotent Postgres imports and historical snapshot stability.
-
+Would make search outages or reindex mistakes corrupt logging truth; conflicts
+with idempotent Postgres imports and historical snapshot stability.
 - **Merging imported records into Pantry by default**: Would blur ownership,
-  clutter user catalogs, and break the PRD requirement that Pantry stay
-  user-curated.
-
+clutter user catalogs, and break the PRD requirement that Pantry stay
+user-curated.
 - **Blocking the mobile/API slice on admin Reference Food UI**: Delays user
-  value; PRD defers admin parity with explicit tracking (this ADR).
+value; PRD defers admin parity with explicit tracking (this ADR).
 
 ## Consequences
 
 - Importers write Postgres first; indexers update Elasticsearch as a follow-on
-  projection with clear failure and repair semantics.
+projection with clear failure and repair semantics.
 - API and tests should assert Postgres invariants, snapshot behavior, and
-  search/detail contracts per the PRD testing decisions—not client call order
-  unless it is part of a published module boundary.
+search/detail contracts per the PRD testing decisions—not client call order
+unless it is part of a published module boundary.
 - When admin Reference Food surfaces ship later, they should reuse the same
-  authority and snapshot rules rather than inventing parallel semantics.
+authority and snapshot rules rather than inventing parallel semantics.
+

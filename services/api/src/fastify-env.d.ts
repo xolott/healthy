@@ -16,6 +16,10 @@ declare module 'fastify' {
       LOG_LEVEL: string;
       CORS_ORIGIN: string;
       DATABASE_URL?: string;
+      ELASTICSEARCH_URL?: string;
+      ELASTICSEARCH_API_KEY?: string;
+      ELASTICSEARCH_USERNAME?: string;
+      ELASTICSEARCH_PASSWORD?: string;
     };
     /** Set by `registerDatabaseAdapter` after env load; `null` when persistence is not configured. */
     databaseAdapter: DatabaseAdapter | null;

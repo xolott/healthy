@@ -171,11 +171,32 @@ function sendSvc(reply: FastifyReply) {
 function sendSearchOutcome(reply: FastifyReply, outcome: PublicReferenceFoodSearchOutcome) {
   switch (outcome.kind) {
     case 'persistence_not_configured':
+      reply.log.warn(
+        { referenceFoodSearchFailure: outcome.kind },
+        'reference food search failed',
+      );
+      return sendSvc(reply);
     case 'persistence_unavailable':
+      reply.log.warn(
+        { referenceFoodSearchFailure: outcome.kind },
+        'reference food search failed',
+      );
       return sendSvc(reply);
     case 'search_unavailable':
+      reply.log.warn(
+        { referenceFoodSearchFailure: outcome.kind },
+        'reference food search failed',
+      );
       return sendSvc(reply);
     case 'invalid_input':
+      reply.log.info(
+        {
+          referenceFoodSearchFailure: outcome.kind,
+          field: outcome.field,
+          message: outcome.message,
+        },
+        'reference food search rejected',
+      );
       return reply.status(400).send({
         error: 'invalid_input',
         field: outcome.field,

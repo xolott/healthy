@@ -35,5 +35,8 @@ export function createElasticsearchClientFromEnv(): Client {
   return new Client({
     node,
     ...(auth !== undefined ? { auth } : {}),
+    tls: {
+      rejectUnauthorized: false, // Dev only!
+    },
   });
 }
