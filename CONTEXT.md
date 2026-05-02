@@ -72,6 +72,20 @@ name and brand **search** use a **rebuildable projection** (see
 [ADR 0003 — Reference Food architecture](docs/adr/0003-reference-food-architecture.md))
 that operators can reindex from Postgres without re-importing provider files.
 
+### Reference Food Import Snapshot
+
+The complete set of provider records that an operator intends to make active
+for a Reference Food source at one import version.
+
+For USDA FoodData Central, a snapshot may span multiple provider JSON files;
+rows missing from one file are not inactive unless they are missing from the
+complete snapshot. The supported USDA snapshot currently consists of
+Foundation Foods and Branded Foods unless an operator explicitly chooses a
+different supported dataset set. Import failure, audit manifest, deterministic
+snapshot hash, duplicate-id rules, and deactivation timing for USDA are
+constrained by [ADR 0004 — USDA Reference Food import snapshot (multi-file
+contract)](docs/adr/0004-usda-reference-food-import-snapshot.md).
+
 ### Recipe
 
 A reusable Pantry item composed from one or more Foods or Recipes and a declared
